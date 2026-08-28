@@ -9,9 +9,9 @@
 | Full name          | Branch prefix | GitHub      | Role         |
 | ------------------ | -------------- | ----------- | ------------ |
 | Charlie Sandvall   | `charlie`      | `Charlie064` | Technical / backend |
-| Pauline Mophou     | `pauline`      | TBD | TBD |
-| Elanore de Garidel | `elanore`      | `eleadega` | TBD |
-| Quentin Feinäugle  | `quentin`      | TBD | TBD |
+| Pauline Mophou     | `pauline`      | TBD | Website |
+| Elanore de Garidel | `elanore`      | `eleadega` | Outreach |
+| Quentin Feinäugle  | `quentin`      | TBD | Outreach, website (secondary) |
 
 Update the Role column as each person's area is decided — this table is the
 one place that fact lives; don't restate roles elsewhere.
