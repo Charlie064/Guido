@@ -10,13 +10,17 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tauri-overlay",
-        "width": 1000,
-        "height": 700,
+        "title": "tutoria-overlay",
+        "width": 1920,
+        "height": 1080,
+        "x": 0,
+        "y": 0,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
-        "shadow": false
+        "shadow": false,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
     "security": {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Overlay Spike</title>
+    <title>Tutoria Overlay</title>
     <style>
       html, body {
         margin: 0;
@@ -11,31 +11,48 @@
         background: transparent;
         overflow: hidden;
       }
-      .box {
+      #box {
         position: absolute;
-        top: 220px;
-        left: 380px;
-        width: 220px;
-        height: 90px;
         border: 3px solid #ff3b3b;
         border-radius: 6px;
         box-shadow: 0 0 0 2px rgba(255, 59, 59, 0.3);
+        display: none;
       }
-      .bubble {
+      #bubble {
         position: absolute;
-        top: 130px;
-        left: 380px;
-        max-width: 260px;
+        max-width: 320px;
         background: #1a2029;
         color: #f6f7f5;
         font: 14px system-ui, sans-serif;
-        padding: 8px 12px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        display: none;
+      }
+      #bubble .hint {
+        display: block;
+        margin-top: 6px;
+        color: #9aa4b2;
+        font-size: 12px;
+      }
+      #status {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        background: #1a2029;
+        color: #f6f7f5;
+        font: 13px system-ui, sans-serif;
+        padding: 6px 10px;
         border-radius: 6px;
       }
     </style>
   </head>
   <body>
-    <div class="bubble">This is the Color tab — click here to open grading tools.</div>
-    <div class="box"></div>
+    <div id="status">loading…</div>
+    <div id="box"></div>
+    <div id="bubble">
+      <span id="bubble-text"></span>
+      <span class="hint">Press N for next step</span>
+    </div>
+    <script src="main.js"></script>
   </body>
 </html>
