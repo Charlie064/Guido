@@ -40,7 +40,9 @@ before shipping beyond a demo.)
 - Branch naming: `claudev/<name>/<feature-name>`, where `<name>` is the
   person the work is for (e.g. `claudev/charlie/overlay-render`) — see the
   name → role table in `docs/reference/team.md`. Ask which person the
-  session is working for if it isn't already clear from context.
+  session is working for if it isn't already clear from context. Teammates
+  working outside Claude Code should run `scripts/new-branch.sh
+  <feature-name>` instead of typing the branch name by hand.
 - Conventional commits, subject line < 72 chars.
 - Always ask before committing.
 - Main only takes completed, tested merges.
@@ -64,6 +66,8 @@ before shipping beyond a demo.)
 | Do-mode opt-in, hybrid vision, platform, business model | `docs/decisions/0002-agency-hybrid-vision-platform-business.md` |
 | Team roster, roles, branch-name prefixes | `docs/reference/team.md` |
 | First demo scope, step-by-step build/test plan | `docs/planning/demo-v0.md` |
+| Overnight plan across the whole team | `docs/planning/overnight-plan.md` |
+| Website scope (Pauline) | `docs/planning/website-v0.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.

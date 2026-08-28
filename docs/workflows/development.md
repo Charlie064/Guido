@@ -4,7 +4,11 @@
 
 ## Branching and commits
 
-- Branch naming: `claudev/<feature-name>`.
+- Branch naming: `claudev/<name>/<feature-name>` — run `scripts/new-branch.sh
+  <feature-name>` instead of typing this by hand; it detects who you are
+  from `git config user.name` and creates the branch for you (pass a name
+  as a second argument to override). See the roster in
+  [reference/team.md](../reference/team.md).
 - Conventional commits (`feat:`, `fix:`, `docs:`, ...), subject < 72 chars.
 - Always ask before committing.
 - `main` only takes completed, tested merges.
