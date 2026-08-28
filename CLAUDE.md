@@ -37,7 +37,10 @@ before shipping beyond a demo.)
 
 ## Workflow rules
 
-- Branch naming: `claudev/<feature-name>`.
+- Branch naming: `claudev/<name>/<feature-name>`, where `<name>` is the
+  person the work is for (e.g. `claudev/charlie/overlay-render`) — see the
+  name → role table in `docs/reference/team.md`. Ask which person the
+  session is working for if it isn't already clear from context.
 - Conventional commits, subject line < 72 chars.
 - Always ask before committing.
 - Main only takes completed, tested merges.
@@ -59,6 +62,8 @@ before shipping beyond a demo.)
 | MVP scope, priorities, demo script | `docs/planning/mvp-roadmap.md` |
 | Why "AI tutor" over "computer-use agent" | `docs/decisions/0001-ai-tutor-not-computer-use-agent.md` |
 | Do-mode opt-in, hybrid vision, platform, business model | `docs/decisions/0002-agency-hybrid-vision-platform-business.md` |
+| Team roster, roles, branch-name prefixes | `docs/reference/team.md` |
+| First demo scope, step-by-step build/test plan | `docs/planning/demo-v0.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.
