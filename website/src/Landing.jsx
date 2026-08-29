@@ -11,7 +11,7 @@ import {
   Apple,
   MonitorSmartphone,
   Command,
-  Video,
+  X,
 } from "lucide-react";
 
 const BRAND = "#B6FF3E";
@@ -171,22 +171,46 @@ function DesktopDownloadWindow({ onClose }) {
   const Icon = current.icon;
 
   return (
-    <div className="max-w-3xl w-full mx-auto rounded-3xl border border-black/10 bg-white shadow-[0_30px_80px_-30px_rgba(0,0,0,0.25)] overflow-hidden">
-      <WindowChrome
-        title="Guido — in one click"
-        cream
-        onDotClick={(dot) => {
-          if (dot === "red") onClose?.();
-        }}
-      />
-      <div
-        className="flex flex-col items-center gap-8 px-10 py-16"
-        style={{
-          backgroundImage: "radial-gradient(rgba(0,0,0,0.08) 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
-        }}
+    <div
+      className="relative max-w-lg w-full mx-auto rounded-3xl overflow-hidden"
+      style={{
+        background: "rgba(12,12,14,0.75)",
+        backdropFilter: "blur(28px)",
+        WebkitBackdropFilter: "blur(28px)",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 40px 100px -20px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.06)",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="absolute top-5 right-5 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:bg-white/10"
+        style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}
       >
-        <div className="inline-flex items-center gap-1 rounded-full p-1.5" style={{ background: "#EFEFEF" }}>
+        <X size={16} />
+      </button>
+
+      <div className="flex flex-col items-center text-center gap-8 px-10 py-16">
+        <div>
+          <div
+            className="text-[11px] font-semibold uppercase mb-3"
+            style={{ color: "rgba(255,255,255,0.4)", letterSpacing: "0.2em" }}
+          >
+            Get Guido
+          </div>
+          <h3
+            className="text-2xl font-semibold text-white tracking-tight"
+            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+          >
+            Ready when you are.
+          </h3>
+        </div>
+
+        <div
+          className="inline-flex items-center gap-1 rounded-full p-1"
+          style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+        >
           {PLATFORMS.map((p) => {
             const PIcon = p.icon;
             const active = p.id === platform;
@@ -198,8 +222,8 @@ function DesktopDownloadWindow({ onClose }) {
                   setPlatform(p.id);
                   setClicked(false);
                 }}
-                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-200"
-                style={{ background: active ? "#0A0A0A" : "transparent", color: active ? "#ffffff" : "#6b6b6b" }}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200"
+                style={{ background: active ? "#ffffff" : "transparent", color: active ? "#0A0A0A" : "rgba(255,255,255,0.55)" }}
               >
                 <PIcon size={14} />
                 {p.label}
@@ -214,21 +238,16 @@ function DesktopDownloadWindow({ onClose }) {
             setClicked(true);
             setTimeout(() => setClicked(false), 1600);
           }}
-          className="relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 px-7 py-3.5 text-[15px]"
-          style={{
-            background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
-            boxShadow: "0 5px 0 0 #000, 0 14px 26px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
-          }}
+          className="inline-flex items-center gap-2 rounded-full font-semibold px-8 py-3.5 text-[15px] transition-transform duration-150 hover:scale-[1.03]"
+          style={{ background: "#ffffff", color: "#0A0A0A", boxShadow: "0 10px 30px -8px rgba(255,255,255,0.25)" }}
         >
-          <span
-            className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
-            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
-          />
-          <span className="relative flex items-center gap-2">
-            <Icon size={15} />
-            {clicked ? "Coming soon" : `Download for ${current.label}`}
-          </span>
+          <Icon size={15} />
+          {clicked ? "Coming soon" : `Download for ${current.label}`}
         </button>
+
+        <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
+          Free to try. Builds ship soon.
+        </p>
       </div>
     </div>
   );
@@ -291,7 +310,7 @@ const WORKS_WITH = [
   { name: "Video editor", img: "/assets/video-editor.png" },
   { name: "VS Code", img: "/assets/vscode.png" },
   { name: "Blender", img: "/assets/blender.png" },
-  { name: "DaVinci Resolve", icon: Video, bg: "#1B1B3A", fg: "#ffffff" },
+  { name: "DaVinci Resolve", img: "/assets/davinci.png" },
 ];
 
 function WorksWithMarquee() {
@@ -341,8 +360,24 @@ export default function Landing() {
   const [demoExpanded, setDemoExpanded] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const demoPanelRef = useRef(null);
+  const heroVideoRef = useRef(null);
   const mode = MODES.find((m) => m.id === activeMode);
   const color = MODE_COLORS[activeMode];
+
+  useEffect(() => {
+    const v = heroVideoRef.current;
+    if (!v) return;
+    v.muted = true;
+    v.defaultMuted = true;
+    const tryPlay = () => v.play().catch(() => {});
+    tryPlay();
+    document.addEventListener("touchstart", tryPlay, { once: true });
+    document.addEventListener("click", tryPlay, { once: true });
+    return () => {
+      document.removeEventListener("touchstart", tryPlay);
+      document.removeEventListener("click", tryPlay);
+    };
+  }, []);
 
   function selectMode(id) {
     setActiveMode(id);
@@ -423,11 +458,14 @@ export default function Landing() {
               }}
             >
               <video
+                ref={heroVideoRef}
                 src="/assets/hero-demo.mp4"
                 className="w-full h-auto block"
                 autoPlay
                 muted
                 playsInline
+                webkit-playsinline="true"
+                preload="auto"
               />
             </div>
 
