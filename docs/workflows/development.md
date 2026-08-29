@@ -242,9 +242,14 @@ The live landing page is Pauline’s Guido Vite app in `website/src/`
 `privacy.html`) go in `website/public/`. The Worker is
 `website/worker/index.ts`; on deploy it serves `website/dist/`.
 
-**Keep the waitlist working:** the footer form in `website/src/Landing.jsx`
-POSTs JSON to `/api/waitlist`. The Worker validates and inserts into D1
-(`worker/index.ts` + `migrations/0001_create_waitlist.sql`).
+**Keep the waitlist working:** the header and bottom “Join the waitlist”
+buttons open the multi-step glass modal (`website/src/Waitlist.jsx`).
+`/waitlist?ref=` opens the same overlay. It POSTs JSON (`name`,
+`email`, `apps`, `appsOther`, `role`, `ref`) to `/api/waitlist`. The
+Worker validates and inserts into D1 (`worker/index.ts` +
+`migrations/0001_create_waitlist.sql` and `0003_waitlist_profile.sql`).
+Do not add Next.js, Framer Motion, or Supabase — the site stays Vite +
+the existing Worker.
 
 Local D1 migrations (only needed once, or after a schema change):
 

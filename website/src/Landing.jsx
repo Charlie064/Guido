@@ -1,26 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  MousePointer2,
-  GraduationCap,
-  Eye,
-  Zap,
-  Volume2,
-  VolumeX,
-  Play,
-  ArrowRight,
-  Apple,
-  MonitorSmartphone,
-  Command,
-  Video,
-} from "lucide-react";
+import { ArrowRight, MousePointer2, Video } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
+import WaitlistOverlay from "./Waitlist.jsx";
 import { FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
-
-const MODE_COLORS = {
-  teach: { accent: "#3B82F6", text: "#ffffff" }, // blue — Notion
-  show: { accent: "#B6FF3E", text: "#0A0A0A" }, // green — Excel
-  do: { accent: "#A78BFA", text: "#0A0A0A" }, // violet — video editor
-};
 
 const INTRO_MS = 4200;
 
@@ -60,202 +42,29 @@ function IntroAnimation({ onDone }) {
   );
 }
 
-function DownloadButton({ className = "", onClick }) {
-  const [clicked, setClicked] = useState(false);
-  const [pressed, setPressed] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        if (onClick) {
-          onClick();
-          return;
-        }
-        setClicked(true);
-        setTimeout(() => setClicked(false), 1600);
-      }}
-      onPointerDown={() => setPressed(true)}
-      onPointerUp={() => setPressed(false)}
-      onPointerLeave={() => setPressed(false)}
-      className={`relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 ${className}`}
-      style={{
-        background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
-        boxShadow: pressed
-          ? "0 1px 0 0 #000, 0 2px 6px -2px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)"
-          : "0 5px 0 0 #000, 0 14px 26px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
-        transform: pressed ? "translateY(4px)" : "translateY(0)",
-      }}
-    >
-      <span
-        className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
-        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
-      />
-      <span className="relative flex items-center gap-2">
-        {clicked ? (
-          "Coming soon"
-        ) : (
-          <>
-            <Apple size={15} />
-            Download free
-          </>
-        )}
-      </span>
-    </button>
-  );
-}
-
-function WindowChrome({ title, onDotClick, cream }) {
-  const dots = [
-    { key: "red", bg: "#FF5F57" },
-    { key: "yellow", bg: "#FEBC2E" },
-    { key: "green", bg: "#28C840" },
-  ];
-  return (
-    <div
-      className="flex items-center gap-2 px-3.5 py-2.5 border-b border-black/[0.06]"
-      style={cream ? { background: "#FBF3E7" } : undefined}
-    >
-      {dots.map((dot) =>
-        onDotClick ? (
-          <button
-            key={dot.key}
-            type="button"
-            onClick={() => onDotClick(dot.key)}
-            className="w-3 h-3 rounded-full p-0 border-0 cursor-pointer"
-            style={{ background: dot.bg }}
-          />
-        ) : (
-          <div key={dot.key} className="w-3 h-3 rounded-full" style={{ background: dot.bg }} />
-        )
-      )}
-      <div className="ml-2 text-[10px] text-neutral-400 font-medium truncate">{title}</div>
-    </div>
-  );
-}
-
-const PLATFORMS = [
-  { id: "mac", label: "macOS", icon: Apple },
-  { id: "windows", label: "Windows", icon: MonitorSmartphone },
-  { id: "linux", label: "Linux", icon: Command },
-];
-
-function DesktopDownloadWindow({ onClose }) {
-  const [platform, setPlatform] = useState("mac");
-  const [clicked, setClicked] = useState(false);
-  const current = PLATFORMS.find((p) => p.id === platform);
-  const Icon = current.icon;
-
-  return (
-    <div className="max-w-3xl w-full mx-auto rounded-3xl border border-black/10 bg-white shadow-[0_30px_80px_-30px_rgba(0,0,0,0.25)] overflow-hidden">
-      <WindowChrome
-        title="Guido — in one click"
-        cream
-        onDotClick={(dot) => {
-          if (dot === "red") onClose?.();
-        }}
-      />
-      <div
-        className="flex flex-col items-center gap-8 px-10 py-16"
-        style={{
-          backgroundImage: "radial-gradient(rgba(0,0,0,0.08) 1px, transparent 1px)",
-          backgroundSize: "22px 22px",
-        }}
-      >
-        <div className="inline-flex items-center gap-1 rounded-full p-1.5" style={{ background: "#EFEFEF" }}>
-          {PLATFORMS.map((p) => {
-            const PIcon = p.icon;
-            const active = p.id === platform;
-            return (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => {
-                  setPlatform(p.id);
-                  setClicked(false);
-                }}
-                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-200"
-                style={{ background: active ? "#0A0A0A" : "transparent", color: active ? "#ffffff" : "#6b6b6b" }}
-              >
-                <PIcon size={14} />
-                {p.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setClicked(true);
-            setTimeout(() => setClicked(false), 1600);
-          }}
-          className="relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 px-7 py-3.5 text-[15px]"
-          style={{
-            background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
-            boxShadow: "0 5px 0 0 #000, 0 14px 26px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
-          }}
-        >
-          <span
-            className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
-            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
-          />
-          <span className="relative flex items-center gap-2">
-            <Icon size={15} />
-            {clicked ? "Coming soon" : `Download for ${current.label}`}
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const MODES = [
+const HOW_STEPS = [
   {
-    id: "teach",
-    label: "Teach",
-    tag: "Default",
-    icon: GraduationCap,
-    app: "NOTION",
-    description: "Learn by doing. Guido guides you step by step, highlights the right controls, and checks your progress before moving forward.",
+    n: "1",
+    title: "It reads your screen",
+    body: "Guido looks at what's actually open — the app, the panel, the buttons in front of you. Not a generic recording made for someone else's setup.",
+    tile: "linear-gradient(160deg, #c5e6fb 0%, #d9cef2 55%, #f3d4e6 100%)",
+    num: "linear-gradient(180deg, #6eaee4 0%, #b592d8 52%, #e58ab4 100%)",
   },
   {
-    id: "show",
-    label: "Show",
-    icon: Eye,
-    app: "EXCEL",
-    description: "Understand what you are looking at. Guido highlights any element on your screen and explains what it is, what it does, and when to use it.",
+    n: "2",
+    title: "It builds a real plan",
+    body: "Ask for something and it researches first. Then it writes a short plan for your version of the software — not a script from someone else's screen.",
+    tile: "linear-gradient(160deg, #d3d4f8 0%, #e4c8ee 50%, #f6c7dd 100%)",
+    num: "linear-gradient(180deg, #8b9ae8 0%, #c89ad4 50%, #ee8eb8 100%)",
   },
   {
-    id: "do",
-    label: "Do",
-    icon: Zap,
-    app: "VIDEO EDITOR",
-    description: "Let Guido handle it for you. It performs the action directly on your screen, then clearly explains what it did so you stay in control.",
+    n: "3",
+    title: "It checks as you go",
+    body: "After every step, Guido looks again. If you clicked the wrong thing or the screen changed, it adjusts instead of pushing you forward.",
+    tile: "linear-gradient(160deg, #e0c8f4 0%, #f0c4e2 52%, #ffd2e4 100%)",
+    num: "linear-gradient(180deg, #a88ad8 0%, #d89ac8 48%, #f48ab0 100%)",
   },
 ];
-
-function EqBars({ active, color }) {
-  const heights = [40, 70, 100, 55, 85, 45, 65];
-  return (
-    <div className="flex items-end gap-[3px] h-6">
-      {heights.map((h, i) => (
-        <span
-          key={i}
-          className="w-[3px] rounded-full"
-          style={{
-            height: `${h}%`,
-            background: active ? color : "#3a3a3a",
-            transformOrigin: "bottom",
-            animation: active ? `eq-bar ${0.6 + (i % 3) * 0.15}s ease-in-out infinite` : "none",
-            animationDelay: `${i * 0.07}s`,
-            transform: active ? undefined : "scaleY(0.25)",
-            transition: "transform 0.3s ease, background 0.3s ease",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
 
 // Real logos where we have them (public/assets); generic placeholders for the rest.
 const WORKS_WITH = [
@@ -308,122 +117,44 @@ function WorksWithMarquee() {
   );
 }
 
-function WaitlistForm() {
-  const [status, setStatus] = useState("");
-
-  async function onSubmit(e) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const email = new FormData(form).get("email");
-    setStatus("Saving…");
-    try {
-      const res = await fetch("/api/waitlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      if (res.ok) {
-        form.reset();
-        setStatus("You're on the list.");
-      } else {
-        setStatus("Something went wrong.");
-      }
-    } catch {
-      setStatus("Something went wrong.");
-    }
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="flex flex-col sm:flex-row items-center gap-2">
-      <input
-        type="email"
-        name="email"
-        required
-        placeholder="you@example.com"
-        className="rounded-full border border-black/15 bg-white px-4 py-2 text-sm w-56 outline-none focus:border-black/30"
-      />
-      <button
-        type="submit"
-        className="rounded-full px-4 py-2 text-sm font-semibold border border-black/15 bg-white text-[#0A0A0A] hover:border-black/30 transition-colors"
-      >
-        Join waitlist
-      </button>
-      {status ? <p className="text-xs text-neutral-500">{status}</p> : null}
-    </form>
-  );
-}
-
-export default function Landing() {
-  const [activeMode, setActiveMode] = useState("teach");
-  const [audioOn, setAudioOn] = useState(false);
-  const [demoInView, setDemoInView] = useState(false);
-  const [shaking, setShaking] = useState(false);
-  const [demoExpanded, setDemoExpanded] = useState(false);
-  const [downloadOpen, setDownloadOpen] = useState(false);
+export default function Landing({ startWaitlist = false }) {
+  const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
+  const [waitlistOpen, setWaitlistOpen] = useState(startWaitlist);
   const [introDone, setIntroDone] = useState(false);
   const [touchPointer] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   );
-  const demoPanelRef = useRef(null);
-  const mode = MODES.find((m) => m.id === activeMode);
-  const color = MODE_COLORS[activeMode];
-
-  function selectMode(id) {
-    setActiveMode(id);
-    setAudioOn(false);
-  }
-
-  function handleDotClick(dot) {
-    if (demoExpanded) {
-      if (dot === "red") setDemoExpanded(false);
-      return;
-    }
-    if (dot === "green") {
-      setDemoExpanded(true);
-    } else {
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
-    }
-  }
-
-  useEffect(() => {
-    const el = demoPanelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setDemoInView(true);
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const heroGuidoRef = useRef(null);
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
       <IntroAnimation onDone={() => setIntroDone(true)} />
-      {introDone ? <GlassMascotCursor disabled={touchPointer} size={72} style={{ zIndex: 20 }} /> : null}
+      {introDone ? (
+        <GlassMascotCursor
+          disabled={touchPointer}
+          size={72}
+          restRef={heroGuidoRef}
+          style={{ zIndex: 20 }}
+        />
+      ) : null}
 
       {/* Nav */}
       <header className="sticky top-0 z-30 backdrop-blur-md bg-white/85 border-b border-black/[0.06]">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
           <Logo />
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-600">
-            <a href="#demo" className="hover:text-black transition-colors">How it works</a>
+            <a href="#how-it-works" className="hover:text-black transition-colors">How it works</a>
             <a href="#works-with" className="hover:text-black transition-colors">Works with</a>
           </nav>
           <button
             type="button"
-            onClick={() => setDownloadOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
+            onClick={() => setWaitlistOpen(true)}
+            className="shrink-0 inline-flex items-center gap-2 rounded-full font-semibold px-3.5 py-1.5 text-[13px] sm:px-5 sm:py-2 sm:text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
             style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
             onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
           >
-            Download for free
+            Join the waitlist
           </button>
         </div>
       </header>
@@ -431,7 +162,7 @@ export default function Landing() {
       {/* Hero — clean, editor-vibe */}
       <section>
         <div
-          className="pt-20 pb-10"
+          className="pt-12 pb-12 sm:pt-20 sm:pb-20"
           style={{
             backgroundImage:
               "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M20 15v10M15 20h10' stroke='%23000000' stroke-opacity='0.09' stroke-width='1.2'/%3E%3C/svg%3E\")",
@@ -440,7 +171,7 @@ export default function Landing() {
         >
           <div className="max-w-3xl mx-auto px-6 text-center">
             <div
-              className="w-full max-w-3xl mx-auto overflow-hidden mb-8"
+              className="relative w-full max-w-3xl mx-auto overflow-hidden mb-8"
               style={{
                 background: "#fcfcfc",
                 maskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
@@ -454,6 +185,7 @@ export default function Landing() {
                 muted
                 playsInline
               />
+              <span ref={heroGuidoRef} className="hero-guido-rest" aria-hidden="true" />
             </div>
 
             <h2
@@ -473,19 +205,12 @@ export default function Landing() {
                 </span>
               </span>
             </p>
-
-            <div className="mt-8">
-              <DownloadButton
-                className="px-7 py-3.5 text-[15px]"
-                onClick={() => setDownloadOpen(true)}
-              />
-            </div>
           </div>
         </div>
 
-        <div className="max-w-3xl mx-auto px-6 pt-10 pb-16 text-center">
+        <div className="max-w-3xl mx-auto px-6 pt-6 pb-10 sm:pt-10 sm:pb-16 text-center">
           <div className="flex items-center justify-center gap-3 sm:gap-6 flex-wrap">
-            {["Follow", "Learn", "Master"].map((word, i) => {
+            {["Ask", "Learn", "Master"].map((word, i) => {
               const weight = i === 0 ? 400 : i === 1 ? 600 : 800;
               const col = i === 0 ? "#a0a0a0" : i === 1 ? `${FLASH_PINK}99` : FLASH_PINK;
               return (
@@ -504,138 +229,30 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Interactive demo */}
-      <section id="demo" className="max-w-5xl mx-auto px-6 pb-24 scroll-mt-16">
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex items-center gap-1 bg-white border border-black/10 rounded-full p-1">
-            {MODES.map((m) => {
-              const Icon = m.icon;
-              const isActive = m.id === activeMode;
-              const c = MODE_COLORS[m.id];
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => selectMode(m.id)}
-                  className="relative flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors duration-300"
-                  style={{
-                    background: isActive ? c.accent : "transparent",
-                    color: isActive ? c.text : "#6b6b6b",
-                  }}
-                >
-                  <Icon size={15} />
-                  {m.label}
-                  {m.tag && !isActive && (
-                    <span className="text-[9px] font-bold uppercase text-neutral-400 hidden sm:inline">
-                      {m.tag}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="max-w-xl mx-auto mt-10 mb-12">
-          <div className="relative">
-            <div
-              className="rounded-3xl px-7 py-6 text-base font-bold leading-relaxed border transition-colors duration-300"
-              style={{ background: `${color.accent}12`, borderColor: `${color.accent}40`, color: "#2a2a2a" }}
-            >
-              {mode.description}
-            </div>
-            <div
-              className="absolute left-10 -bottom-2 w-0 h-0 transition-colors duration-300"
-              style={{
-                borderLeft: "8px solid transparent",
-                borderRight: "8px solid transparent",
-                borderTop: `8px solid ${color.accent}12`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Big video panel */}
-        {demoExpanded && (
-          <div
-            className="fixed inset-0 z-40"
-            style={{ background: "rgba(10,10,10,0.55)", backdropFilter: "blur(10px)" }}
-            onClick={() => setDemoExpanded(false)}
-          />
-        )}
-        <div
-          ref={demoPanelRef}
-          className={`rounded-3xl border bg-white overflow-hidden transition-all duration-500 ease-out ${
-            demoExpanded ? "fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-6xl" : ""
-          }`}
-          style={{
-            borderColor: `${color.accent}55`,
-            boxShadow: `0 40px 90px -20px rgba(0,0,0,0.35), 0 0 70px -10px ${color.accent}66`,
-            transform: demoExpanded ? "translate(-50%, -50%)" : demoInView ? "scale(1)" : "scale(0.92)",
-            opacity: demoInView ? 1 : 0,
-            animation: shaking ? "shake-no 0.5s ease-in-out" : "none",
-          }}
-        >
-          <WindowChrome title={mode.app} onDotClick={handleDotClick} />
-          <div className="relative bg-neutral-950 aspect-video flex items-center justify-center">
-            <div className="absolute inset-0 opacity-50" style={{ background: "radial-gradient(circle at 25% 20%, #1c1c1c, #000)" }} />
-
-            {activeMode === "teach" && (
-              <div className="relative grid grid-cols-6 gap-2 w-2/3">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <div key={i} className="h-8 rounded bg-white/5 border border-white/10" />
-                ))}
-              </div>
-            )}
-            {activeMode === "show" && (
-              <div className="relative grid grid-cols-5 gap-2 w-2/3">
-                {Array.from({ length: 15 }).map((_, i) => (
-                  <div key={i} className="h-6 rounded-sm bg-white/5 border border-white/10" />
-                ))}
-              </div>
-            )}
-            {activeMode === "do" && (
-              <div className="relative w-2/3 h-24 rounded-lg bg-white/5 border border-white/10 flex items-end gap-1 p-3">
-                {[30, 60, 40, 80, 50, 65, 35, 90, 45].map((h, i) => (
-                  <div key={i} className="flex-1 rounded-sm" style={{ height: `${h}%`, background: "rgba(255,255,255,0.08)" }} />
-                ))}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setAudioOn((v) => !v)}
-              className="absolute w-16 h-16 rounded-full flex items-center justify-center border-2 transition-all duration-300 hover:scale-105"
-              style={{ borderColor: color.accent, background: "rgba(10,10,10,0.7)" }}
-            >
-              <Play size={22} color={color.accent} fill={audioOn ? color.accent : "none"} />
-            </button>
-
-            <span className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wide text-neutral-500 bg-white/5 border border-white/10 rounded-full px-2.5 py-1">
-              Demo coming soon
-            </span>
-          </div>
-
-          {/* Audio bar visualizer */}
-          <div className="flex items-center justify-between gap-4 px-5 py-4 bg-black border-t border-white/10">
-            <button
-              type="button"
-              onClick={() => setAudioOn((v) => !v)}
-              className="flex items-center gap-2 text-xs font-semibold transition-colors"
-              style={{ color: audioOn ? color.accent : "#a0a0a0" }}
-            >
-              {audioOn ? <Volume2 size={15} color={color.accent} /> : <VolumeX size={15} />}
-              {audioOn ? "Audio on" : "Tap to hear it"}
-            </button>
-            <EqBars active={audioOn} color={color.accent} />
-          </div>
+      {/* How it works, in more detail */}
+      <section id="how-it-works" className="max-w-5xl mx-auto px-5 sm:px-6 py-14 sm:py-20 scroll-mt-16">
+        <h2 className="how-section-title text-[1.7rem] sm:text-4xl text-center mb-10 sm:mb-14">
+          A closer look at how it works
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {HOW_STEPS.map((step) => (
+            <article key={step.n} className="how-step" style={{ background: step.tile }}>
+              <span className="how-step-num mb-5" style={{ backgroundImage: step.num }}>
+                {step.n}
+              </span>
+              <h3 className="how-step-title mb-3">{step.title}</h3>
+              <p className="relative text-[15px] leading-relaxed text-[#2a2233]/70">
+                {step.body}
+              </p>
+            </article>
+          ))}
         </div>
       </section>
 
       {/* Works with — horizontal icon marquee */}
-      <section id="works-with" className="border-y border-black/[0.06] bg-white scroll-mt-16 py-20">
+      <section id="works-with" className="border-y border-black/[0.06] bg-white scroll-mt-16 py-14 sm:py-20">
         <h2
-          className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-center max-w-2xl mx-auto px-6 mb-14"
+          className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-center max-w-2xl mx-auto px-6 mb-10 sm:mb-14"
           style={{ fontFamily: "'Space Grotesk', sans-serif" }}
         >
           Use it on everything you already have open.
@@ -643,55 +260,49 @@ export default function Landing() {
         <WorksWithMarquee />
       </section>
 
-      {/* Download */}
-      <section id="download" className="max-w-6xl mx-auto px-6 py-16 text-center scroll-mt-16">
+      {/* Waitlist */}
+      <section id="waitlist" className="max-w-6xl mx-auto px-5 sm:px-6 py-12 sm:py-16 text-center scroll-mt-16">
         <img
           src="/assets/get-guido.png"
           alt="Get Guido"
-          className="w-full max-w-2xl mx-auto mb-10"
+          className="w-full max-w-sm sm:max-w-2xl mx-auto mb-8 sm:mb-10"
         />
 
         <button
           type="button"
-          onClick={() => setDownloadOpen(true)}
+          onClick={() => setWaitlistOpen(true)}
           className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
           style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
           onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 36px 8px rgba(196,181,253,0.35)")}
           onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
         >
-          Download for free
+          Join the waitlist
         </button>
       </section>
 
-      {downloadOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          style={{ background: "rgba(10,10,10,0.55)", backdropFilter: "blur(10px)" }}
-          onClick={() => setDownloadOpen(false)}
-        >
-          <div onClick={(e) => e.stopPropagation()}>
-            <DesktopDownloadWindow onClose={() => setDownloadOpen(false)} />
-          </div>
-        </div>
-      )}
+      <WaitlistOverlay
+        open={waitlistOpen}
+        referredBy={referredBy}
+        onClose={() => {
+          setWaitlistOpen(false);
+          if (window.location.pathname.replace(/\/+$/, "") === "/waitlist") {
+            window.history.replaceState({}, "", "/");
+          }
+        }}
+      />
 
       {/* Footer */}
       <footer className="border-t border-black/[0.06]">
-        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col gap-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <Logo />
-            <WaitlistForm />
-          </div>
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <Logo />
+          <div className="flex items-center flex-wrap justify-center gap-4">
             <p className="text-xs text-neutral-400">© Guido team</p>
-            <div className="flex items-center gap-4">
-              <a href="/login" className="text-xs text-neutral-400 hover:text-neutral-700">
-                Sign in
-              </a>
-              <a href="/privacy.html" className="text-xs text-neutral-400 hover:text-neutral-700">
-                Privacy policy
-              </a>
-            </div>
+            <a href="/login" className="text-xs text-neutral-400 hover:text-neutral-700">
+              Sign in
+            </a>
+            <a href="/privacy.html" className="text-xs text-neutral-400 hover:text-neutral-700">
+              Privacy policy
+            </a>
           </div>
         </div>
       </footer>

@@ -48,27 +48,143 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+const WAITLIST_APPS = new Set([
+  "excel",
+  "word",
+  "notion",
+  "adobe",
+  "davinci",
+  "cad",
+  "blender",
+]);
+
+const WAITLIST_ROLES = new Set([
+  "university_student",
+  "young_professional",
+  "high_school_student",
+  "entrepreneur",
+  "creative",
+  "other",
+]);
+
+function waitlistReferralUrl(code: string): string {
+  return `https://guidotutor.com/waitlist?ref=${encodeURIComponent(code)}`;
+}
+
+async function waitlistPosition(db: D1Database, id: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM waitlist WHERE id <= ?")
+    .bind(id)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+async function ensureReferralCode(db: D1Database, id: number, existing: string | null): Promise<string> {
+  if (existing) return existing;
+  const code = randomUrlToken(6);
+  await db.prepare("UPDATE waitlist SET referral_code = ? WHERE id = ?").bind(code, id).run();
+  return code;
+}
+
 async function handleWaitlistSignup(request: Request, env: Env): Promise<Response> {
-  let email: string | undefined;
+  let body: {
+    email?: string;
+    name?: string;
+    apps?: unknown;
+    appsOther?: string;
+    role?: string;
+    ref?: string;
+  };
   try {
-    ({ email } = await request.json<{ email?: string }>());
+    body = await request.json();
   } catch {
     return json({ error: "Invalid email" }, 400);
   }
 
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const appsOther = typeof body.appsOther === "string" ? body.appsOther.trim() : "";
+  const role = typeof body.role === "string" ? body.role.trim() : "";
+  const ref = typeof body.ref === "string" ? body.ref.trim() : "";
+  const apps = Array.isArray(body.apps)
+    ? [...new Set(body.apps.filter((app): app is string => typeof app === "string" && WAITLIST_APPS.has(app)))]
+    : [];
+
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: "Invalid email" }, 400);
   }
-
-  try {
-    await env.DB.prepare("INSERT INTO waitlist (email) VALUES (?)").bind(email).run();
-  } catch (err) {
-    if (!(err instanceof Error) || !err.message.includes("UNIQUE")) {
-      return json({ error: "Could not save signup" }, 500);
-    }
+  if (!name || name.length > 80) {
+    return json({ error: "Name is required" }, 400);
+  }
+  if (apps.length === 0 && !appsOther) {
+    return json({ error: "Pick at least one app, or tell us something else" }, 400);
+  }
+  if (appsOther.length > 280) {
+    return json({ error: "That note is a bit long" }, 400);
+  }
+  if (role && !WAITLIST_ROLES.has(role)) {
+    return json({ error: "Pick who you are" }, 400);
   }
 
-  return json({ ok: true });
+  const existing = await env.DB.prepare(
+    "SELECT id, referral_code FROM waitlist WHERE email = ?",
+  )
+    .bind(email)
+    .first<{ id: number; referral_code: string | null }>();
+
+  if (existing) {
+    const code = await ensureReferralCode(env.DB, existing.id, existing.referral_code);
+    return json({
+      ok: true,
+      alreadyJoined: true,
+      position: await waitlistPosition(env.DB, existing.id),
+      referralCode: code,
+      referralUrl: waitlistReferralUrl(code),
+    });
+  }
+
+  let referredBy: string | null = null;
+  if (ref) {
+    const referrer = await env.DB.prepare("SELECT referral_code FROM waitlist WHERE referral_code = ?")
+      .bind(ref)
+      .first<{ referral_code: string }>();
+    if (referrer) referredBy = referrer.referral_code;
+  }
+
+  const referralCode = randomUrlToken(6);
+  try {
+    const inserted = await env.DB.prepare(
+      `INSERT INTO waitlist (email, name, apps, apps_other, role, referral_code, referred_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(email, name, JSON.stringify(apps), appsOther || null, role || null, referralCode, referredBy)
+      .run();
+    const id = Number(inserted.meta.last_row_id);
+    return json({
+      ok: true,
+      alreadyJoined: false,
+      position: await waitlistPosition(env.DB, id),
+      referralCode,
+      referralUrl: waitlistReferralUrl(referralCode),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("UNIQUE")) {
+      const again = await env.DB.prepare("SELECT id, referral_code FROM waitlist WHERE email = ?")
+        .bind(email)
+        .first<{ id: number; referral_code: string | null }>();
+      if (again) {
+        const code = await ensureReferralCode(env.DB, again.id, again.referral_code);
+        return json({
+          ok: true,
+          alreadyJoined: true,
+          position: await waitlistPosition(env.DB, again.id),
+          referralCode: code,
+          referralUrl: waitlistReferralUrl(code),
+        });
+      }
+    }
+    return json({ error: "Could not save signup" }, 500);
+  }
 }
 
 async function handleGoogleStart(env: Env, url: URL): Promise<Response> {

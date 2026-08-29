@@ -26,11 +26,6 @@ html, body {
   50% { transform: translateY(-8px) rotate(var(--card-rot, 0deg)); }
 }
 
-@keyframes eq-bar {
-  0%, 100% { transform: scaleY(0.3); }
-  50% { transform: scaleY(1); }
-}
-
 @keyframes marquee-y {
   from { transform: translateY(0); }
   to { transform: translateY(-50%); }
@@ -156,10 +151,364 @@ html, body {
   }
 }
 
-@keyframes shake-no {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-10px); }
-  40% { transform: translateX(9px); }
-  60% { transform: translateX(-6px); }
-  80% { transform: translateX(4px); }
+.how-step {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 28px 26px 30px;
+  min-height: 100%;
+  border: 1px solid rgba(90, 70, 110, 0.16);
+  box-shadow:
+    0 18px 40px -20px rgba(91, 75, 99, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: transform 200ms ease, box-shadow 200ms ease;
 }
+
+.how-step:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 24px 48px -20px rgba(91, 75, 99, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+.how-step::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 70% at 18% -10%, rgba(255, 255, 255, 0.78), transparent 52%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0) 46%);
+}
+
+.how-step-num,
+.how-step-title,
+.how-section-title {
+  font-family: "Fredoka", sans-serif;
+}
+
+.how-step-num {
+  display: block;
+  font-weight: 700;
+  font-size: 3.15rem;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.how-step-title {
+  font-weight: 600;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  color: #2a2233;
+}
+
+.how-section-title {
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  background: linear-gradient(115deg, #7eb8ea 0%, #c89ad4 48%, #ef8bb8 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.waitlist-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+  background: rgba(10, 10, 12, 0.58);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.waitlist-overlay.enter {
+  animation: waitlist-veil-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.waitlist-overlay.form {
+  animation: none;
+  opacity: 1;
+}
+
+.waitlist-overlay.leave {
+  animation: waitlist-veil-out 300ms ease both;
+}
+
+.hero-guido-rest {
+  position: absolute;
+  left: 52%;
+  top: 36%;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.waitlist-mark {
+  position: relative;
+  width: min(720px, 92vw);
+  pointer-events: none;
+  animation: waitlist-mark-in 1100ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.waitlist-mark-buddy {
+  position: absolute;
+  left: 66%;
+  top: 4%;
+  width: 78px;
+  filter: drop-shadow(0 14px 18px rgba(60, 40, 70, 0.16));
+  animation: waitlist-buddy-hover 1100ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.waitlist-mark img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 18px 36px rgba(0, 0, 0, 0.28));
+}
+
+.waitlist-shell {
+  width: 100%;
+  max-width: 36rem;
+  animation: waitlist-card-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.waitlist-overlay.leave .waitlist-shell {
+  animation: waitlist-card-out 280ms ease both;
+}
+
+.waitlist-card {
+  padding: 32px 28px 30px;
+  max-height: min(90dvh, 760px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.waitlist-card:hover {
+  transform: none;
+}
+
+.waitlist-kicker,
+.waitlist-title,
+.waitlist-next,
+.waitlist-back,
+.waitlist-choice,
+.waitlist-place {
+  font-family: "Space Grotesk", sans-serif;
+}
+
+.waitlist-kicker {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(42, 34, 51, 0.45);
+  margin-bottom: 6px;
+}
+
+.waitlist-title {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: #2a2233;
+  line-height: 1.15;
+}
+
+.waitlist-title-sm {
+  font-size: 1.55rem;
+}
+
+.waitlist-copy {
+  position: relative;
+  margin-top: 8px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(42, 34, 51, 0.7);
+  font-family: Inter, sans-serif;
+}
+
+.waitlist-place {
+  font-size: 3.4rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+  background: linear-gradient(180deg, #6eaee4 0%, #b592d8 52%, #e58ab4 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.waitlist-pane {
+  animation: waitlist-pane-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.waitlist-input {
+  width: 100%;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-size: 16px;
+  font-family: Inter, sans-serif;
+  color: #2a2233;
+  outline: none;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(90, 70, 110, 0.16);
+}
+
+.waitlist-input::placeholder {
+  color: rgba(42, 34, 51, 0.4);
+}
+
+.waitlist-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 18px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2a2233;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(90, 70, 110, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.waitlist-choice.is-on {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(42, 34, 51, 0.45);
+}
+
+.waitlist-next,
+.waitlist-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 12px 22px;
+}
+
+.waitlist-next {
+  flex: 1;
+  background: #0A0A0A;
+  color: #ffffff;
+}
+
+.waitlist-next:disabled {
+  opacity: 0.5;
+}
+
+.waitlist-back {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(90, 70, 110, 0.16);
+  color: #2a2233;
+}
+
+@keyframes waitlist-veil-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes waitlist-veil-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes waitlist-buddy-hover {
+  0% { opacity: 0; transform: translate(-40%, 16px) scale(0.88); }
+  38% { opacity: 1; transform: translate(-40%, -10px) scale(1); }
+  100% { opacity: 1; transform: translate(-40%, -16px) scale(1); }
+}
+
+@keyframes waitlist-mark-in {
+  0% { opacity: 0; transform: scale(0.92) translateY(10px); filter: blur(8px); }
+  42% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+  78% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.03) translateY(-8px); filter: blur(6px); }
+}
+
+@keyframes waitlist-card-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes waitlist-card-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+
+@keyframes waitlist-pane-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+  .waitlist-overlay {
+    padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .waitlist-card {
+    padding: 22px 16px 18px;
+    border-radius: 22px;
+    max-height: min(92dvh, 760px);
+  }
+  .waitlist-title { font-size: 1.6rem; }
+  .waitlist-title-sm { font-size: 1.22rem; }
+  .waitlist-place { font-size: 2.5rem; }
+  .waitlist-mark { width: min(420px, 86vw); }
+  .waitlist-mark-buddy {
+    left: 70%;
+    top: 0;
+  }
+  .waitlist-mark-buddy > * {
+    transform: scale(0.68);
+    transform-origin: top left;
+  }
+  .how-step {
+    padding: 22px 20px 24px;
+    border-radius: 22px;
+  }
+  .how-step-num { font-size: 2.6rem; }
+  .waitlist-copy { font-size: 14px; }
+  .waitlist-choice {
+    font-size: 12px;
+    padding: 10px;
+  }
+  .waitlist-next,
+  .waitlist-back {
+    min-height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  .how-step:hover {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-step,
+  .how-step:hover {
+    transition: none;
+    transform: none;
+  }
+  .waitlist-overlay,
+  .waitlist-mark,
+  .waitlist-mark-buddy,
+  .waitlist-shell,
+  .waitlist-pane {
+    animation: none !important;
+  }
+}
+

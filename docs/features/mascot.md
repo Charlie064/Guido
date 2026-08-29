@@ -12,7 +12,9 @@
   `stretch` / `tilt`) is a body transform on top of any state.
 - **What’s wired:** website can import the React components via the
   `@mascot` Vite alias; landing and `/login` mount the cursor-follow
-  buddy on pointer devices. The landing intro is CSS-only (orbit,
+  buddy on pointer devices. After the intro it rests slightly over the
+  hero Guido wordmark, follows the pointer, then drifts home when idle.
+  The landing intro is CSS-only (orbit,
   click, fade) using the static happy SVG so it stays on the GPU.
   Delayed animations use `forwards` only — iOS Safari treats delayed
   `both` as the end keyframe and would hide the intro. The cursor
