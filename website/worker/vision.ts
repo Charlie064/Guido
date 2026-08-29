@@ -1,23 +1,46 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { type Env, json, membershipFromBearer } from "./auth";
+import { type Env, type Plan, json, membershipFromBearer } from "./auth";
 
 // Guido's one call into Claude. The desktop app never talks to Anthropic
 // directly and never holds a key — anything shipped in the bundle is
 // extractable, so the key lives only as a Worker secret and every request
-// is authenticated, rate limited, and shaped here.
+// is authenticated, rate limited, budgeted, and shaped here.
 //
 // Deliberately NOT a passthrough proxy: the client sends a screenshot and
 // a goal, not a `messages` array. A passthrough would let anyone with a
 // free account spend our Anthropic budget on arbitrary prompts, and would
 // put the system prompt — the part worth stealing — back in the client.
 
-const MODEL = "claude-opus-5";
+// docs/business/pricing.md models COGS at $2/$10 per MTok, which is this
+// model. Changing the model here silently invalidates every margin in
+// that doc, so change both together or neither.
+const MODEL = "claude-sonnet-5";
+const INPUT_MICRO_USD_PER_TOKEN = 2; // $2 / 1M tokens
+const OUTPUT_MICRO_USD_PER_TOKEN = 10; // $10 / 1M tokens
 
-// Bounds the request before it reaches Anthropic. A PNG of a 4K screen is
-// ~2-4 MB raw, ~3-5 MB base64; 8 MB leaves headroom without letting a
-// client push arbitrarily large uploads through on our budget.
-const MAX_SCREENSHOT_BYTES = 8 * 1024 * 1024;
+// A next-step answer measured at ~340 output tokens. This is a hard
+// ceiling on what one call can cost, and thinking tokens count against
+// it too — 2048 leaves room for adaptive thinking plus the answer while
+// capping worst-case output spend at ~$0.02 instead of ~$0.16.
+const MAX_TOKENS = 2048;
+
+// pricing.md sizes every estimate on half-res captures (960x540 ~ 700
+// input tokens; full 4K is 2691, ~4x the cost for no accuracy gain on
+// locate). The desktop app is expected to downsample before sending;
+// this cap is what makes that non-optional.
+const MAX_SCREENSHOT_BYTES = 1_500_000;
 const MAX_TEXT_CHARS = 2000;
+
+// Monthly spend ceiling per plan, in micro-USD. Set well above the
+// typical COGS in pricing.md ($4.05/mo on starter) so a real user never
+// meets them — these bound abuse, they are not a product quota. The
+// product quota is skill_runs.
+const MONTHLY_CEILING_MICRO_USD: Record<Plan, number | null> = {
+  free: 1_000_000, // $1
+  starter: 6_000_000, // $6, against a $12 sticker
+  plus: 12_000_000, // $12, against a $24 sticker
+  owner: null, // unmetered
+};
 
 const SYSTEM_PROMPT = `You are Guido, a software tutor. You are looking at a screenshot of the user's screen and helping them accomplish a goal inside the application shown.
 
@@ -36,6 +59,22 @@ interface VisionRequest {
 
 const ALLOWED_MEDIA = new Set(["image/png", "image/jpeg", "image/webp"]);
 
+function costMicroUsd(inputTokens: number, outputTokens: number): number {
+  return inputTokens * INPUT_MICRO_USD_PER_TOKEN + outputTokens * OUTPUT_MICRO_USD_PER_TOKEN;
+}
+
+async function spentThisMonth(db: D1Database, userId: number): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COALESCE(SUM(micro_usd), 0) AS spent
+       FROM vision_usage
+       WHERE user_id = ? AND created_at >= date('now', 'start of month')`,
+    )
+    .bind(userId)
+    .first<{ spent: number }>();
+  return Number(row?.spent ?? 0);
+}
+
 export async function handleVision(request: Request, env: Env): Promise<Response> {
   if (!env.ANTHROPIC_API_KEY) {
     return json({ error: "Vision is not configured" }, 503);
@@ -48,10 +87,19 @@ export async function handleVision(request: Request, env: Env): Promise<Response
 
   // Per-user, not per-IP: a shared office NAT would otherwise throttle
   // everyone together, and the session token is what actually maps to the
-  // budget being spent.
+  // budget being spent. This bounds burst only — the monthly ceiling
+  // below is what bounds the bill.
   const { success } = await env.VISION_LIMITER.limit({ key: `vision:${member.user_id}` });
   if (!success) {
     return json({ error: "Too many requests" }, 429);
+  }
+
+  const ceiling = MONTHLY_CEILING_MICRO_USD[member.plan];
+  if (ceiling !== null) {
+    const spent = await spentThisMonth(env.DB, member.user_id);
+    if (spent >= ceiling) {
+      return json({ error: "Monthly usage limit reached", plan: member.plan }, 402);
+    }
   }
 
   let body: VisionRequest;
@@ -66,7 +114,7 @@ export async function handleVision(request: Request, env: Env): Promise<Response
     return json({ error: "screenshot is required" }, 400);
   }
   if (screenshot.length > MAX_SCREENSHOT_BYTES) {
-    return json({ error: "Screenshot too large" }, 413);
+    return json({ error: "Screenshot too large — downsample before sending" }, 413);
   }
 
   const mediaType = body.media_type ?? "image/png";
@@ -86,8 +134,11 @@ export async function handleVision(request: Request, env: Env): Promise<Response
   try {
     response = await client.messages.create({
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: MAX_TOKENS,
       thinking: { type: "adaptive" },
+      // "What is the next click" does not need deep deliberation, and
+      // thinking tokens bill at the output rate.
+      output_config: { effort: "low" },
       system: SYSTEM_PROMPT,
       messages: [
         {
@@ -122,6 +173,16 @@ export async function handleVision(request: Request, env: Env): Promise<Response
     return json({ error: "Vision request failed" }, 502);
   }
 
+  // Record before returning, and record even on a refusal — a refused
+  // call still costs input tokens, and a bill-bounding ledger that only
+  // counts successes is not bounding the bill.
+  const spend = costMicroUsd(response.usage.input_tokens, response.usage.output_tokens);
+  await env.DB.prepare(
+    "INSERT INTO vision_usage (user_id, input_tokens, output_tokens, micro_usd) VALUES (?, ?, ?, ?)",
+  )
+    .bind(member.user_id, response.usage.input_tokens, response.usage.output_tokens, spend)
+    .run();
+
   // A refusal is a 200 with no usable content — checking stop_reason first
   // avoids handing the UI an empty answer with no explanation.
   if (response.stop_reason === "refusal") {
@@ -136,6 +197,9 @@ export async function handleVision(request: Request, env: Env): Promise<Response
 
   return json({
     text,
+    // Truncation is silent otherwise: the UI would show a step that stops
+    // mid-sentence with no indication anything was cut.
+    truncated: response.stop_reason === "max_tokens",
     usage: {
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,

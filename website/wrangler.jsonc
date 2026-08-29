@@ -16,15 +16,19 @@
   "vars": {
     "GOOGLE_CLIENT_ID": ""
   },
-  // Abuse guard on /api/vision, which spends real Anthropic money per
+  // Burst guard on /api/vision, which spends real Anthropic money per
   // call. Keyed per user, not per IP. `namespace_id` is any string unique
   // within this Worker — there is nothing to create in the Cloudflare
-  // dashboard. `period` accepts only 10 or 60.
+  // dashboard. `period` accepts only 10 or 60, so this can express "per
+  // minute" and nothing longer; the monthly spend ceiling that actually
+  // bounds the bill lives in vision.ts against the vision_usage table.
+  // Counters are per-Cloudflare-location, not global, so treat this as
+  // an abuse guard rather than an accounting mechanism.
   "ratelimits": [
     {
       "name": "VISION_LIMITER",
       "namespace_id": "1001",
-      "simple": { "limit": 20, "period": 60 }
+      "simple": { "limit": 6, "period": 60 }
     }
   ],
   "d1_databases": [
