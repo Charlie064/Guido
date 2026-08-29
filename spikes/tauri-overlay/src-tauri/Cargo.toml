@@ -29,7 +29,31 @@ serde_json = "1"
 # the overlay promote itself to a layer-shell surface on those compositors
 # so it stays on top there too — see init_layer_shell in src/lib.rs. Only
 # pulled in on Linux; alwaysOnTop alone is sufficient on macOS/Windows.
+#
+# x11rb: window_provider.rs's Linux backend (window enumeration + live
+# rect re-query for the window-picker capture, see ADR 0005). Talks X11
+# directly, which also covers XWayland — Wayland-native enumeration is out
+# of scope (see window_provider.rs's module comment).
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
+x11rb = "0.13"
+
+# CGWindowListCopyWindowInfo (window_provider.rs) only needs Core
+# Foundation's CFArray/CFDictionary/CFString/CFNumber wrappers — the
+# CGWindowList call itself is declared as a raw extern against the
+# CoreGraphics framework directly, not through the `core-graphics` crate,
+# so this doesn't depend on that crate's own symbol names.
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+
+# EnumWindows/DwmGetWindowAttribute/QueryFullProcessImageNameW
+# (window_provider.rs).
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Dwm",
+    "Win32_System_Threading",
+] }
 
