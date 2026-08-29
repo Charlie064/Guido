@@ -32,9 +32,9 @@
    given that token.
 5. Replace the disabled placeholder in `sidebar.html`'s `#view-login` with
    the real flow, gated on the membership check.
-6. **Quentin defines what a "membership" actually is** (free/pro? one paid
-   tier or several? trial period?) and writes it into `docs/business/` —
-   this doc deliberately does not decide that; it's part of the task.
+6. Membership **tiers are defined** in
+   [business/pricing.md](../business/pricing.md) — `free` | `starter` |
+   `plus` | `owner`. This plan only implements the check.
 
 ## Why the website Worker, not a new backend
 
@@ -112,8 +112,9 @@ CREATE TABLE users (
 
 CREATE TABLE memberships (
   user_id INTEGER NOT NULL REFERENCES users(id),
-  plan TEXT NOT NULL,           -- e.g. 'free', 'pro' — see the tiers task below
-  status TEXT NOT NULL,         -- e.g. 'active', 'trialing', 'expired'
+  plan TEXT NOT NULL,           -- 'free' | 'starter' | 'plus' | 'owner'
+                                -- see docs/business/pricing.md
+  status TEXT NOT NULL,         -- 'active' | 'expired'
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id)
 );
@@ -167,24 +168,15 @@ table (not a signed-JWT-only approach) so a session can be revoked
   calling `start_google_login()`, then `invoke("get_session_token")` +
   a fetch to `/api/me` before advancing past login.
 
-### 5. Membership tiers (Quentin — do this before or alongside step 1)
+### 5. Membership tiers
 
-Tracked as [BL-007](../BACKLOG.md) — this is broader product scope than
-just this login task, so it has its own backlog entry rather than living
-only here. Nothing in the docs defines what a "membership" is yet — [ADR
-0002](../decisions/0002-agency-hybrid-vision-platform-business.md) only
-says "monthly subscription," no tiers. This doc deliberately does not
-decide it. **Write the answer into `docs/business/pricing.md`** (create
-it — `docs/business/` currently holds only a `.gitkeep`) — at minimum:
-how many tiers, what each unlocks, whether there's a free tier or a
-trial, and whether the MVP checks a **manually set** `plan` value in D1
-(no payment processor — flip someone's row by hand for now) or wires up
-real billing. This is a required deliverable of BL-007, not an optional
-write-up — the `memberships` table's `plan`/`status` values below stay
-placeholders until `pricing.md` exists. Real billing (Stripe or similar:
-checkout, webhooks, subscription lifecycle) is a materially bigger,
-separate task from the login flow above — scope it as a follow-up unless
-explicitly pulled in now.
+Canonical definition: [business/pricing.md](../business/pricing.md).
+Default a newly created `users` row to `memberships.plan = 'free'`,
+`status = 'active'`. `/api/me` must include `plan`, `status`,
+`skills_remaining`, `skills_included`, `can_save_skills` as specified
+there. Stripe / Starter overage charges are out of this login slice —
+MVP only stores `plan` (hand-set beyond `free`) and can hard-cap
+`free` at 5 new skills.
 
 ## Before Quentin can start: what Charlie needs to provide
 

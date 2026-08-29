@@ -164,6 +164,13 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   owns the actual landing-page content — the current
   `website/public/index.html` is a placeholder proving the wiring, not the
   real site.
+- **Anthropic API COGS estimated** in `docs/business/pricing.md`
+  (planning: 1 skill/day × 5 steps × 5 locates/step, images sent at
+  half linear res 960×540 → ~$4.05 typical subscriber/month; heavy
+  ~$8). Membership tiers decided in the same file: `free` (5
+  lifetime skills), `starter` ($12 + $0.25/skill overage), `plus`
+  ($24, can save skills), `owner` (unlimited). `BL-007` is now
+  enforce-quotas, not define-tiers.
 - **Open, undecided:**
   - Where the Do-mode opt-in toggle lives (global setting vs. per-question).
   - Gamification mechanic (`BL-002`).

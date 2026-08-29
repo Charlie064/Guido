@@ -67,20 +67,13 @@ point — this file should never pose as a source of truth for what's done.
   steps. Also still open: real design pass on the landing page. Cloudflare
   Member invites are sent ([reference/team.md](reference/team.md)), so
   `wrangler deploy` is no longer blocked on that.
-- **BL-007 — Define membership tiers (Quentin).** Renumbered from 006 to
-  007 on merge into `main` — `main` already had its own BL-006 (Pauline's
-  website-integration item) by the time this branch was picked up; see
-  [planning/login-membership-plan.md](planning/login-membership-plan.md).
-  Nothing in the docs defines what a "membership" actually is yet
-  ([ADR 0002](decisions/0002-agency-hybrid-vision-platform-business.md)
-  only says "monthly subscription," no tiers). Needs: how many tiers, what
-  each unlocks, whether there's a free tier or trial, and whether the MVP
-  checks a manually-set `plan` value in D1 or wires up real billing
-  (Stripe or similar — a materially bigger, separate task). **Write the
-  answer into `docs/business/pricing.md`** (create it — `docs/business/`
-  currently holds only a `.gitkeep`); this is a required deliverable of
-  the item, not optional. Blocks the `memberships` table's `plan`/`status`
-  values in the login plan from being anything more than placeholders.
+- **BL-007 — Enforce membership quotas.** Tiers (`free` / `starter` /
+  `plus` / `owner`) are defined in
+  [business/pricing.md](business/pricing.md). Remaining work: count new
+  skills, hard-cap free at 5, return the `/api/me` quota fields from
+  [planning/login-membership-plan.md](planning/login-membership-plan.md),
+  and gate skill save on `plus`/`owner`. Stripe + Starter overage
+  charges are a later slice.
 - **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
   currently runs on the free `workers.dev` subdomain
   (`tutoria-website.guidotutor.workers.dev`, see
