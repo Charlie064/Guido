@@ -86,17 +86,29 @@
         flex-shrink: 0;
       }
 
+      /* This bar is on every view, so an unclamped long title/subtitle
+         (a research-generated skill title, a long goal string) is the one
+         overflow bug that reproduces on every screen at a narrow width —
+         same missing-ellipsis pattern as .chat-row-title had. Its wrapper
+         already has flex:1;min-width:0 (inline style below), so this was
+         the only piece missing. */
       .bar-title {
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-weight: 600;
         font-size: 14px;
         letter-spacing: -0.02em;
         color: var(--ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .bar-subtitle {
         color: var(--muted);
         font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .bar-icon-btn {
