@@ -149,3 +149,30 @@ point — this file should never pose as a source of truth for what's done.
   actually move relative to the real system cursor, what triggers it,
   does it work through the same window-scope/portal constraints
   `locate_element` already has) — not scoped here.
+- **BL-011 — Relative (before/after) verify checks.** Deliberately
+  deferred (2026-08-29) — the first build of Guide → Do → Verify
+  (`docs/planning/vision-driven-substep-loop.md`, `verify_substep`) only
+  supports **absolute** checks: "Exposure ≈ +0.5", checked against one
+  after-the-fact screenshot. A relative check ("Exposure increased from
+  its current value," useful when a substep nudges something without a
+  specific target number in mind) needs a *before* state too, which is a
+  real design fork — Charlie's own catch: it means capturing something
+  at the *start* of a substep, which cuts against Verify's core design
+  choice that a screenshot only happens on a manual, user-triggered
+  confirm/verify press, never automatically. Rather than resolve that
+  tension in the first build, it's deferred whole.
+  - **Design sketch, not decided**: don't add a step-start capture.
+    Instead, treat whatever screenshot a *previous* substep's AI-verify
+    happened to produce as an opportunistic baseline for the *next*
+    substep's relative check — same idea already used one level up
+    (the last verify's screenshot feeds the next top-level step's
+    `plan_step` call). Needs an explicit decision on what "baseline"
+    even means: the actual cached image, or just the previous verify's
+    `observed` text reused as plain context (cheaper, no image
+    retention question, and `verify_substep` already takes a `context`
+    string this could ride in on with no new plumbing) — not decided,
+    scope this properly before building.
+  - **Only reachable at all after at least one AI-verify has actually
+    run** in the current substep sequence — self-confirmed-only substeps
+    leave no baseline, so `plan_step` needs to know not to generate a
+    relative `expected_outcome` there and fall back to an absolute one.

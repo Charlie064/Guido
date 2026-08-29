@@ -142,18 +142,34 @@ triggered), just a different question asked of the model.
    `deriveScopeFromGlobals()` split already landed and is compatible with
    whatever the other session converges on, but the UI side (moving the
    picker into goal creation) isn't done.
-3. **`expected_outcome` + `verify_substep`** — done, tested, this session.
-4. **Next**: wire a confirm+verify control onto a substep in the chat
-   view (`renderChat`/`actionsHtml` in `sidebar.js`), show the
-   expected-vs-observed mismatch UI, wire the reactive-substep path on
-   failure. Blocked on `sidebar.js` being free of concurrent edits.
-5. **Then**: gate `generateStepSubsteps` (the call that fires `plan_step`
-   for the *next* step) on the current step's confirmation state, and
-   thread the last verify's screenshot through as that call's vision
-   input — this is the part that needs `plan_step.py` to grow a second,
-   vision-capable code path (it's currently a bare text call).
-6. Auto-locate-on-entry and callout placement pick back up whenever
-   they're actually prioritized again — nothing above depends on them.
+3. ~~`expected_outcome` + `verify_substep`~~ — done, tested.
+4. ~~Wire confirm+verify onto the chat view~~ — done. **"Check my work"**
+   per substep (`verifyHtml`/`data-verify` in `sidebar.js`) calls
+   `verify_substep` and renders expected-vs-observed inline; a mismatch
+   shows an **"Ask for help"** button that prefills the chat input,
+   handing off into the existing reactive-substep path. A separate
+   **"Next step"** button (`#step-advance`) is the plain self-confirm
+   advance — deliberately *not* gated on verify having run anywhere in
+   the step, per the resolved open question 2/5 below. Also fixed in
+   passing: `generateStepSubsteps` built substeps from `plan_step`'s
+   response without copying `expected_outcome` onto the stored object,
+   so the button would never have had anything to check against — caught
+   before it shipped as a "why is Check my work never showing" bug.
+   Not yet exercised in a running app (no way to drive the GUI from this
+   environment) — verified by build/syntax checks and re-reading the
+   wiring, not a live click-through.
+5. **Deferred to [BL-011](../BACKLOG.md), not built**: gating
+   `generateStepSubsteps` for the *next* step on the current step's
+   confirmation state, and threading a verify screenshot through as that
+   call's vision input. Resolved (2026-08-29) to the simpler "skip"
+   answer instead — a step confirmed via plain "Next step" (no verify
+   anywhere in it) leaves `plan_step` text-only for the step after it,
+   same as today, rather than deriving a forced screenshot. Relative/
+   before-after checks specifically (the actual reason a before-state
+   was wanted) are BL-011's proper scope, not built as part of this pass.
+6. Auto-locate-on-entry, callout placement, and per-skill capture scope
+   pick back up whenever they're actually prioritized again — nothing
+   above depends on them.
 
 ---
 
@@ -263,15 +279,19 @@ verify press, same as today's locate press), not a new automatic-capture
 frequency, so it doesn't add a new category of exposure the way
 auto-locate-on-entry would have.
 
-## Open questions (updated)
+## Open questions (updated) — resolved 2026-08-29 unless marked
 
 1. **Granularity** — per-substep confirm/verify with a step-level
    advance-gate (this doc's working interpretation), or something
    coarser? Flagged above; confirm before building the state machine.
-2. What happens when a step is confirmed via self-confirm only (no AI
-   verify anywhere in it) — does step N+1's `plan_step` fall back to a
-   fresh, separate screenshot, or skip the vision input entirely for
-   that transition?
+   **Still open** — the answers below assume the per-substep reading but
+   this hasn't been explicitly confirmed.
+2. **Resolved: skip.** A step confirmed via self-confirm only (no AI
+   verify anywhere in it) means step N+1's `plan_step` stays text-only,
+   same as today — no fallback screenshot is taken just to keep every
+   transition vision-grounded. Simpler, and it means a screenshot only
+   ever happens as a direct consequence of the user pressing verify,
+   with no derived/implicit capture anywhere in the chain.
 3. Per-skill or still-global capture scope — still open, now entangled
    with the other session's home-flow rework; needs a fresh look once
    that settles.
@@ -279,3 +299,20 @@ auto-locate-on-entry would have.
    or does it still land on `nextCannedReply()`'s fixture text? (The
    reactive-substep mechanism it plugs into is real; the answer behind
    it isn't yet — see `docs/features/skills.md`'s existing gap.)
+5. **Resolved: two buttons, absolute checks only for now.** The confirm
+   control is two side-by-side actions per substep — a plain advance
+   button (labelled **"Next step"**) and a separate **"Check my work"**
+   button that runs `verify_substep` and shows expected-vs-observed
+   before letting the user advance. Charlie caught a real design
+   contradiction working through the exposure example — a *relative*
+   check ("exposure increased from before") needs a before-screenshot,
+   which can only be taken at a substep's *start*, contradicting Verify's
+   whole premise that a screenshot only happens on a manual, at-the-end
+   confirm/verify press. Resolved by scope, not by solving the
+   contradiction: **this build only supports absolute checks**
+   ("Exposure ≈ +0.5"), which need only the after-screenshot and have no
+   such conflict. Relative/before-after checks are split out to
+   [BL-011](../BACKLOG.md), including a sketch of the likely
+   answer (reuse a *previous* substep's verify screenshot/observed-text
+   as an opportunistic baseline, rather than add a new automatic
+   step-start capture) — not decided, not building it now.

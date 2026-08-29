@@ -15,7 +15,7 @@
 //   for platforms with no live window rect (a Wayland portal capture never
 //   discloses screen position) and as a non-intrusive "roughly where".
 import { SKILLS, nextCannedReply } from "./fake-skill.js";
-import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon } from "./icons.js";
+import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon, CheckIcon } from "./icons.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -1130,6 +1130,12 @@ async function generateStepSubsteps(step) {
       target_description: sub.target_description,
       instruction_text: sub.instruction_text,
       action: sub.action,
+      // What "Check my work" verifies against (verifyHtml/verify_substep
+      // below) — plan_step.py has generated this alongside the other
+      // fields since this session's earlier pass, but nothing carried it
+      // from the Rust response onto the stored substep until now, so the
+      // Check-my-work button never had anything to show.
+      expected_outcome: sub.expected_outcome,
       last_known_bbox: null,
     }));
     step.generated = true;
@@ -1360,6 +1366,43 @@ function actionsHtml(sub) {
   return `<div class="bubble-actions">${eye}${locate}${schematic}</div>`;
 }
 
+// "Check my work" — a manual, per-substep AI verify against
+// expected_outcome (plan_step's own field, see plan_step.py). Absolute
+// checks only for now ("Exposure ≈ +0.5"); a relative/before-after check
+// would need a screenshot at the substep's *start*, which contradicts
+// Verify's whole premise that a screenshot only happens on this button
+// press — deferred to BL-011 in docs/BACKLOG.md rather than solved here.
+// Separate from the eye/target/note icon row above: this one costs an
+// API call and changes what's shown below it, so it's a labeled button,
+// not an icon.
+function verifyHtml(sub) {
+  if (!sub.expected_outcome) return "";
+  const button = `<button class="bubble-verify-btn" data-verify="${sub.id}" type="button">${CheckIcon({
+    size: 13,
+  })}Check my work</button>`;
+  if (!sub.verifyResult) return button;
+
+  const { matches, observed } = sub.verifyResult;
+  const askHelp = matches
+    ? ""
+    : `<button class="verify-ask-help" data-ask-help="${sub.id}" type="button">Ask for help</button>`;
+  return `
+    ${button}
+    <div class="verify-result ${matches ? "match" : "mismatch"}">
+      <div class="verify-result-row">
+        <span class="verify-result-label">Expected</span>
+        <span>${sub.expected_outcome}</span>
+      </div>
+      <div class="verify-result-row">
+        <span class="verify-result-label">Observed</span>
+        <span>${observed}</span>
+      </div>
+      <div class="verify-result-verdict">${matches ? "✓ Looks right" : "✗ Doesn't match yet"}</div>
+      ${askHelp}
+    </div>
+  `;
+}
+
 function substepBubbleHtml(sub) {
   if (sub.origin === "ai") {
     return `
@@ -1367,6 +1410,7 @@ function substepBubbleHtml(sub) {
         <div class="bubble-target">${sub.target_description}</div>
         <div class="bubble-instruction">${sub.instruction_text}</div>
         ${actionsHtml(sub)}
+        ${verifyHtml(sub)}
         <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     `;
@@ -1377,6 +1421,7 @@ function substepBubbleHtml(sub) {
       <div class="bubble-answer">
         <div class="bubble-instruction">${sub.instruction_text}</div>
         ${actionsHtml(sub)}
+        ${verifyHtml(sub)}
         <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     </div>
@@ -1453,8 +1498,73 @@ function renderChat() {
     });
   });
 
+  body.querySelectorAll("[data-verify]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.verify);
+      if (!sub || !sub.expected_outcome) return;
+      btn.disabled = true;
+      btn.classList.add("busy");
+      try {
+        sub.verifyResult = await invoke("verify_substep", {
+          expectedOutcome: sub.expected_outcome,
+          scope: currentCaptureScope(),
+          context: locateContext(sub),
+        });
+        await persistSkills();
+        renderChat();
+      } catch (err) {
+        btn.classList.remove("busy");
+        btn.disabled = false;
+        btn.title = `Couldn't check: ${err}`;
+      }
+    });
+  });
+
+  body.querySelectorAll("[data-ask-help]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.askHelp);
+      if (!sub) return;
+      // Prefills rather than auto-sends: the observed text is a useful
+      // starting point, not necessarily exactly what the user wants to
+      // ask, and sendChatMessage's canned-reply fixture (see its own
+      // comment) means nothing is lost by giving them a chance to edit
+      // first.
+      const input = document.querySelector("#chat-input");
+      input.value = `I did this but it still shows: ${sub.verifyResult?.observed ?? "something unexpected"}. What should I do?`;
+      input.focus();
+    });
+  });
+
   body.scrollTop = body.scrollHeight;
+  updateStepAdvanceButton();
 }
+
+// Plain self-confirm, free — the "user decides they're done" advance
+// skills.md's Per-step loop already describes. Deliberately NOT gated on
+// every substep having been AI-verified: per this session's design
+// discussion, a step confirmed with no verify anywhere in it just skips
+// straight to the next step's plan_step call staying text-only (no
+// derived screenshot taken on its behalf) — see
+// docs/planning/vision-driven-substep-loop.md's open question 2.
+function updateStepAdvanceButton() {
+  const btn = document.querySelector("#step-advance");
+  const index = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
+  const isLast = index === currentSkill.steps.length - 1;
+  btn.textContent = isLast ? "Skill complete" : "Next step";
+  btn.disabled = isLast;
+}
+
+async function advanceToNextStep() {
+  const index = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
+  const next = currentSkill.steps[index + 1];
+  if (!next) return;
+  if (!next.generated && !next.planning) {
+    await generateStepSubsteps(next);
+  }
+  openStep(next);
+}
+
+document.querySelector("#step-advance").addEventListener("click", advanceToNextStep);
 
 function sendChatMessage() {
   const input = document.querySelector("#chat-input");

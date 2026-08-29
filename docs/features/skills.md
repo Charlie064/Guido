@@ -129,19 +129,37 @@ When the user reaches a top-level step:
 - A screenshot is **manually triggered** by the user pressing a button
   when they want the AI to look at the current screen — not fired
   automatically per substep.
-- Advancing to the next top-level step is **manual** — the user decides
-  they're done, not an automatic screen-diff/verify (that's roadmap P1
-  item 12, not built here). **Backend piece now exists** (2026-08-29,
-  untested against a real UI): `plan_step` generates an `expected_outcome`
-  per substep, and a new `verify_substep` call checks a screenshot
-  against it (`verify.py`/`verify_step.py`, `lib.rs`), instead of trusting
-  a "Done" click — this is the actual Guide → Do → Verify step from
-  [philosophy/vision.md](../philosophy/vision.md), prioritized over
-  on-screen highlight placement per Charlie's direction. See
+- Advancing to the next top-level step is **manual, via a "Next step"
+  button** (`#step-advance`, bottom of the chat view) — the user decides
+  they're done. Deliberately not gated on anything having been AI-verified
+  first: pressing it always advances, and if no substep in the step was
+  ever verified, the next step's `plan_step` call just stays text-only
+  (no screenshot is derived from nowhere to force it) — see "Per-step
+  loop," below.
+- **Guide → Do → Verify, built** (2026-08-29): each AI substep with an
+  `expected_outcome` (see "Per-step loop") gets its own **"Check my
+  work"** button (`verifyHtml`/`data-verify` in `sidebar.js`) — a manual,
+  per-substep AI check, not automatic/polling. It calls `verify_substep`
+  (`verify.py`/`verify_step.py`, `lib.rs`), which screenshots the current
+  capture scope and asks whether it matches `expected_outcome`, returning
+  `{matches, observed}`. Both are shown — expected side by side with
+  observed — so a wrong-but-specific answer is more useful for fixing the
+  problem than a bare pass/fail. On a mismatch, an **"Ask for help"**
+  button prefills the chat input with the observed state as a starting
+  question, turning a failed check into a normal reactive (pink) substep
+  rather than a dead end — the fixture-answer limitation on that path is
+  the same one already noted for reactive substeps generally, above.
+  This replaces trusting a "Done" click with the actual Guide → Do →
+  Verify step named in
+  [philosophy/vision.md](../philosophy/vision.md), and was deliberately
+  prioritized over on-screen highlight/callout polish per Charlie's
+  direction. **Absolute checks only** ("Exposure ≈ +0.5") — a relative/
+  before-after check ("exposure increased from before") would need a
+  screenshot at the substep's *start*, which conflicts with Verify's
+  premise that a screenshot only happens on this button press; deferred
+  whole to [BL-011](../BACKLOG.md) rather than resolved here. See
   [planning/vision-driven-substep-loop.md](../planning/vision-driven-substep-loop.md)
-  for the full design (confirm+optional-verify per substep, gating the
-  next step's `plan_step` on the current one being confirmed, a failed
-  verify becoming a reactive substep) — not yet wired to any UI.
+  for the full design history.
 - The resulting blue/pink sequence is **user-editable**: steps judged
   unnecessary can be deleted before/after the fact. This pruning is what
   turns a raw Q&A trace into a clean, reusable skill — the step-by-step

@@ -1237,6 +1237,136 @@
         color: var(--pink);
       }
 
+      /* "Check my work" — a labeled button, not icon-only like the
+         eye/target/note row above it: unlike those, this one costs an
+         API call and changes what's shown below it, so it needs to read
+         as a deliberate action rather than blend into the icon row. */
+      .bubble-verify-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 7px;
+        background: none;
+        border: 1px solid var(--blue-border);
+        color: var(--blue);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .bubble-verify-btn:hover {
+        background: var(--blue-soft);
+      }
+
+      .bubble-verify-btn:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+
+      .bubble-verify-btn.busy {
+        animation: bubble-btn-pulse 1s ease-in-out infinite;
+      }
+
+      /* Expected-vs-observed result, shown after a verify — the ✓/✗ carries
+         the same red/green split as substep origin colors elsewhere, but
+         the mismatch case leads with "Ask for help" rather than just a
+         bare failure state, since that's the actual next action. */
+      .verify-result {
+        margin-top: 7px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+
+      .verify-result.match {
+        background: rgba(40, 200, 130, 0.08);
+        border: 1px solid rgba(40, 200, 130, 0.3);
+      }
+
+      .verify-result.mismatch {
+        background: var(--pink-soft);
+        border: 1px solid var(--pink-border);
+      }
+
+      .verify-result-row {
+        display: flex;
+        gap: 5px;
+      }
+
+      .verify-result-row + .verify-result-row {
+        margin-top: 3px;
+      }
+
+      .verify-result-label {
+        flex-shrink: 0;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .verify-result.match .verify-result-verdict {
+        color: #1f9e63;
+        font-weight: 600;
+      }
+
+      .verify-result.mismatch .verify-result-verdict {
+        color: var(--pink);
+        font-weight: 600;
+      }
+
+      .verify-ask-help {
+        display: inline-flex;
+        margin-top: 6px;
+        background: none;
+        border: 1px solid var(--pink-border);
+        color: var(--pink);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .verify-ask-help:hover {
+        background: var(--pink-soft);
+      }
+
+      /* Bottom-of-step advance bar — separate from chat-footer's
+         ask-a-question input, since "I'm done with this step" and "let
+         me ask something" are different intents that shouldn't compete
+         for the same row. */
+      .step-advance-bar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 8px 16px;
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .step-advance-btn {
+        background: linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%);
+        color: #ffffff;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .step-advance-btn:hover {
+        box-shadow: 0 0 0 4px var(--halo-bloom);
+      }
+
+      .step-advance-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+        box-shadow: none;
+      }
+
       /* Schematic preview: NOT a real window drawn over the target app —
          a small proportional diagram, rendered entirely inside this
          panel, of roughly where the element sits. See sidebar.js's
@@ -1502,6 +1632,9 @@
           The box here is a schematic, not drawn on Excel.
         </div>
         <div class="chat-body" id="chat-body"></div>
+        <div class="step-advance-bar">
+          <button class="step-advance-btn" id="step-advance" type="button">Next step</button>
+        </div>
         <div class="chat-footer">
           <input id="chat-input" type="text" placeholder="Ask a question…" />
           <button id="chat-send" type="button">Send</button>

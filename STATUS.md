@@ -420,6 +420,24 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   input field's placeholder text, which was invisible the moment that
   input lost focus or was replaced by another view.
 
+- **Guide → Do → Verify UI wired** (2026-08-29, later than the backend
+  entry above): a "Check my work" button per AI substep
+  (`verifyHtml`/`data-verify` in `sidebar.js`) calls `verify_substep`,
+  shows expected-vs-observed inline, and offers "Ask for help" on a
+  mismatch (prefills the chat input, hands off to the existing reactive-
+  substep mechanism). A separate "Next step" button (`#step-advance`) is
+  the plain self-confirm advance, deliberately not gated on any verify
+  having run. Fixed in passing: `generateStepSubsteps` never copied
+  `expected_outcome` from `plan_step`'s response onto the stored substep,
+  so the button would have had nothing to check — caught before shipping.
+  Relative/before-after checks ("exposure increased from before") are
+  deliberately out of this pass — Charlie caught that they need a
+  before-state screenshot, which conflicts with Verify's premise that a
+  screenshot only happens on a manual press; split out as
+  [BL-011](docs/BACKLOG.md). **Not yet click-tested in a running app** —
+  no way to drive the GUI from this environment; verified by build/
+  syntax checks and re-reading the wiring only.
+
 ## What's next
 
 - **Guide → Do → Verify — backend built and tested, no UI yet.**
