@@ -143,3 +143,11 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
 - **Open, undecided:**
   - Where the Do-mode opt-in toggle lives (global setting vs. per-question).
   - Gamification mechanic (`BL-002`).
+- **Planned, not started: Google login + membership check (Quentin).** See
+  `docs/planning/login-membership-plan.md` — extends the D1 waitlist
+  database with users/memberships/sessions, adds a Google OAuth flow to
+  the website Worker, and wires the desktop app's placeholder login view
+  to it. Formalizes the auth scope ADR 0004 explicitly deferred. Blocked
+  on Charlie providing Cloudflare account access, a Google Cloud project,
+  and a privacy policy page — see that doc's "Before Quentin can start"
+  section.
