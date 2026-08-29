@@ -3,5 +3,6 @@ import Login from './Login.jsx'
 
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  return path === '/login' ? <Login /> : <Landing />
+  if (path === '/login') return <Login />
+  return <Landing startWaitlist={path === '/waitlist'} />
 }

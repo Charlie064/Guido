@@ -137,9 +137,16 @@ The live landing page is Pauline’s Guido Vite app in `website/src/`
 `privacy.html`) go in `website/public/`. The Worker is
 `website/worker/index.ts`; on deploy it serves `website/dist/`.
 
-**Keep the waitlist working:** the footer form in `website/src/Landing.jsx`
-POSTs JSON to `/api/waitlist`. The Worker validates and inserts into D1
-(`worker/index.ts` + `migrations/0001_create_waitlist.sql`).
+**Keep the waitlist working:** the header and bottom “Join the waitlist”
+buttons open the multi-step glass modal (`website/src/Waitlist.jsx`).
+`/waitlist?ref=` opens the same overlay. It POSTs JSON (`name`,
+`email`, `apps`, `appsOther`, `role`, `ref`) to `/api/waitlist`. The
+Worker validates and inserts into D1 (`worker/index.ts` +
+`migrations/0001_create_waitlist.sql`,
+`0003_add_waitlist_profile_fields.sql`, and
+`0004_waitlist_apps_and_referral.sql`).
+Do not add Next.js, Framer Motion, or Supabase — the site stays Vite +
+the existing Worker.
 
 Local D1 migrations (only needed once, or after a schema change):
 
@@ -153,8 +160,9 @@ branded `/login` (Guido fonts/buttons), then `/auth/google/start`,
 `website/.dev.vars` and fill `GOOGLE_CLIENT_ID` /
 `GOOGLE_CLIENT_SECRET`. Register the exact callback
 `http://localhost:8787/auth/google/callback` (local) or
-`https://tutoria-website.guidotutor.workers.dev/auth/google/callback`
-(production) on the Google OAuth client. The privacy policy Google
+`https://guidotutor.com/auth/google/callback`
+(production; `https://tutoria-website.guidotutor.workers.dev` still
+works) on the Google OAuth client. The privacy policy Google
 requires is `website/public/privacy.html` (`/privacy.html`). Quota
 rules are in [business/pricing.md](../business/pricing.md).
 
@@ -164,7 +172,10 @@ Deploying live:
 npm run deploy
 ```
 
-This needs `wrangler login` once, and needs you to actually be a member
+Production is `https://guidotutor.com` (and `www`) on the Tutoria
+Cloudflare account, via custom domains on the `tutoria-website` Worker.
+`npm run deploy` attaches those hostnames from `wrangler.jsonc`. This
+needs `wrangler login` once, and needs you to actually be a member
 of the Tutoria Cloudflare account — invites went out 2026-08-29 (see
 [reference/team.md](../reference/team.md)); check your email/spam if you
 haven't accepted yours yet.
