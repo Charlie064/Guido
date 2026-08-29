@@ -563,7 +563,18 @@ pub fn run() {
                 .get_webview_window("sidebar")
                 .unwrap_or_else(|| panic!("\"sidebar\" window declared in tauri.conf.json must exist"));
 
-            sidebar.show()?;
+            // Isolated fake Excel loop — `npm run demo` / GUIDO_EXCEL_DEMO=1.
+            // Regular `npx tauri dev` still opens sidebar only.
+            let excel_demo = std::env::var("GUIDO_EXCEL_DEMO")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            if excel_demo {
+                app.get_webview_window("excel-demo")
+                    .expect("\"excel-demo\" window declared in tauri.conf.json must exist")
+                    .show()?;
+            } else {
+                sidebar.show()?;
+            }
 
             // "region-select" gets layer-shell too (fill_screen — see
             // init_layer_shell), so it floats above everything (including

@@ -16,6 +16,7 @@
 //   discloses screen position) and as a non-intrusive "roughly where".
 import { SKILLS, nextCannedReply } from "./fake-skill.js";
 import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon } from "./icons.js";
+import { pickNativeWindow } from "./window-pick.js";
 
 const { getCurrentWindow } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
@@ -351,35 +352,21 @@ async function selectWindow() {
   button.disabled = true;
   label.textContent = "Click the window you want…";
 
-  await getCurrentWindow().hide();
-
-  const point = await new Promise(async (resolve) => {
-    const unlisten = await listen("tutoria:window-point-selected", (event) => {
-      unlisten();
-      resolve(event.payload);
-    });
-    emit("tutoria:begin-window-select");
-  });
-
-  if (point) {
-    try {
-      selectedWindow = await invoke("window_at_point", { x: Math.round(point.x), y: Math.round(point.y) });
-    } catch (err) {
-      label.textContent = `Nothing there — try clicking directly on a window (${err})`;
-      await getCurrentWindow().show();
-      await getCurrentWindow().setFocus();
-      button.disabled = false;
-      setTimeout(() => {
-        if (label.textContent.startsWith("Nothing there")) label.textContent = previousLabel;
-      }, 3000);
-      return;
+  try {
+    const picked = await pickNativeWindow();
+    if (picked) {
+      selectedWindow = picked;
+      portalPick = null;
     }
+    label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
+  } catch (err) {
+    label.textContent = `Nothing there — try clicking directly on a window (${err})`;
+    setTimeout(() => {
+      if (label.textContent.startsWith("Nothing there")) label.textContent = previousLabel;
+    }, 3000);
+  } finally {
+    button.disabled = false;
   }
-
-  label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
-  await getCurrentWindow().show();
-  await getCurrentWindow().setFocus();
-  button.disabled = false;
 }
 
 document.querySelector("#setup-region-select").addEventListener("click", selectWindow);
@@ -515,20 +502,33 @@ async function submitNewGoal() {
   input.value = "";
 
   try {
+    // Research runs while the user picks a window — Ask first, then the
+    // dimmed click-catcher so the wait isn't a blank spinner. A window
+    // already chosen in setup is left alone.
+    const needsPick = !selectedWindow && !portalPick;
+    const pickPromise = needsPick
+      ? selectWindow().catch((err) => {
+          console.warn("window pick during research failed", err);
+        })
+      : Promise.resolve();
+
     // Real Claude web-search round trip, routinely 30-60s — see the
     // global status bar (#status-bar) for what tells the user this is
     // still in flight rather than hung. stallAfter is well past the
     // typical range before it starts suggesting something's actually
     // wrong, so a normal slow call never gets flagged.
-    const researchSteps = await withStatus(
-      `Researching "${goal}"`,
-      () => invoke("research_goal", { goal, appName: selectedAppName() }),
-      {
-        slowAfter: 8,
-        stallAfter: 90,
-        stalledHint: "Research calls are normally done within a minute. If your Anthropic API key is out of credit, this call fails fast instead of hanging — so this most likely means it's still genuinely working.",
-      },
-    );
+    const researchSteps = (await Promise.all([
+      withStatus(
+        `Researching "${goal}"`,
+        () => invoke("research_goal", { goal, appName: selectedAppName() }),
+        {
+          slowAfter: 8,
+          stallAfter: 90,
+          stalledHint: "Research calls are normally done within a minute. If your Anthropic API key is out of credit, this call fails fast instead of hanging — so this most likely means it's still genuinely working.",
+        },
+      ),
+      pickPromise,
+    ]))[0];
     const skill = {
       id: `skill-${nextSkillId++}`,
       title: goal,

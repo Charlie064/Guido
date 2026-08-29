@@ -8,6 +8,7 @@
   },
   "app": {
     "withGlobalTauri": true,
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "sidebar",
@@ -54,6 +55,36 @@
         "skipTaskbar": true,
         "resizable": false,
         "focus": false,
+        "visible": false
+      },
+      {
+        "label": "excel-demo",
+        "title": "Guido",
+        "url": "excel-demo.html",
+        "width": 320,
+        "height": 420,
+        "center": true,
+        "transparent": false,
+        "decorations": true,
+        "alwaysOnTop": false,
+        "skipTaskbar": false,
+        "resizable": true,
+        "visible": false
+      },
+      {
+        "label": "excel-demo-overlay",
+        "title": "guido-excel-demo-overlay",
+        "url": "excel-demo-overlay.html",
+        "width": 1920,
+        "height": 1080,
+        "x": 0,
+        "y": 0,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "skipTaskbar": true,
+        "resizable": false,
         "visible": false
       }
     ],

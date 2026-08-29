@@ -105,6 +105,16 @@ npm install
 npx tauri dev
 ```
 
+Isolated UI harness (not the live sidebar) — Ask on top, app-group
+cards (Premiere / Photoshop / Blender, plus Excel after a prompt),
+glass overlay callouts. Use this as the visual reference when porting
+home groups into `sidebar.html`:
+
+```sh
+cd spikes/tauri-overlay
+npm run demo
+```
+
 This launches the Tutoria panel as a plain decorated window at its full
 size — **there is no collapsed icon to click anymore** (it was removed
 along with the collapse/expand resize dance, which relied on
@@ -112,16 +122,18 @@ always-on-top/undecorated behaviour that didn't hold up on GNOME; see the
 header comment in `src/sidebar.js`). If you see a small draggable icon,
 you are running an old build — `git pull`.
 
-Walk through login (placeholder — any click continues) → setup (pick what
-to capture) → skills → a step's path → that step's chat. Press **Escape**
-to quit.
+Walk through login (placeholder — any click continues) → setup (optional
+window pick) → home. **Ask first** — Research starts immediately, and if
+no window is picked yet the screen dims so you can click one while that
+runs. Then a step's path → that step's chat. Press **Escape** to quit.
 
-**The setup step behaves differently per platform**, and the button tells
+**Window pick behaves differently per platform**, and the button tells
 you which you have ([ADR 0007](../decisions/0007-portal-capture-backend-wayland.md)):
 
 - **"Select window"** (macOS, Windows, Linux/X11) — the screen dims and
   you click the window you want; its live rect is re-queried before every
-  capture, so moving or resizing it is fine.
+  capture, so moving or resizing it is fine. The same gesture is used
+  from setup and from Ask (`src/window-pick.js`).
 - **"Choose source"** (Linux/Wayland) — your desktop's own share prompt
   opens. Pick a screen *or* a window; you only get prompted once, and
   every later capture is silent. **Pick a whole screen if you want the

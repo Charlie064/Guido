@@ -50,6 +50,9 @@
    detection is still BL-004.
 2. **Goal** — the user states what they want to accomplish, in chat
    ("how do I make a chart"). The demo skill is “Make a chart in Excel”.
+   If no capture window is picked yet, Ask also opens the click-to-pick
+   gesture so Research can run while they click the target app
+   (`src/window-pick.js`).
 3. **Research** — one-shot, online, AI-assisted. Runs exactly once per
    chat, against the stated goal (not re-run per step). This is the
    expensive, highest-leverage call in the whole system: everything

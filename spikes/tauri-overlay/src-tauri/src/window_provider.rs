@@ -113,7 +113,11 @@ pub fn get_window_rect(id: &str) -> Result<WindowInfo, String> {
 // itself between hide() and this query landing, shouldn't resolve to us.
 fn is_own_window(w: &WindowInfo) -> bool {
     let haystack = format!("{} {}", w.app_name, w.title).to_lowercase();
-    haystack.contains("tutoria") || haystack.contains("tauri-overlay")
+    haystack.contains("tutoria")
+        || haystack.contains("tauri-overlay")
+        || haystack.contains("region-select")
+        || haystack.contains("select window")
+        || haystack.contains("excel-demo")
 }
 
 // Resolves a click (in absolute screen px, the same space `WindowInfo`'s
@@ -122,12 +126,31 @@ fn is_own_window(w: &WindowInfo) -> bool {
 // sidebar.js's window-select flow. Relies on `list_windows()` returning
 // front-to-back (topmost-first) order; see each backend's own note on how
 // it gets that order for free from its native API.
-pub fn window_at_point(x: i64, y: i64) -> Result<WindowInfo, String> {
-    list_windows()?
-        .into_iter()
+fn window_hit(windows: &[WindowInfo], x: i64, y: i64) -> Option<WindowInfo> {
+    windows
+        .iter()
         .filter(|w| !is_own_window(w))
         .find(|w| x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height)
-        .ok_or_else(|| "no window found at that point".to_string())
+        .cloned()
+}
+
+pub fn window_at_point(x: i64, y: i64) -> Result<WindowInfo, String> {
+    let windows = list_windows()?;
+    if let Some(hit) = window_hit(&windows, x, y) {
+        return Ok(hit);
+    }
+    // Retina / mixed logical-vs-physical clicks: JS may hand us CSS px
+    // while the backend stored points, or the reverse. Try both scales
+    // before giving up — same command for the live app and the demo.
+    for scale in [2_i64, 3] {
+        if let Some(hit) = window_hit(&windows, x / scale, y / scale) {
+            return Ok(hit);
+        }
+        if let Some(hit) = window_hit(&windows, x.saturating_mul(scale), y.saturating_mul(scale)) {
+            return Ok(hit);
+        }
+    }
+    Err("no window found at that point".to_string())
 }
 
 // ---------- macOS: CGWindowListCopyWindowInfo ----------
@@ -146,7 +169,7 @@ pub fn window_at_point(x: i64, y: i64) -> Result<WindowInfo, String> {
 mod macos {
     use super::WindowInfo;
     use core_foundation::array::{CFArray, CFArrayRef};
-    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::base::{CFType, CFTypeRef, TCFType};
     use core_foundation::dictionary::CFDictionary;
     use core_foundation::number::CFNumber;
     use core_foundation::string::CFString;
@@ -155,9 +178,26 @@ mod macos {
     const OPTION_EXCLUDE_DESKTOP_ELEMENTS: u32 = 1 << 4;
     const NULL_WINDOW_ID: u32 = 0;
 
+    #[repr(C)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGWindowListCopyWindowInfo(option: u32, relative_to_window: u32) -> CFArrayRef;
+        fn CGRectMakeWithDictionaryRepresentation(dict: CFTypeRef, rect: *mut CGRect) -> u8;
     }
 
     fn get_num(dict: &CFDictionary<CFString, CFType>, key: &str) -> Option<i64> {
@@ -197,14 +237,24 @@ mod macos {
 
             let Some(bounds) = dict
                 .find(CFString::new("kCGWindowBounds"))
-                .and_then(|v| v.downcast::<CFDictionary<CFString, CFType>>())
+                .and_then(|v| v.downcast::<CFDictionary>())
             else {
                 continue;
             };
-            let x = get_num(&bounds, "X").unwrap_or(0);
-            let y = get_num(&bounds, "Y").unwrap_or(0);
-            let width = get_num(&bounds, "Width").unwrap_or(0);
-            let height = get_num(&bounds, "Height").unwrap_or(0);
+            let mut rect = CGRect {
+                origin: CGPoint { x: 0.0, y: 0.0 },
+                size: CGSize { width: 0.0, height: 0.0 },
+            };
+            let ok = unsafe {
+                CGRectMakeWithDictionaryRepresentation(bounds.as_CFTypeRef(), &mut rect)
+            };
+            if ok == 0 {
+                continue;
+            }
+            let x = rect.origin.x.round() as i64;
+            let y = rect.origin.y.round() as i64;
+            let width = rect.size.width.round() as i64;
+            let height = rect.size.height.round() as i64;
             if width < 40 || height < 40 {
                 continue;
             }
