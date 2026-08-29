@@ -11,10 +11,7 @@ import {
   Apple,
   MonitorSmartphone,
   Command,
-  PenTool,
   Video,
-  Code2,
-  Box,
 } from "lucide-react";
 
 const BRAND = "#B6FF3E";
@@ -75,12 +72,18 @@ function IntroAnimation() {
 
 function Logo() {
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center justify-center rounded-lg w-8 h-8" style={{ background: "#0A0A0A" }}>
-        <MousePointer2 size={16} color={BRAND} strokeWidth={2.5} />
-      </div>
+    <div className="flex items-center gap-2.5">
+      <img
+        src="/assets/guido-icon.png"
+        alt="Guido"
+        className="w-11 h-11 rounded-xl"
+        style={{
+          border: "1.5px solid rgba(0,0,0,0.1)",
+          boxShadow: "0 0 0 4px rgba(196,181,253,0.15), 0 4px 10px -2px rgba(0,0,0,0.15)",
+        }}
+      />
       <span className="font-semibold text-[17px] tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-        guideo
+        Guido
       </span>
     </div>
   );
@@ -170,7 +173,7 @@ function DesktopDownloadWindow({ onClose }) {
   return (
     <div className="max-w-3xl w-full mx-auto rounded-3xl border border-black/10 bg-white shadow-[0_30px_80px_-30px_rgba(0,0,0,0.25)] overflow-hidden">
       <WindowChrome
-        title="guideo — download"
+        title="Guido — in one click"
         cream
         onDotClick={(dot) => {
           if (dot === "red") onClose?.();
@@ -237,22 +240,22 @@ const MODES = [
     label: "Teach",
     tag: "Default",
     icon: GraduationCap,
-    app: "Notion — Team Wiki",
-    description: "Learn by doing. guideo guides you step by step, highlights the right controls, and checks your progress before moving forward.",
+    app: "NOTION",
+    description: "Learn by doing. Guido guides you step by step, highlights the right controls, and checks your progress before moving forward.",
   },
   {
     id: "show",
     label: "Show",
     icon: Eye,
-    app: "Excel — Q3_Budget.xlsx",
-    description: "Understand what you are looking at. guideo highlights any element on your screen and explains what it is, what it does, and when to use it.",
+    app: "EXCEL",
+    description: "Understand what you are looking at. Guido highlights any element on your screen and explains what it is, what it does, and when to use it.",
   },
   {
     id: "do",
     label: "Do",
     icon: Zap,
-    app: "Video editor — timeline.mp4",
-    description: "Let guideo handle it for you. It performs the action directly on your screen, then clearly explains what it did so you stay in control.",
+    app: "VIDEO EDITOR",
+    description: "Let Guido handle it for you. It performs the action directly on your screen, then clearly explains what it did so you stay in control.",
   },
 ];
 
@@ -282,12 +285,12 @@ function EqBars({ active, color }) {
 // Real logos where we have them (public/assets); generic placeholders for the rest.
 const WORKS_WITH = [
   { name: "Notion", img: "/assets/notion.png" },
-  { name: "Excel", img: "/assets/excel.svg" },
-  { name: "Figma", icon: PenTool, bg: "#A259FF", fg: "#ffffff" },
-  { name: "GitHub", icon: Code2, bg: "#171515", fg: "#ffffff" },
-  { name: "Video editor", icon: Video, bg: "#3B82F6", fg: "#ffffff" },
-  { name: "VS Code", icon: Box, bg: "#007ACC", fg: "#ffffff" },
-  { name: "Blender", icon: Box, bg: "#E87D0D", fg: "#ffffff" },
+  { name: "Excel", img: "/assets/excel.png" },
+  { name: "Figma", img: "/assets/figma.png" },
+  { name: "GitHub", img: "/assets/github.svg" },
+  { name: "Video editor", img: "/assets/video-editor.png" },
+  { name: "VS Code", img: "/assets/vscode.png" },
+  { name: "Blender", img: "/assets/blender.png" },
   { name: "DaVinci Resolve", icon: Video, bg: "#1B1B3A", fg: "#ffffff" },
 ];
 
@@ -386,14 +389,16 @@ export default function Landing() {
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-600">
             <a href="#demo" className="hover:text-black transition-colors">How it works</a>
             <a href="#works-with" className="hover:text-black transition-colors">Works with</a>
-            <a href="#download" className="hover:text-black transition-colors">Download</a>
           </nav>
           <button
             type="button"
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-xl hover:bg-black/5 transition-colors"
-            aria-label="Files"
+            onClick={() => setDownloadOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
+            style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
+            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
           >
-            📁
+            Download for free
           </button>
         </div>
       </header>
@@ -409,7 +414,14 @@ export default function Landing() {
           }}
         >
           <div className="max-w-3xl mx-auto px-6 text-center">
-            <div className="w-full max-w-3xl mx-auto rounded-2xl overflow-hidden mb-8" style={{ background: "#fcfcfc" }}>
+            <div
+              className="w-full max-w-3xl mx-auto overflow-hidden mb-8"
+              style={{
+                background: "#fcfcfc",
+                maskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
+                WebkitMaskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
+              }}
+            >
               <video
                 src="/assets/hero-demo.mp4"
                 className="w-full h-auto block"
@@ -427,7 +439,7 @@ export default function Landing() {
             </h2>
 
             <p className="text-neutral-600 text-[17px] leading-relaxed max-w-lg mx-auto">
-              guideo watches your screen and shows you exactly where to click.{" "}
+              Guido watches your screen and shows you exactly where to click.{" "}
               <span className="font-bold text-neutral-800">
                 Learn any app by{" "}
                 <span className="relative whitespace-nowrap">
@@ -501,8 +513,12 @@ export default function Landing() {
               {mode.description}
             </div>
             <div
-              className="absolute left-10 -bottom-[7px] w-4 h-4 rotate-45 border-r border-b transition-colors duration-300"
-              style={{ background: `${color.accent}12`, borderColor: `${color.accent}40` }}
+              className="absolute left-10 -bottom-2 w-0 h-0 transition-colors duration-300"
+              style={{
+                borderLeft: "8px solid transparent",
+                borderRight: "8px solid transparent",
+                borderTop: `8px solid ${color.accent}12`,
+              }}
             />
           </div>
         </div>
@@ -599,7 +615,7 @@ export default function Landing() {
       <section id="download" className="max-w-6xl mx-auto px-6 py-16 text-center scroll-mt-16">
         <img
           src="/assets/get-guido.png"
-          alt="Get guideo"
+          alt="Get Guido"
           className="w-full max-w-2xl mx-auto mb-10"
         />
 
@@ -607,9 +623,9 @@ export default function Landing() {
           type="button"
           onClick={() => setDownloadOpen(true)}
           className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-          style={{ boxShadow: "0 0 0 rgba(59,130,246,0)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 36px 8px rgba(59,130,246,0.4)")}
-          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(59,130,246,0)")}
+          style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 36px 8px rgba(196,181,253,0.35)")}
+          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
         >
           Download for free
         </button>
