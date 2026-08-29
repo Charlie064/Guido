@@ -116,15 +116,28 @@ function WindowChrome({ title, onDotClick, cream }) {
   );
 }
 
+const PERSONAS = [
+  { value: "uni_student", label: "University student" },
+  { value: "young_professional", label: "Young professional" },
+  { value: "high_school_student", label: "High school student" },
+  { value: "entrepreneur", label: "Entrepreneur / Founder" },
+  { value: "other", label: "Other" },
+];
+
 function DesktopDownloadWindow({ onClose }) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [persona, setPersona] = useState(null);
   const [status, setStatus] = useState("idle"); // idle | loading | done | error
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!email || status === "loading") return;
+    if (!name || !email || status === "loading") return;
     setStatus("loading");
-    const { error } = await supabase.from("waitlist").insert({ email });
+    const { error } = await supabase
+      .from("waitlist")
+      .insert({ name, email, phone: phone || null, persona });
     if (error && error.code !== "23505") {
       setStatus("error");
       return;
@@ -176,6 +189,15 @@ function DesktopDownloadWindow({ onClose }) {
         ) : (
           <form onSubmit={handleSubmit} className="w-full flex flex-col items-center gap-4">
             <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Name"
+              className="w-full rounded-full px-5 py-3 text-sm text-white outline-none placeholder:text-white/30"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+            />
+            <input
               type="email"
               required
               value={email}
@@ -184,6 +206,42 @@ function DesktopDownloadWindow({ onClose }) {
               className="w-full rounded-full px-5 py-3 text-sm text-white outline-none placeholder:text-white/30"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
             />
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Phone (optional)"
+              className="w-full rounded-full px-5 py-3 text-sm text-white outline-none placeholder:text-white/30"
+              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}
+            />
+
+            <div className="w-full flex flex-col items-center gap-2">
+              <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
+                How would you best describe yourself? (optional)
+              </span>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {PERSONAS.map((p) => {
+                  const active = persona === p.value;
+                  return (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setPersona(active ? null : p.value)}
+                      aria-pressed={active}
+                      className="rounded-full px-3 py-1.5 text-xs font-semibold transition-colors"
+                      style={{
+                        background: active ? "#ffffff" : "rgba(255,255,255,0.06)",
+                        border: `1px solid ${active ? "#ffffff" : "rgba(255,255,255,0.08)"}`,
+                        color: active ? "#0A0A0A" : "rgba(255,255,255,0.6)",
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={status === "loading"}
@@ -379,12 +437,17 @@ export default function Landing() {
           <button
             type="button"
             onClick={() => setDownloadOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-            style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
-            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+            className="relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 px-5 py-2 text-sm"
+            style={{
+              background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
+              boxShadow: "0 4px 0 0 #000, 0 10px 20px -8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
+            }}
           >
-            Join the waitlist
+            <span
+              className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
+              style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
+            />
+            <span className="relative">Join the waitlist</span>
           </button>
         </div>
       </header>
@@ -650,12 +713,17 @@ export default function Landing() {
         <button
           type="button"
           onClick={() => setDownloadOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-          style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 36px 8px rgba(196,181,253,0.35)")}
-          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+          className="relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 px-7 py-3.5 text-[15px]"
+          style={{
+            background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
+            boxShadow: "0 5px 0 0 #000, 0 14px 26px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
+          }}
         >
-          Join the waitlist
+          <span
+            className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
+            style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
+          />
+          <span className="relative">Join the waitlist</span>
         </button>
       </section>
 
