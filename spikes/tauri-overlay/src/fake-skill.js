@@ -24,6 +24,22 @@
 //   a follow-up question; carries `question` (what they asked) in
 //   addition to `instruction_text` (the answer).
 
+// The reference frame these fixture coordinates were authored against.
+// This IS the "screen size parameter" that makes them scalable: every
+// x0..y1 below is a pixel position on a notional 1920x1080 frame, and
+// every consumer divides by these to get a 0..1 fraction before scaling to
+// whatever it's actually drawing on — the in-panel schematic uses them for
+// its aspect-ratio and percentage offsets (schematicHtml in sidebar.js),
+// and the real on-screen overlay re-multiplies the fraction by the target
+// window's *current* rect (overlay.js). So nothing here is tied to a
+// 1920x1080 display; these two numbers are only the denominator.
+//
+// 1920x1080 specifically because it's the most common desktop resolution,
+// so the fixture boxes land in plausible-looking places when the schematic
+// draws them, and because a real locate_element result carries the actual
+// captured frame's size in the same two fields — keeping the fixture in
+// the same shape means swapping fixtures for live data changes nothing
+// downstream.
 const REF_W = 1920;
 const REF_H = 1080;
 

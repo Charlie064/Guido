@@ -70,6 +70,7 @@ before shipping beyond a demo.)
 | Website scope (Pauline) | `docs/planning/website-v0.md` |
 | What to work on without a Claude Code session | `docs/planning/offline-planning-guide.md` |
 | Skill generation/editing/storage algorithm | `docs/features/skills.md` |
+| Adding a UI icon (check the pool first, don't redraw) | `spikes/tauri-overlay/src/icons.js`, gallery at `src/icons.html` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tutoria-overlay</title>
+    <style>
+      /* The real on-screen overlay: a transparent, always-on-top,
+         PERMANENTLY click-through window that draws a highlight box and a
+         text callout over the target app.
+
+         This revisits the design docs/architecture/overview.md's "Visual
+         overlay" section abandoned — an interactive full-screen window
+         blocks clicks into the app being taught. The difference now is
+         that click-through is set once in Rust at startup
+         (set_ignore_cursor_events, see src-tauri/src/lib.rs) and never
+         toggled from JS. The old failure was a *toggled* passthrough
+         getting stuck in the interactive direction, trapping the whole
+         screen; with nothing ever toggling it there's no stuck state to
+         reach. Nothing in this file may add a listener that needs real
+         clicks — if this window ever needs input, it needs a different
+         design, not a toggle.
+
+         pointer-events: none on everything is belt-and-braces on top of
+         the OS-level passthrough, so even a compositor that ignores the
+         hint can't make this window swallow a click. */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: transparent;
+        pointer-events: none;
+        font: 13px system-ui, sans-serif;
+      }
+
+      * {
+        pointer-events: none !important;
+        box-sizing: border-box;
+      }
+
+      /* Positioned in CSS px relative to this window's own top-left, which
+         overlay.js keeps aligned to the monitor origin — see its
+         toScreenCss() for the physical-px -> CSS-px conversion that makes
+         this correct on fractional/HiDPI scaling. */
+      #box {
+        position: absolute;
+        display: none;
+        border: 2px solid #ff3b3b;
+        border-radius: 3px;
+        background: rgba(255, 59, 59, 0.12);
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45), 0 0 14px rgba(255, 59, 59, 0.5);
+      }
+
+      /* The "text box in a certain location" — the substep's instruction,
+         anchored just under (or above, if there's no room) the highlighted
+         element rather than in the sidebar. */
+      #callout {
+        position: absolute;
+        display: none;
+        max-width: 320px;
+        background: #1a2029;
+        color: #f6f7f5;
+        border: 1px solid rgba(246, 247, 245, 0.16);
+        border-left: 3px solid #2f6fed;
+        border-radius: 8px;
+        padding: 9px 11px;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+      }
+
+      #callout .target {
+        color: #9aa4b2;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 3px;
+      }
+
+      #callout .instruction {
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      #callout .hint {
+        margin-top: 6px;
+        color: #9aa4b2;
+        font-size: 9px;
+      }
+
+      /* Shown instead of the box when the overlay is asked to draw for a
+         window that has since closed, or on a platform with no live rect —
+         a silent no-draw would be indistinguishable from a bug. */
+      #notice {
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: none;
+        background: #1a2029;
+        color: #f6f7f5;
+        border: 1px solid rgba(236, 72, 153, 0.35);
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 11px;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="box"></div>
+    <div id="callout">
+      <div class="target" id="callout-target"></div>
+      <div class="instruction" id="callout-instruction"></div>
+      <div class="hint">Press the eye again in Tutoria to hide this.</div>
+    </div>
+    <div id="notice"></div>
+    <script type="module" src="overlay.js"></script>
+  </body>
+</html>

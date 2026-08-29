@@ -8,11 +8,16 @@
 // live window rects. Wayland is out of scope here (native Wayland gives no
 // compositor-agnostic way to enumerate windows or their geometry outside
 // the wlroots foreign-toplevel protocol, and that protocol doesn't expose
-// geometry even where it exists — see the ADR's research section). A
-// Wayland session with an X11-capable connection (XWayland) still works
-// through the Linux backend below since it talks X11 either way; a Wayland-
-// native session with no XWayland just gets list_windows()'s connect error
-// surfaced to the caller, same as "no display available."
+// geometry even where it exists — see the ADR's research section).
+//
+// On a Wayland session that is where the story ends: the X11 backend below
+// only ever sees XWayland clients, and on a GNOME/KDE desktop where every
+// app is Wayland-native that is an *empty list*, not an error — so
+// click-to-pick silently resolves to nothing no matter where the user
+// clicks. That is why `backend()` exists: Wayland sessions are routed to
+// the desktop portal instead (portal_capture.py), where the compositor's
+// own picker selects the source and hands back frames directly. macOS and
+// Windows keep the native path unchanged.
 //
 // `id` is what `get_window_rect` re-resolves against later — this is what
 // makes the "resizer" problem (docs/decisions/0005…) solvable: a caller
@@ -30,6 +35,37 @@ pub struct WindowInfo {
     pub y: i64,
     pub width: i64,
     pub height: i64,
+}
+
+// Which pick-and-capture strategy this session actually supports.
+//
+// `Native`: windows can be enumerated and given live screen rects, so the
+// app drives the gesture itself (click-to-pick) and crops a full-screen
+// grab to the window's current rect.
+// `Portal`: nothing can be enumerated; the compositor's picker chooses the
+// source and the frame *is* the scope, so there are no screen coordinates
+// to re-resolve and nothing to crop.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Backend {
+    Native,
+    Portal,
+}
+
+// Keyed off the session type rather than "did the X11 query return
+// anything", because a Wayland session with one stray XWayland app would
+// otherwise report Native and then be able to see only that one app —
+// and, more decisively, screen *capture* is broken there too (mss is
+// X11-only and grim needs wlr-screencopy), so the portal is the only
+// working path even when a rect is technically obtainable.
+pub fn backend() -> Backend {
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            return Backend::Portal;
+        }
+    }
+    Backend::Native
 }
 
 pub fn list_windows() -> Result<Vec<WindowInfo>, String> {
@@ -422,6 +458,16 @@ mod linux_x11 {
                 width,
                 height,
             });
+        }
+        // An empty list here is not "nothing is open" — it means no client
+        // is registered with X11 at all, i.e. every app is Wayland-native.
+        // Reported as an error so a caller can never mistake it for a
+        // successful enumeration that just happened to find nothing.
+        if out.is_empty() {
+            return Err("no X11 windows found — this looks like a Wayland-native \
+                        session, where windows can't be enumerated; use the \
+                        portal capture path instead"
+                .to_string());
         }
         Ok(out)
     }

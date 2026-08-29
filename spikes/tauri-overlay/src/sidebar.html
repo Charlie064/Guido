@@ -536,40 +536,53 @@
         font-size: 11px;
       }
 
-      .bubble-show {
-        margin-top: 6px;
+      /* Per-substep actions: eye (draw the real on-screen overlay),
+         target (re-locate live), note (in-panel schematic) — icon-only,
+         from the shared pool in src/icons.js. Icons inherit `color` via
+         currentColor, so the hover/disabled states below tint the SVG
+         itself without each icon needing a color passed in. */
+      .bubble-actions {
+        display: flex;
+        gap: 4px;
+        margin-top: 7px;
+      }
+
+      .bubble-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         background: none;
         border: 1px solid var(--border);
         color: var(--muted);
         border-radius: 5px;
-        padding: 3px 7px;
-        font-size: 10px;
+        padding: 3px 5px;
+        line-height: 0;
       }
 
-      .bubble-show:hover {
+      .bubble-icon-btn:hover {
         border-color: var(--blue-border);
         color: var(--text);
       }
 
-      .bubble-locate {
-        margin-top: 6px;
-        margin-left: 4px;
-        background: none;
-        border: 1px solid var(--border);
-        color: var(--muted);
-        border-radius: 5px;
-        padding: 3px 7px;
-        font-size: 10px;
-      }
-
-      .bubble-locate:hover {
-        border-color: var(--blue-border);
-        color: var(--text);
-      }
-
-      .bubble-locate:disabled {
+      .bubble-icon-btn:disabled {
         opacity: 0.6;
         cursor: default;
+      }
+
+      /* Mid-locate: the vision round trip takes seconds, so the button
+         has to visibly be doing something rather than just going dim. */
+      .bubble-icon-btn.busy {
+        animation: bubble-btn-pulse 1s ease-in-out infinite;
+      }
+
+      @keyframes bubble-btn-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+
+      .bubble-icon-btn.failed {
+        border-color: var(--pink-border);
+        color: var(--pink);
       }
 
       /* Schematic preview: NOT a real window drawn over the target app —
@@ -662,12 +675,25 @@
       </section>
 
       <section id="view-setup" class="view">
-        <p>
+        <!-- Two variants, one per capture backend (see
+             window_provider::backend): click-to-pick where windows can be
+             enumerated, the compositor's own picker on Wayland where they
+             can't. setup.js picks which paragraph to show. -->
+        <p id="setup-blurb-native">
           Optional: pick the application window this skill is about.
           Vision calls only capture that window, and it re-checks the
           window's current size each time — so the overlay never goes
           stale if you resize or move it. Otherwise the full screen is
           used. This is a one-time setup step, not per-question.
+        </p>
+        <p id="setup-blurb-portal" hidden>
+          Pick what this skill should watch. Your desktop asks you to
+          choose a screen or a window and to confirm — that prompt is
+          one-time, and every later capture is silent. Sharing a whole
+          screen also lets the highlight be drawn directly on it; with a
+          single window Wayland won't say where it is, so guidance falls
+          back to a diagram. The app you're learning never needs to be
+          fullscreen or focused.
         </p>
         <div id="setup-region">
           <span id="setup-region-label">Window: full screen</span>

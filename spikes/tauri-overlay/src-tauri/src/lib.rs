@@ -20,6 +20,21 @@ mod window_provider;
 enum FrameAnchor {
     Region,
     Window { id: String, label: String },
+    // `Portal`: captured through the desktop portal (Wayland), where the
+    // frame is whatever source the compositor's picker handed us. There is
+    // deliberately no id or rect to re-anchor to — the portal never
+    // discloses the window's screen position, and the stored restore token
+    // (portal_capture.py) is what makes the *next* capture land on the same
+    // source. `label` is the portal's own description, display only.
+    //
+    // `screen` is what decides whether the on-screen overlay can draw:
+    // a screen-scoped frame *is* a whole monitor, so a fraction of the
+    // frame is the same fraction of that monitor and maps straight back to
+    // absolute coordinates. A window-scoped frame has no knowable position,
+    // so the overlay refuses and falls back to the schematic (ADR 0006).
+    // It is trustworthy because it comes from the portal's own report of
+    // what the user picked (source_type), not from a guess.
+    Portal { label: String, screen: bool },
 }
 
 // What the caller wants scoped: a free-drawn box, or a live window handle
@@ -32,6 +47,20 @@ enum FrameAnchor {
 enum CaptureScope {
     Region(Region),
     Window { id: String },
+    // Wayland: the source was picked once through the portal and is
+    // re-resolved from the stored restore token, not from a rect. `scope`
+    // is the portal source type the pick was made with ("any" | "window" |
+    // "monitor") and has to match, since the token is stored per scope.
+    //
+    // `screen` is what the user actually landed on, which "any" can't
+    // imply — the portal reports it back after the pick (source_type) and
+    // the caller passes it through. It decides whether the overlay can
+    // draw; see FrameAnchor::Portal.
+    Portal {
+        scope: String,
+        #[serde(default)]
+        screen: Option<bool>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -98,9 +127,20 @@ fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureSc
     // since it was selected: every capture re-derives its region from the
     // window's *current* geometry, not a stale snapshot (see ADR 0005 and
     // the FrameAnchor::Window comment above).
+    // `portal_scope` and `region` are mutually exclusive: a portal capture
+    // *is* already scoped to the picked source, so there is nothing to crop.
+    let mut portal_scope: Option<String> = None;
     let (region, anchor) = match scope {
         None => (None, None),
         Some(CaptureScope::Region(r)) => (Some(r), Some(FrameAnchor::Region)),
+        Some(CaptureScope::Portal { scope, screen }) => {
+            let label = format!("portal source ({scope})");
+            // Falls back to the requested scope when the caller didn't say:
+            // a "monitor" request can only have produced a screen.
+            let screen = screen.unwrap_or(scope == "monitor");
+            portal_scope = Some(scope);
+            (None, Some(FrameAnchor::Portal { label, screen }))
+        }
         Some(CaptureScope::Window { id }) => {
             let win = match window_provider::get_window_rect(&id) {
                 Ok(w) => w,
@@ -115,7 +155,7 @@ fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureSc
         }
     };
 
-    let result = run_locate(&target, &region).map(|mut b| {
+    let result = run_locate(&target, &region, portal_scope.as_deref()).map(|mut b| {
         b.anchor = anchor;
         b
     });
@@ -146,6 +186,72 @@ fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, String
     window_provider::window_at_point(x, y)
 }
 
+// Lets the setup view ask which pick gesture is even possible here before
+// offering one: click-to-pick on macOS/Windows/X11, the compositor's own
+// picker on Wayland. See window_provider::backend.
+#[tauri::command]
+fn capture_backend() -> window_provider::Backend {
+    window_provider::backend()
+}
+
+// What a portal-backend pick returns — the portal's own description of the
+// chosen source, plus its pixel size. No window id, title or app name: the
+// portal does not disclose them, which is the trade for it working at all
+// on Wayland.
+#[derive(Serialize, Deserialize, Debug)]
+struct PortalPick {
+    scope: String,
+    width: i64,
+    height: i64,
+    source_type: Option<String>,
+    // Present for monitor sources only — see portal_capture.py.
+    position: Option<Vec<i64>>,
+    label: String,
+    persisted: bool,
+}
+
+// Runs the compositor's picker (the one prompt in the whole flow) and
+// stores a restore token so later captures are silent. The sidebar is
+// hidden for the duration so the user is picking from their real desktop,
+// and so this app's own window isn't the obvious thing to click.
+#[tauri::command]
+fn pick_portal_source(app: tauri::AppHandle, scope: Option<String>) -> Result<PortalPick, String> {
+    use tauri::Manager;
+
+    let scope = scope.unwrap_or_else(|| "any".to_string());
+    let sidebar = app
+        .get_webview_window("sidebar")
+        .expect("\"sidebar\" window declared in tauri.conf.json must exist");
+    sidebar.hide().map_err(|e| format!("failed to hide sidebar before pick: {e}"))?;
+
+    let result = run_portal_pick(&scope);
+
+    sidebar.show().map_err(|e| format!("failed to re-show sidebar after pick: {e}"))?;
+    result
+}
+
+fn run_portal_pick(scope: &str) -> Result<PortalPick, String> {
+    let dir = vision_detect_dir();
+    let python = dir.join(".venv").join("bin").join("python3");
+    let script = dir.join("portal_capture.py");
+
+    let output = Command::new(&python)
+        .arg(&script)
+        .arg("pick")
+        .arg(scope)
+        .current_dir(&dir)
+        .output()
+        .map_err(|e| format!("failed to run portal_capture.py: {e}"))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("failed to parse portal_capture.py output ({stdout}): {e}"))
+}
+
 // Research runs once per chat, on just the goal text — no screenshot, no
 // sidebar to hide (see locate_element above for why that one needs it).
 // See docs/features/skills.md's "Research" step.
@@ -158,6 +264,48 @@ fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, String
 #[tauri::command]
 fn research_goal(goal: String, app_name: Option<String>) -> Result<Vec<ResearchStep>, String> {
     run_research(&goal, app_name.as_deref())
+}
+
+// Skill persistence: the whole skills/steps/substeps tree, as JS already
+// shapes it, round-tripped as an opaque JSON string. Deliberately *not* a
+// typed Rust struct mirroring Skill/Step/Substep — that shape (bbox,
+// FrameAnchor variants, per-origin substep fields) already lives in
+// sidebar.js and fake-skill.js, and is still actively changing there; a
+// second copy here would just be a second place to update every time the
+// UI's data model does. Rust's job is only "put these bytes on disk and
+// hand them back," not to understand them.
+fn skills_file_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("couldn't resolve the app data directory: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("couldn't create {}: {e}", dir.display()))?;
+    Ok(dir.join("skills.json"))
+}
+
+// None when no skill has ever been saved yet (fresh install) — distinct
+// from an error, so the caller can fall back to the fixture demo data
+// without treating "nothing saved yet" as a failure.
+#[tauri::command]
+fn load_skills_json(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = skills_file_path(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("couldn't read {}: {e}", path.display())),
+    }
+}
+
+// Called after every skill/step/substep mutation (new goal researched,
+// substeps generated, a chat follow-up added) — see sidebar.js's
+// persistSkills. Whole-file rewrite rather than incremental: the file is
+// small (a session's worth of skills) and this way there's exactly one
+// code path to get right, with no partial-write states to reason about.
+#[tauri::command]
+fn save_skills_json(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    let path = skills_file_path(&app)?;
+    std::fs::write(&path, json).map_err(|e| format!("couldn't write {}: {e}", path.display()))
 }
 
 fn run_research(goal: &str, app_name: Option<&str>) -> Result<Vec<ResearchStep>, String> {
@@ -247,14 +395,20 @@ fn run_plan_step(
         .map_err(|e| format!("failed to parse plan_step.py output ({stdout}): {e}"))
 }
 
-fn run_locate(target: &str, region: &Option<Region>) -> Result<Box2D, String> {
+fn run_locate(
+    target: &str,
+    region: &Option<Region>,
+    portal_scope: Option<&str>,
+) -> Result<Box2D, String> {
     let dir = vision_detect_dir();
     let python = dir.join(".venv").join("bin").join("python3");
     let script = dir.join("live_step.py");
 
     let mut cmd = Command::new(&python);
     cmd.arg(&script).arg(target);
-    if let Some(r) = region {
+    if let Some(scope) = portal_scope {
+        cmd.arg("--portal").arg(scope);
+    } else if let Some(r) = region {
         cmd.arg(format!("{},{},{},{}", r.x, r.y, r.width, r.height));
     }
 
@@ -341,26 +495,24 @@ pub fn run() {
             research_goal,
             plan_step,
             list_windows,
+            capture_backend,
+            pick_portal_source,
+            load_skills_json,
+            save_skills_json,
             refresh_window_rect,
             window_at_point
         ])
         .setup(|app| {
             use tauri::Manager;
-            // Two windows, not four: "sidebar" is the entire app — a
-            // plain, fixed-size decorated window showing one of
+            // Three windows: "sidebar" is the app proper — a plain,
+            // fixed-size decorated window showing one of
             // login/setup/skills/path/chat at a time (see sidebar.js).
-            // No collapsed-icon mode for now, and no full-screen highlight
-            // overlay window anymore either — an always-on-top window
-            // covering the whole screen turned out to be the thing
-            // actually blocking clicks into the app being taught, even
-            // permanently click-through — so highlighting now renders as
-            // a small schematic preview inside the sidebar's own panel
-            // (see sidebar.js) instead of a real box drawn over the
-            // target app. "region-select" is a full-screen window shown
-            // only for the duration of a region drag — see its own
-            // comment for why that isn't done by making sidebar itself
-            // interactive there. See docs/architecture/overview.md's
-            // "Windows" note.
+            // "region-select" is a full-screen surface shown only for the
+            // duration of a region drag or a click-to-pick-a-window
+            // gesture — see its own comment for why that isn't done by
+            // making sidebar itself interactive there. "overlay" is the
+            // real on-screen highlight window (see below). See
+            // docs/architecture/overview.md's "Windows" note.
             let sidebar = app
                 .get_webview_window("sidebar")
                 .unwrap_or_else(|| panic!("\"sidebar\" window declared in tauri.conf.json must exist"));
@@ -378,6 +530,50 @@ pub fn run() {
                 &app.get_webview_window("region-select")
                     .expect("\"region-select\" window declared in tauri.conf.json must exist"),
             )?;
+
+            // The real on-screen overlay — restored after having been cut
+            // (see docs/architecture/overview.md's "Visual overlay"): an
+            // earlier full-screen highlight window blocked clicks into the
+            // app being taught. The fix is that click-through is set here,
+            // once, at startup, and NEVER toggled from JS afterwards — the
+            // old failure mode was a *toggled* passthrough getting stuck
+            // in the interactive direction, which trapped the whole screen
+            // with no recovery short of killing the app. With nothing ever
+            // toggling it, there's no stuck state to reach. Don't add a
+            // command that flips this; if the overlay ever needs real
+            // input it needs a different design (see overlay.html).
+            //
+            // Layer-shell on Linux for the same reason region-select gets
+            // it: a plain alwaysOnTop toplevel can be tiled into the
+            // workspace layout by a tiling compositor instead of floating
+            // above everything, which would put the highlight box
+            // somewhere other than over the target app.
+            let overlay = app
+                .get_webview_window("overlay")
+                .expect("\"overlay\" window declared in tauri.conf.json must exist");
+            #[cfg(target_os = "linux")]
+            init_layer_shell(&overlay)?;
+            // GTK: set_ignore_cursor_events on a window that has never
+            // been shown aborts the process. tao implements it as
+            // `window.window().unwrap().input_shape_combine_region(..)`
+            // (tao's linux/event_loop.rs, WindowRequest::CursorIgnoreEvents)
+            // and `gtk_widget_get_window` returns NULL until the widget is
+            // *realized* — so the unwrap panics, inside a glib dispatch
+            // callback that can't unwind, which turns a panic into an
+            // immediate abort ("panic in a function that cannot unwind").
+            // "overlay" starts `"visible": false` and must stay invisible
+            // until a substep asks for it, so it isn't realized yet here.
+            //
+            // realize() creates the GdkWindow without mapping it — the
+            // window stays invisible, but the GdkWindow the input-shape
+            // call needs now exists. Must come *after* init_layer_shell:
+            // gtk-layer-shell requires init before realization.
+            #[cfg(target_os = "linux")]
+            {
+                use gtk::prelude::WidgetExt;
+                overlay.gtk_window()?.realize();
+            }
+            overlay.set_ignore_cursor_events(true)?;
 
             Ok(())
         })
