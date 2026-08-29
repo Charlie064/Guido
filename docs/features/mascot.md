@@ -13,8 +13,10 @@
 - **What’s wired:** website can import the React components via the
   `@mascot` Vite alias; landing and `/login` mount the cursor-follow
   buddy on pointer devices. The landing intro is CSS-only (orbit,
-  click, fade) using the static happy SVG so it stays on the GPU; the
-  cursor buddy mounts after the intro. The header mark stays
+  click, fade) using the static happy SVG so it stays on the GPU.
+  Delayed animations use `forwards` only — iOS Safari treats delayed
+  `both` as the end keyframe and would hide the intro. The cursor
+  buddy mounts after the intro. The header mark stays
   `guido-icon.png`. Desktop login uses the same
   `guido-icon.png` as the website login header. **Not yet:** desktop
   overlay that follows the OS cursor, or driving `thinking` / `success`

@@ -41,14 +41,21 @@ html, body {
   to { transform: translateX(-50%); }
 }
 
-/* Intro: compositor-only (transform + opacity). No filters, no JS frames. */
+/* Intro: compositor-only. Use `forwards` (not `both`) — iOS Safari applies
+   delayed `both` as the *end* keyframe, which hid the whole sequence. */
 .intro-overlay {
+  --intro-r: 128px;
   position: fixed;
   inset: 0;
   z-index: 100;
   pointer-events: none;
   background: #ffffff;
-  animation: intro-overlay-out 560ms cubic-bezier(0.22, 1, 0.36, 1) 3640ms both;
+  opacity: 1;
+  animation: intro-overlay-out 560ms cubic-bezier(0.22, 1, 0.36, 1) 3640ms forwards;
+}
+
+@media (max-width: 640px) {
+  .intro-overlay { --intro-r: min(112px, 28vw); }
 }
 
 .intro-mascot {
@@ -61,7 +68,7 @@ html, body {
   margin-top: -68px;
   opacity: 0;
   transform: translate3d(0, 14px, 0);
-  animation: intro-mascot-in 900ms cubic-bezier(0.22, 1, 0.36, 1) 2780ms both;
+  animation: intro-mascot-in 900ms cubic-bezier(0.22, 1, 0.36, 1) 2780ms forwards;
 }
 
 .intro-mascot img {
@@ -73,8 +80,9 @@ html, body {
 .intro-orbit {
   position: absolute;
   inset: 0;
+  transform-origin: 50% 50%;
   transform: rotate(-90deg);
-  animation: intro-spin 2100ms linear both;
+  animation: intro-spin 2100ms linear forwards;
 }
 
 .intro-radius {
@@ -83,8 +91,8 @@ html, body {
   left: 50%;
   width: 0;
   height: 0;
-  transform: translate3d(128px, 0, 0);
-  animation: intro-in 780ms cubic-bezier(0.22, 1, 0.36, 1) 2100ms both;
+  transform: translate3d(var(--intro-r), 0, 0);
+  animation: intro-in 780ms cubic-bezier(0.22, 1, 0.36, 1) 2100ms forwards;
 }
 
 .intro-pointer {
@@ -92,11 +100,12 @@ html, body {
   top: -10px;
   left: -6px;
   transform: rotate(90deg);
-  animation: intro-unspin 2100ms linear both;
+  animation: intro-unspin 2100ms linear forwards;
 }
 
 .intro-pointer-press {
-  animation: intro-click 420ms ease-out 2880ms both;
+  opacity: 1;
+  animation: intro-click 420ms ease-out 2880ms forwards;
 }
 
 @keyframes intro-spin {
@@ -110,7 +119,7 @@ html, body {
 }
 
 @keyframes intro-in {
-  from { transform: translate3d(128px, 0, 0); }
+  from { transform: translate3d(var(--intro-r), 0, 0); }
   to { transform: translate3d(0, 0, 0); }
 }
 
@@ -131,15 +140,20 @@ html, body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .intro-overlay,
-  .intro-mascot,
   .intro-orbit,
   .intro-radius,
   .intro-pointer,
   .intro-pointer-press {
     animation: none;
+    opacity: 0;
   }
-  .intro-overlay { opacity: 0; }
+  .intro-mascot {
+    animation: intro-mascot-in 500ms ease 80ms forwards;
+  }
+  .intro-overlay {
+    opacity: 1;
+    animation: intro-overlay-out 400ms ease 900ms forwards;
+  }
 }
 
 @keyframes shake-no {

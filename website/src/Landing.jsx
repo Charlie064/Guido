@@ -36,7 +36,7 @@ function IntroAnimation({ onDone }) {
     const t = setTimeout(() => {
       setVisible(false);
       onDoneRef.current?.();
-    }, reduceMotion ? 200 : INTRO_MS);
+    }, reduceMotion ? 1400 : INTRO_MS);
     return () => clearTimeout(t);
   }, []);
 
