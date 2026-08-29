@@ -37,15 +37,14 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     under this Wayland/XWayland setup — it only works on X11 — so grim is
     now the primary path with mss kept as an X11 fallback), then the same
     vision-location call as Phase 0.
-  - Frontend (`src/main.js`) resizes the overlay to the primary monitor on
-    launch, positions the red box + explanation bubble from the returned
-    coordinates, and advances through the hardcoded 3-step sequence on
-    keypress (N / Enter), matching demo-v0 Phase 1 step 4.
-  - **Verified live, end to end, on this machine tonight:** `npx tauri dev`
-    launched a real transparent/always-on-top window sized to the actual
-    screen; it called into the Python live-capture pipeline and rendered
-    the box + bubble at the returned coordinates. Rust side (`cargo
-    check`) compiles clean.
+  - **Verified live, end to end:** `npx tauri dev` launched a real
+    transparent/always-on-top window sized to the actual screen; it called
+    into the Python live-capture pipeline and rendered a box + bubble at
+    the returned coordinates. Rust side (`cargo check`) compiles clean.
+    **Superseded by the UI rework below** — the full-screen highlight
+    window this used no longer exists, so the box/bubble rendering is gone
+    even though the `locate_element` → `live_step.py` pipeline it proved
+    still works.
   - **Not yet verified:** keyboard-advance through all 3 steps (no
     synthetic-input tool available in this environment — needs a real
     keypress) and accuracy against the actual VS Code Welcome screen live
@@ -67,6 +66,45 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     tonight. Still worth a real ADR recording this once the team's awake,
     per the original "pick the desktop app framework" item below.
 
+- **UI rework: one-window app shell with the skills/steps/chat flow —
+  built, over fixture data.** Supersedes the multi-window overlay design
+  above. See the "Visual overlay" section in
+  `docs/architecture/overview.md` for the full rationale.
+  - **Windows cut from 5 to 2.** Everything (collapsed icon, login, region
+    setup, skills list, step path, step chat) is now one `sidebar` window
+    that resizes itself between an 80×80 icon and a 380×560 panel.
+    `region-select` (transient region-drag surface) is the only other
+    window. Deleted: `index.html`, `main.js`, `icon.html`, `icon.js`,
+    `app.html`, `app.js`.
+  - **No on-screen overlay at all anymore.** Any real window over the
+    target app blocks clicks into it, so highlighting is now a schematic
+    diagram *inside* the sidebar's chat view (proportional red box on a
+    placeholder rectangle), not a box drawn on the real screen. **This
+    means the "point at the real element" promise in
+    `docs/philosophy/vision.md` is currently not delivered** — a known,
+    deliberate trade-off, flagged for revisit.
+  - **UI flow implemented**: login (placeholder, no auth) → setup (region
+    picker) → skills list → step path (expandable step nodes, blue
+    AI-substeps vs. pink user-question substeps, locked "not generated
+    yet" steps) → step chat (bubbles per substep, working input that
+    appends a new pink substep with a canned reply). Matches the substep
+    model in `docs/features/skills.md`.
+  - **Content is fixture data** (`src/fake-skill.js`), not AI output — no
+    API calls in this flow. The `locate_element` pipeline is still wired
+    and compiles, just not called from the new UI yet.
+  - **Sidebar is excluded from vision screenshots**: `locate_element`
+    hides it around the capture and re-shows it even on error, so no call
+    site has to remember.
+  - Two real platform bugs found and fixed while building this, both
+    documented in `src-tauri/src/lib.rs`: Tauri's `setSize()` silently
+    no-ops on an anchored layer-shell surface (needs a hide → GTK resize →
+    show cycle, verified via `hyprctl layers`), and calling GTK directly
+    from a `#[tauri::command]` handler crashes intermittently because
+    those don't run on the GTK thread (needs `run_on_main_thread`).
+  - **Verified live**: launched, confirmed the collapse/expand resize at
+    the compositor level, and screenshotted each view through the whole
+    flow including the schematic preview.
+
 ## What's next
 
 - **Morning: rehearse the actual demo script** (`docs/planning/demo-v0.md`)
@@ -80,10 +118,28 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
 - Decide non-negotiables (screen-data handling was explicitly deferred, not
   decided) and fill them into `CLAUDE.md`.
 - Start on remaining P0 items in `docs/planning/mvp-roadmap.md`.
+- **Designed, not yet built:** the per-step algorithm (manual screenshot
+  trigger, lazy AI-generated substeps vs. reactive user-question substeps,
+  user-editable path, no-screenshot skill storage, opt-in refresh on
+  replay) — see `docs/features/skills.md`. Also closes what a saved
+  "skill" stores.
+- **ADR 0004 (Cloudflare) accepted, and live.** Dedicated "Tutoria"
+  Cloudflare account created and administered by Charlie (Account ID
+  `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain
+  `guidotutor`) — see `docs/reference/team.md`. Website deployed:
+  **https://tutoria-website.guidotutor.workers.dev/**. Scaffold in
+  `website/` (`wrangler.jsonc`, `src/index.ts`,
+  `migrations/0001_create_waitlist.sql`) — Worker + static assets + a
+  waitlist-only D1 database (`tutoria-waitlist`). Verified end to end in
+  production: loaded the live URL in a browser, submitted the waitlist
+  form, confirmed the row landed in the real D1 database via `wrangler d1
+  execute --remote`. Full accounts/auth still deferred, per ADR 0004's
+  narrowed scope. **Not yet done:** inviting teammates as Cloudflare
+  account members (Manage Account → Members in the dashboard); a real
+  domain (currently on the free `workers.dev` subdomain). Pauline still
+  owns the actual landing-page content — the current
+  `website/public/index.html` is a placeholder proving the wiring, not the
+  real site.
 - **Open, undecided:**
   - Where the Do-mode opt-in toggle lives (global setting vs. per-question).
-  - The algorithm the agent uses to decide what to do at each step
-    (screenshot vs. web search vs. both) — flagged as high importance,
-    needs its own discussion before implementation.
-  - What exactly a saved "skill" (`BL-001`) stores.
   - Gamification mechanic (`BL-002`).
