@@ -43,6 +43,17 @@ const COLUMN_ORDER = [
   "referred_by",
 ];
 
+const ROLE_LABELS: Record<string, string> = {
+  university_student: "University student",
+  young_professional: "Young professional",
+  high_school_student: "High school student",
+  entrepreneur: "Entrepreneur",
+  creative: "Creative",
+  other: "Other",
+};
+
+const SEARCH_KEYS = ["email", "name", "referral_code", "referred_by"];
+
 export type WaitlistSnapshot = {
   columns: WaitlistColumn[];
   rows: Record<string, unknown>[];
@@ -95,6 +106,28 @@ export async function fetchWaitlist(db: D1Database): Promise<WaitlistSnapshot> {
   };
 }
 
+function humanizeRole(value: string): string {
+  if (ROLE_LABELS[value]) return ROLE_LABELS[value];
+  return value.replace(/_/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function formatSignupDate(value: string): string {
+  const iso = /T/.test(value) ? value : value.replace(" ", "T") + (value.endsWith("Z") ? "" : "Z");
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return value;
+  return (
+    new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "UTC",
+    }).format(date) + " UTC"
+  );
+}
+
 export function cellDisplay(key: string, value: unknown): string {
   if (value == null || value === "") return "";
   if (key === "apps") {
@@ -105,7 +138,24 @@ export function cellDisplay(key: string, value: unknown): string {
       // stored as plain text
     }
   }
+  if (key === "role") return humanizeRole(String(value));
   return String(value);
+}
+
+function cellSortValue(key: string, value: unknown): string {
+  if (value == null || value === "") return "";
+  if (key === "created_at") return String(value);
+  return cellDisplay(key, value);
+}
+
+function cellTableDisplay(key: string, value: unknown): string {
+  if (value == null || value === "") return "—";
+  if (key === "created_at") return formatSignupDate(String(value));
+  return cellDisplay(key, value);
+}
+
+function rowSearchText(row: Record<string, unknown>): string {
+  return SEARCH_KEYS.map((key) => cellDisplay(key, row[key])).filter(Boolean).join(" ").toLowerCase();
 }
 
 export function escapeHtml(value: string): string {
@@ -144,7 +194,6 @@ export function csvResponse(csv: string): Response {
 
 export function waitlistHtml(snapshot: WaitlistSnapshot, loggedInAs: string): string {
   const total = snapshot.rows.length;
-  const emailKey = snapshot.columns.some((col) => col.key === "email") ? "email" : snapshot.columns[0]?.key ?? "";
   const defaultSort = Math.max(
     0,
     snapshot.columns.findIndex((col) => col.key === "created_at"),
@@ -152,14 +201,15 @@ export function waitlistHtml(snapshot: WaitlistSnapshot, loggedInAs: string): st
 
   const body = snapshot.rows
     .map((row) => {
-      const email = cellDisplay(emailKey, row[emailKey]);
+      const search = rowSearchText(row);
       const cells = snapshot.columns
         .map((col) => {
-          const display = cellDisplay(col.key, row[col.key]);
-          return `<td data-sort="${escapeHtml(display)}">${escapeHtml(display)}</td>`;
+          const display = cellTableDisplay(col.key, row[col.key]);
+          const sort = cellSortValue(col.key, row[col.key]);
+          return `<td data-sort="${escapeHtml(sort)}">${escapeHtml(display)}</td>`;
         })
         .join("");
-      return `<tr data-email="${escapeHtml(email.toLowerCase())}">${cells}</tr>`;
+      return `<tr data-search="${escapeHtml(search)}">${cells}</tr>`;
     })
     .join("");
 
@@ -209,6 +259,13 @@ export function waitlistHtml(snapshot: WaitlistSnapshot, loggedInAs: string): st
       text-decoration: none;
     }
     a.btn:hover { background: #eee; }
+    .warn {
+      margin: 0 0 16px;
+      padding: 8px 10px;
+      background: #fff6d6;
+      border: 1px solid #e3c56b;
+      color: #3d3200;
+    }
     .wrap { overflow: auto; background: #fff; border: 1px solid #ddd; }
     table { border-collapse: collapse; width: 100%; min-width: 64rem; }
     th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
@@ -234,8 +291,13 @@ export function waitlistHtml(snapshot: WaitlistSnapshot, loggedInAs: string): st
     <div class="meta" id="count">${total} signup${total === 1 ? "" : "s"}</div>
     <div class="meta">Logged in as: ${escapeHtml(loggedInAs)}</div>
   </header>
+  ${
+    loggedInAs === "(no Access header)"
+      ? `<p class="warn">No Cloudflare Access session. Fine on localhost. Do not deploy this URL without Access — anyone who knows it can see every signup.</p>`
+      : ""
+  }
   <div class="toolbar">
-    <input type="search" id="filter" placeholder="Filter by email" autocomplete="off">
+    <input type="search" id="filter" placeholder="Filter by email, name, or referral" autocomplete="off" aria-label="Filter by email, name, or referral">
     <a class="btn" href="/internal/waitlist/export">Download CSV</a>
   </div>
   <div class="wrap">
@@ -279,8 +341,8 @@ export function waitlistHtml(snapshot: WaitlistSnapshot, loggedInAs: string): st
         var q = filter.value.trim().toLowerCase();
         var rows = tbody.rows;
         for (var i = 0; i < rows.length; i++) {
-          var email = rows[i].getAttribute("data-email") || "";
-          rows[i].classList.toggle("hidden", q !== "" && email.indexOf(q) === -1);
+          var hay = rows[i].getAttribute("data-search") || "";
+          rows[i].classList.toggle("hidden", q !== "" && hay.indexOf(q) === -1);
         }
         updateCount();
       });

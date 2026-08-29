@@ -120,7 +120,8 @@ npm run dev
 `npm run dev` is the Vite landing page (Pauline’s Guido site) at
 `http://localhost:5173`. API routes live on the Worker — in another
 terminal run `npm run dev:api` (`wrangler dev` on :8787). Vite proxies
-`/api` and `/auth` to that port so the waitlist form works.
+`/api`, `/auth`, and `/internal` to that port so the waitlist form and
+the waitlist admin work.
 
 `npm run build` writes the SPA to `website/dist/`. `npm run deploy`
 builds then runs `wrangler deploy`, which serves `dist/` as assets plus
