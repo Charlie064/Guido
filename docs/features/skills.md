@@ -7,12 +7,15 @@
   flagged undecided in [STATUS.md](../../STATUS.md).
 - **What's built**: the UI shape (steps/substeps, blue-vs-pink origin,
   expandable path, per-step chat) in `spikes/tauri-overlay/src/sidebar.js`,
-  driven by fixture data in `src/fake-skill.js`; and the Research call
-  itself (`spikes/vision-detect/research.py`, invoked via the
-  `research_goal` Tauri command in `lib.rs`). **What isn't**: substep
-  generation, real replies, and any persistence — every substep is still
-  hand-written fixture content, and a Research-generated step currently
-  has no way to be reached/expanded (see "Per-step loop" below).
+  originally driven by fixture data in `src/fake-skill.js`; the Research
+  call (`spikes/vision-detect/research.py`, invoked via the
+  `research_goal` Tauri command in `lib.rs`); and, as of this pass, the
+  first real per-step AI-planned substep generation (`plan_step`
+  command → `spikes/vision-detect/plan_step.py`, invoked lazily from
+  `generateStepSubsteps` in `sidebar.js` — see "Per-step loop" below).
+  **What isn't**: reactive user-question substeps, user-editable path,
+  and any persistence — a chat's substeps still live only in memory for
+  that session.
 - Implements the per-step mechanics of the
   Goal → Research → See → Guide → Do → Verify → Learn loop from
   [philosophy/vision.md](../philosophy/vision.md), inside the four-layer
@@ -55,9 +58,18 @@
    [architecture/overview.md](../architecture/overview.md). That tool's
    dynamic filtering runs searches inside a code-execution wrapper under
    the hood, which is markedly more token-hungry than plain search;
-   `research.py` caps it at `max_tokens=4096` and `max_uses=3` after a
+   `research.py` caps it at `max_tokens=4096` and `max_uses=2` after a
    smaller budget was observed live to truncate before ever producing an
-   answer.
+   answer (`max_uses` was 3 initially, trimmed to 2 for latency — a real
+   call still returned a full multi-step answer). The client is built
+   with `max_retries=0` and the call itself with `timeout=90`
+   (`plan_step.py` similarly, at `timeout=60`): the SDK retries a timed-
+   out request `max_retries` (2, by default) more times, so `timeout`
+   alone doesn't bound the wait — a single stalled call silently became a
+   270s+ one in testing (3 attempts × 90s each), and with the SDK's
+   10-minute default timeout that's up to 30 minutes, indistinguishable
+   from a real hang to the UI. With `max_retries=0`, a genuine stall now
+   fails loud with a clear error at the bounded `timeout` instead.
 4. **One goal per chat.** Wanting to do something unrelated (e.g. a pivot
    table, after asking about a chart) means starting a new chat, which
    runs its own Research pass and produces its own skill. No mid-chat goal
@@ -65,14 +77,17 @@
 
 ## Per-step loop
 
-**Not built yet — this is the gap left after Research.** A step produced
-by Research renders with `generated: false` and stays that way forever;
-`sidebar.js`'s `renderPath()` only makes a step clickable/expandable once
-`generated` is `true`, and nothing currently flips that or populates
-`substeps`. So today a real goal produces a browsable-but-inert list of
-steps (title + brief + watch_for, no dead end message anymore — see
-`renderPath`), not an interactive skill. The design below is the intended
-behavior once this call exists.
+**First real pass built** (`plan_step` command in `lib.rs` →
+`spikes/vision-detect/plan_step.py`, called lazily by
+`generateStepSubsteps` in `sidebar.js`). A step produced by Research
+still renders with `generated: false` and locked until the user first
+opens it — at that point `plan_step` runs once, scoped to just that
+step's own `title`/`brief`/`watch_for` plus the overall goal, and the
+result flips `generated` to `true` and populates `substeps` as AI-origin
+(blue) rows. Not yet built from the fuller design below: the AI does not
+yet look at prior substeps' Q&A for context (there's no prior substep the
+first time a step is reached, and no mechanism to feed later ones back
+in), and the path isn't user-editable yet.
 
 When the user reaches a top-level step:
 

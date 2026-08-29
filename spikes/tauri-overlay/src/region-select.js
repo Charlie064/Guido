@@ -8,6 +8,7 @@ const { getCurrentWindow, currentMonitor } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
 
 const boxEl = () => document.querySelector("#box");
+const hintEl = () => document.querySelector("#hint");
 
 async function resizeToMonitor() {
   const win = getCurrentWindow();
@@ -23,6 +24,7 @@ async function resizeToMonitor() {
 function runSelection() {
   return new Promise(async (resolve) => {
     const win = getCurrentWindow();
+    hintEl().innerHTML = 'Drag to select a capture region — <kbd>Esc</kbd> or click for full screen';
     document.body.classList.add("active");
     await win.show();
     await win.setFocus();
@@ -91,9 +93,54 @@ function runSelection() {
   });
 }
 
+// Runs one click-to-pick-a-window gesture: shows this window (crosshair
+// cursor, dimmed screen — same click-catcher this file already had for
+// region-drag, see the file-header comment on region-select.html for why
+// a real window, not a click-through toggle), waits for a single click,
+// hides itself, and resolves with the click point in absolute screen px
+// (this window is sized+positioned to exactly cover the monitor via
+// resizeToMonitor, so clientX/clientY already are screen coordinates —
+// same space region-drag's box already used). The caller (sidebar.js)
+// resolves that point to a window via the `window_at_point` command,
+// since this window itself is hidden by the time that query runs and so
+// can never be the "window" a click resolves to.
+function runClickSelect() {
+  return new Promise(async (resolve) => {
+    const win = getCurrentWindow();
+    hintEl().innerHTML = 'Click the window you want to select — <kbd>Esc</kbd> for full screen';
+    document.body.classList.add("active");
+    await win.show();
+    await win.setFocus();
+
+    function onClick(e) {
+      finish({ x: e.clientX, y: e.clientY });
+    }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") finish(null);
+    }
+
+    async function finish(point) {
+      document.removeEventListener("click", onClick);
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.classList.remove("active");
+      await win.hide();
+      resolve(point);
+    }
+
+    document.addEventListener("click", onClick);
+    document.addEventListener("keydown", onKeyDown);
+  });
+}
+
 listen("tutoria:begin-region-select", async () => {
   const region = await runSelection();
   emit("tutoria:region-selected", region);
+});
+
+listen("tutoria:begin-window-select", async () => {
+  const point = await runClickSelect();
+  emit("tutoria:window-point-selected", point);
 });
 
 listen("tutoria:quit", () => getCurrentWindow().close());

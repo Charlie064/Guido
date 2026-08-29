@@ -88,9 +88,18 @@ Should be able to reason about: visible text, buttons, menus, input fields,
 panels, icons, application layout, and approximate on-screen location of
 elements.
 
-Capture is scoped to a user-drawn region (default: full screen), never
+Capture is scoped to a user-picked window (default: full screen), never
 inferred from window focus — see
-[ADR 0003](../decisions/0003-capture-region-not-window-detection.md).
+[ADR 0003](../decisions/0003-capture-region-not-window-detection.md) and
+[ADR 0005](../decisions/0005-window-anchored-overlay-coordinates.md).
+**[partial]** — window-pick capture (macOS/Windows/Linux X11, via
+`spikes/tauri-overlay/src-tauri/src/window_provider.rs`) is built and
+wired into `locate_element`, which re-resolves the picked window's live
+rect immediately before every capture so it survives that window being
+resized or moved after selection; Wayland-native enumeration is out of
+scope (a free-drawn region remains the fallback there and everywhere
+else). Not yet built: occlusion detection (still deferred per ADR 0003)
+and grouping skills by the detected app (BL-004).
 
 ### Computer control
 
@@ -158,55 +167,39 @@ delivered; revisit if/when a way to highlight without blocking clicks is
 found (e.g. a true click-through box whose small element-sized region,
 not the whole monitor, is the only interactive-looking part — untried).
 
-**Windows: one small always-interactive panel, plus a transient
-region-drag window** [built] — down from an earlier four/five-window
-design (`main` + `icon` + `sidebar` + a separate `app` window were all
-tried at various points). All of that UI — collapsed icon, login, region
-setup, skills list, step path, step chat — now lives in **one window**,
-`sidebar` (`spikes/tauri-overlay/src/sidebar.html`/`sidebar.js`), which
-resizes itself between a small collapsed icon (80×80) and an expanded
-panel (380×560). This became possible, and correct, only once the
-full-screen highlight window (`main`) was removed: `main` used to need
-permanent click-through specifically so a small always-clickable `icon`
-window could coexist with it, and *that* split was itself worked around
-repeatedly (see the git history of this section for the toggle-based and
-click-through designs that were tried and rejected). With no full-screen
-window left at all, there's nothing for the icon to need protecting from,
-so `icon` and `sidebar` could simply become the same window.
-`region-select` (`region-select.html`/`region-select.js`) is unchanged: a
-temporary, fully-interactive, full-screen window shown only for the
-duration of a region drag, hidden immediately after via a real `hide()`
-call.
+**Windows: one plain fixed-size panel, plus a transient region-drag
+fallback window** [built] — down from an earlier four/five-window design
+(`main` + `icon` + `sidebar` + a separate `app` window were all tried at
+various points). All of the UI — login, setup, skills list, step path,
+step chat — lives in **one window**, `sidebar`
+(`spikes/tauri-overlay/src/sidebar.html`/`sidebar.js`): a plain, decorated,
+resizable, non-always-on-top toplevel, fixed at launch to 480×720 and
+centered (`tauri.conf.json`). There's no collapsed-icon mode for now — an
+earlier version resized itself between an 80×80 icon and a 380×560 panel
+(`resize_sidebar`, since deleted), but that depended on
+always-on-top+undecorated window quirks that didn't hold up on GNOME;
+bringing a minimized mode back is tracked as future work, not an
+oversight (see `STATUS.md`). `region-select`
+(`region-select.html`/`region-select.js`) is unchanged: a temporary,
+fully-interactive, full-screen window, now used only as the
+`CaptureScope::Region` fallback behind window-pick capture (see "Screen
+understanding" above) — shown only for the duration of a region drag,
+hidden immediately after via a real `hide()` call.
 
-**Resizing a layer-shell window needs two non-obvious fixes** — both hit
-in practice, not hypothetical:
-
-1. Tauri's own `window.setSize()` silently does nothing on a window
-   already promoted to a wlr-layer-shell surface (see the layer-shell note
-   below) once it's anchored to only two edges rather than stretched to
-   fill the screen. What actually works: hide the window, resize the
-   underlying `GtkWindow` directly (`gtk_window.resize()` +
-   `set_default_size()`), then show it again — confirmed via `hyprctl
-   layers` reporting the new surface size, not just the webview's own
-   belief about its size. This is a real, working exception to "prefer
-   Tauri's own APIs" — noted here so it isn't rediscovered as a mystery.
-2. Calling that raw GTK resize directly from inside a `#[tauri::command]`
-   handler crashed intermittently: command handlers don't run on the
-   main/GTK thread, and GTK isn't thread-safe from any other thread. The
-   fix is `AppHandle::run_on_main_thread`, with a channel to block the
-   command until the main-thread closure finishes (since the caller needs
-   the resize to have actually completed before it proceeds). See
-   `resize_sidebar` in `spikes/tauri-overlay/src-tauri/src/lib.rs`.
-
-**Region picker** [partial] — the sidebar's setup view lets the user click
-"Select region" to drag a capture box on the transient `region-select`
-window (Escape or a plain click keeps the full-screen default); the
-sidebar hides itself for the duration of the drag (a plain `hide()`, not a
-click-through toggle) and reopens once a region is picked. Threaded
-through to capture: `locate_element` takes an optional region and
-`live_step.py` crops to it (via `grim -g` on Wayland, an `mss`
-custom-rect monitor dict on X11) instead of always grabbing the full
-primary monitor.
+**Window-pick capture, region-drag as fallback** [partial] — the sidebar's
+setup view lets the user pick a live OS window from a list
+(`window_provider.rs`, see "Screen understanding" above) as the default
+capture scope; a "Select region" affordance to drag a box on the
+transient `region-select` window remains as the fallback where window-pick
+isn't available (Wayland) or the user wants a specific sub-area (Escape or
+a plain click keeps the full-screen default). The sidebar hides itself for
+the duration of a region drag (a plain `hide()`, not a click-through
+toggle) and reopens once picked. Threaded through to capture:
+`locate_element` takes a `CaptureScope` (`Region` or `Window{id}`, the
+latter re-resolved to the window's *current* rect immediately before every
+capture) and `live_step.py` crops to the resulting region (via `grim -g`
+on Wayland, an `mss` custom-rect monitor dict on X11) instead of always
+grabbing the full primary monitor.
 
 **Screenshots exclude the sidebar itself** [built] — since `sidebar` is a
 real, visible window (unlike the old fully click-through `main`), a raw
@@ -216,23 +209,34 @@ before shelling out to the capture and shows it again immediately after —
 guaranteed even if the capture/locate call errors — so every caller gets
 this for free rather than relying on each call site to remember it.
 
-**Staying above the system status bar is per-platform** [built, Linux] —
-"always on top" isn't one mechanism across platforms. On Linux/Wayland,
-wlroots compositors (Sway, Hyprland, ...) draw bars like waybar through the
-wlr-layer-shell protocol, a stacking class a plain "always on top" toplevel
-window can never render above; `sidebar` and `region-select` both promote
-themselves to layer-shell surfaces (Overlay layer) to fix it —
-`init_layer_shell` in `spikes/tauri-overlay/src-tauri/src/lib.rs`, gated to
-`target_os = "linux"` and only active when `gtk_layer_shell::is_supported()`
-(i.e. an actual Wayland session; X11 sessions fall back to plain
-alwaysOnTop, which is sufficient there). macOS/Windows don't need an
-equivalent — their "always on top" window levels already sit above the
-menu bar/taskbar. `region-select` anchors all four edges (stretches to
-cover the monitor); `sidebar` anchors only top+left with a fixed margin,
-so it grows/shrinks from its bottom-right corner rather than drifting —
-which also means it isn't draggable on Wayland (layer-shell surfaces don't
-support the interactive move `data-tauri-drag-region` relies on), so its
-position is fixed for now.
+**Staying above the system status bar is per-platform, region-select
+only** [built, Linux] — "always on top" isn't one mechanism across
+platforms. On Linux/Wayland, wlroots compositors (Sway, Hyprland, ...)
+draw bars like waybar through the wlr-layer-shell protocol, a stacking
+class a plain "always on top" toplevel window can never render above;
+`region-select` promotes itself to a layer-shell surface (Overlay layer,
+anchored to all four edges) to fix it — `init_layer_shell` in
+`spikes/tauri-overlay/src-tauri/src/lib.rs`, gated to `target_os = "linux"`
+and only active when `gtk_layer_shell::is_supported()` (i.e. a wlroots
+Wayland session; X11 and GNOME's Mutter both fall back to plain
+alwaysOnTop — confirmed via this app's own `WAYLAND_DEBUG=1` registry dump
+that Mutter never advertises `zwlr_layer_shell_v1` at all, not a version
+gap). macOS/Windows don't need an equivalent — their "always on top"
+window levels already sit above the menu bar/taskbar.
+
+`sidebar` is not just un-promoted from layer-shell, it's a **plain
+decorated window now, not always-on-top** (dropped through two earlier
+designs): layer-shell surfaces have no interactive move, so dragging
+needed a custom margin-rewriting IPC command with no GNOME answer at all;
+switching to Tauri's `startDragging()` on a plain undecorated
+always-on-top toplevel was tried next, but proved unreliable in practice
+even though it should work in principle. Giving `sidebar` a real titlebar
+(`decorations: true`, `alwaysOnTop: false` in `tauri.conf.json`) sidesteps
+both: the window manager owns dragging entirely, exactly like any other
+app window, with zero app-side drag code. Trade-off, accepted: `sidebar`
+is no longer forced above other windows, and on a tiling compositor
+(Hyprland/Sway) it can now be tiled into the workspace layout instead of
+floating.
 
 **Instruction/explanation popup** — a short text bubble, used for two
 purposes: pointing ("click here") and explaining ("this is the Color tab —
