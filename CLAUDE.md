@@ -62,6 +62,7 @@ before shipping beyond a demo.)
 | Product vision, positioning, target user | `docs/philosophy/vision.md` |
 | Technical architecture (layers, providers) | `docs/architecture/overview.md` |
 | MVP scope, priorities, demo script | `docs/planning/mvp-roadmap.md` |
+| How the MVP gets built (tracks, order, ownership) | `docs/planning/mvp-build-plan.md` |
 | Why "AI tutor" over "computer-use agent" | `docs/decisions/0001-ai-tutor-not-computer-use-agent.md` |
 | Do-mode opt-in, hybrid vision, platform, business model | `docs/decisions/0002-agency-hybrid-vision-platform-business.md` |
 | Team roster, roles, branch-name prefixes | `docs/reference/team.md` |

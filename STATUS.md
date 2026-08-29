@@ -117,7 +117,10 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   `docs/philosophy/vision.md`.
 - Decide non-negotiables (screen-data handling was explicitly deferred, not
   decided) and fill them into `CLAUDE.md`.
-- Start on remaining P0 items in `docs/planning/mvp-roadmap.md`.
+- Start on remaining P0 items in `docs/planning/mvp-roadmap.md`, following
+  the track/ordering plan in `docs/planning/mvp-build-plan.md` — Phase 0
+  (live accuracy baseline on a fresh VS Code Welcome window, and freezing
+  the substep JSON contract) gates everything else.
 - **Designed, not yet built:** the per-step algorithm (manual screenshot
   trigger, lazy AI-generated substeps vs. reactive user-question substeps,
   user-editable path, no-screenshot skill storage, opt-in refresh on
