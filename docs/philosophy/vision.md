@@ -1,6 +1,7 @@
 **Contract**
-- Product name: **Tutoria** (working title; product-facing name "TutorialCue" is
-  under consideration — see the naming note at the end of this doc).
+- Product name: **Tutoria** (repo/working title; **"tutoriapp"** is the
+  leading product-facing name candidate, with "TutorialCue" also under
+  consideration — see the naming note at the end of this doc).
 - Core loop: **Goal → Research → See → Guide → Do → Verify → Learn**.
 - Positioning: an AI *tutor* that can see and use the computer — not primarily
   an autonomous computer-use agent. See [ADR 0001](../decisions/0001-ai-tutor-not-computer-use-agent.md).
@@ -105,5 +106,13 @@ actual interface in front of you.
 
 The GitHub repo and working product name is **Tutoria**. Earlier drafts of
 this vision used "TutorialCue" as the product-facing name — that has not
-been decided either way. Update this note (and the repo/product references
-throughout `docs/`) once the team settles on one name.
+been decided either way.
+
+**"tutoriapp"** (it teaches you to use applications) is now the leading
+candidate: unlike "Tutoria," which collides with existing products/services
+using close variants of that name, "tutoriapp" is understood to have
+limited competing use — a real trademark/domain/app-store search has not
+been run yet and should happen before locking it in.
+
+Update this note (and the repo/product references throughout `docs/`) once
+the team settles on one name.
