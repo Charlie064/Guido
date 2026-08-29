@@ -2,7 +2,7 @@
 - Time-boxed overnight plan across all four people, target: a working
   demo-v0 (see [demo-v0.md](demo-v0.md)) plus submission-ready website copy
   and a rehearsed pitch by morning.
-- A plan, not a source of truth — graduates/archives per
+- A plan, not a source of truth — graduates then gets deleted, per
   [meta/style-guide.md](../meta/style-guide.md). Check
   [STATUS.md](../../STATUS.md) for current status, not this file.
 - Hour blocks are relative to whenever the overnight session actually
