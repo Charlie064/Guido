@@ -14,6 +14,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply tutoria-waitlist --remote"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0",
     "@tailwindcss/vite": "^4.3.3",
     "lucide-react": "^1.34.0",
     "react": "^19.2.8",

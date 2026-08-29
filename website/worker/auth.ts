@@ -1,11 +1,25 @@
 export type Plan = "free" | "starter" | "plus" | "owner";
 export type MembershipStatus = "active" | "expired";
 
+// The Workers rate-limiting binding. Declared here rather than pulled in
+// from @cloudflare/workers-types, which this project doesn't install —
+// the worker's .ts is bundled by esbuild, which strips types without
+// checking them, so the ambient globals below (Fetcher, D1Database) are
+// already unchecked and one more local shape costs nothing.
+export interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  // Set with `wrangler secret put ANTHROPIC_API_KEY` — never in `vars`,
+  // never in the repo, and never shipped to the desktop app. The whole
+  // point of /api/vision is that this value exists on exactly one machine.
+  ANTHROPIC_API_KEY?: string;
+  VISION_LIMITER: RateLimit;
 }
 
 export interface MembershipRow {

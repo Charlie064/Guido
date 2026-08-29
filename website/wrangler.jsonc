@@ -3,6 +3,10 @@
   "name": "guido-website",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
+  // The Anthropic SDK's credential resolution imports node:path/node:fs
+  // (for the on-disk auth profiles we don't use). Without this the Worker
+  // throws at runtime on the first import, not at build time.
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -12,6 +16,17 @@
   "vars": {
     "GOOGLE_CLIENT_ID": ""
   },
+  // Abuse guard on /api/vision, which spends real Anthropic money per
+  // call. Keyed per user, not per IP. `namespace_id` is any string unique
+  // within this Worker — there is nothing to create in the Cloudflare
+  // dashboard. `period` accepts only 10 or 60.
+  "ratelimits": [
+    {
+      "name": "VISION_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

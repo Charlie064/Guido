@@ -11,6 +11,7 @@ import {
   remainingFor,
   sha256Base64Url,
 } from "./auth";
+import { handleVision } from "./vision";
 
 export type { Env };
 
@@ -42,6 +43,9 @@ export default {
     }
     if (url.pathname === "/api/skills/start" && request.method === "POST") {
       return handleSkillStart(request, env);
+    }
+    if (url.pathname === "/api/vision" && request.method === "POST") {
+      return handleVision(request, env);
     }
 
     return env.ASSETS.fetch(request);
