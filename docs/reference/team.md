@@ -16,6 +16,29 @@
 Update the Role column as each person's area is decided — this table is the
 one place that fact lives; don't restate roles elsewhere.
 
+## Cloudflare account
+
+Charlie Sandvall created and administers the Tutoria Cloudflare account
+(billing, DNS, member invites) — see
+[ADR 0004](../decisions/0004-cloudflare-infrastructure-proposal.md).
+Account ID `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain
+`guidotutor`. Other team members are added as account **members** by
+email invite (Manage Account → Members in the dashboard), not via a
+shared login.
+
+| Full name          | Cloudflare email                  | Role                              |
+| ------------------ | ---------------------------------- | ---------------------------------- |
+| Charlie Sandvall   | `charlie.sandvall@gmail.com`       | Super Administrator (billing/DNS/member management) |
+| Pauline Mophou     | `pauline.mophou@protonmail.com`    | Administrator (no billing/membership access) |
+| Elanore de Garidel | `eleanore4444@icloud.com`          | Administrator (no billing/membership access) |
+| Quentin Feinäugle  | `quentinfeinaeugle@gmail.com`      | Administrator (no billing/membership access) |
+
+Non-billing teammates get the built-in **Administrator** role, not **Super
+Administrator** — full Workers/Pages/D1 access for development, but no
+billing profile or membership management. Invites still need to be sent
+from the dashboard (Manage Account → Members → Invite) — not yet done as
+of 2026-08-29.
+
 ## Creating a branch
 
 Run `scripts/new-branch.sh <feature-name>` instead of typing

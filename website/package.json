@@ -1,0 +1,13 @@
+{
+  "name": "tutoria-website",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply tutoria-waitlist --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tutoria-waitlist --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  }
+}

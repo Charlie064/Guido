@@ -37,3 +37,8 @@ Where the download will eventually point (which platform builds, hosted
 where) is not decided — not blocking for now, flag it back to Charlie once
 the site is otherwise ready so the placeholder can be swapped for a real
 link.
+
+Website hosting/domain (and, longer-term, product-side database/account
+validation) has a candidate provider — see
+[ADR 0004](../decisions/0004-cloudflare-infrastructure-proposal.md)
+(proposed, not accepted). Doesn't block building the site itself.

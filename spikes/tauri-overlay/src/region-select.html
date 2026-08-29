@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tutoria — select region</title>
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+        cursor: crosshair;
+      }
+      /* This window exists *only* for the region-drag gesture, and only
+         ever appears for that: shown right before a drag starts, hidden
+         right after (see region-select.js), never click-through. main.js
+         used to do this drag itself by toggling its own click-through
+         state off then back on — that toggle was observed to get stuck
+         one-directional (the return-to-click-through side silently not
+         taking effect), leaving main interactive and blocking the whole
+         screen with no recovery short of killing the app.
+         The fix is architectural: main is now permanently click-through
+         (set once in Rust, see src-tauri/src/lib.rs — never touched from
+         JS again), so there's no "stuck" state for it to get stuck in.
+         This window is the one thing that goes interactive for the drag
+         instead, and it's a good place for that to happen even in the
+         worst case, because it's impossible to mistake for a silent trap:
+         the whole screen dims and the cursor turns into a crosshair the
+         instant it's active, so if hide() ever failed, it would be
+         obvious that *this* is what's covering the screen — not an
+         invisible click-through window you'd have no way to notice. */
+      body.active {
+        background: rgba(10, 12, 16, 0.15);
+      }
+      #hint {
+        position: absolute;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a2029;
+        color: #f6f7f5;
+        font: 13px system-ui, sans-serif;
+        padding: 8px 14px;
+        border-radius: 6px;
+        pointer-events: none;
+      }
+      #hint kbd {
+        background: #2a3241;
+        border-radius: 3px;
+        padding: 1px 5px;
+        font-family: inherit;
+      }
+      #box {
+        position: absolute;
+        border: 2px dashed #4d8cff;
+        background: rgba(77, 140, 255, 0.08);
+        display: none;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hint">Drag to select a capture region — <kbd>Esc</kbd> or click for full screen</div>
+    <div id="box"></div>
+    <script src="region-select.js"></script>
+  </body>
+</html>

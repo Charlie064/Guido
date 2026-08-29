@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tutoria</title>
+    <style>
+      :root {
+        --bg: #1a2029;
+        --panel-raised: #232a36;
+        --border: rgba(246, 247, 245, 0.12);
+        --text: #f6f7f5;
+        --muted: #9aa4b2;
+        --blue: #2f6fed;
+        --blue-hover: #4d8cff;
+        --pink: #ec4899;
+        --pink-soft: rgba(236, 72, 153, 0.12);
+        --pink-border: rgba(236, 72, 153, 0.35);
+        --blue-soft: rgba(47, 111, 237, 0.12);
+        --blue-border: rgba(47, 111, 237, 0.35);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: transparent;
+        overflow: hidden;
+        height: 100vh;
+        width: 100vw;
+        color: var(--text);
+        font: 13px system-ui, sans-serif;
+        /* The collapsed icon is a fixed 80x80 window (tauri.conf.json) with
+           no scrollable content — any page zoom or touch-driven pan just
+           makes the icon appear to grow/slide inside its own box, since
+           there's nothing behind it to actually zoom or pan into. touch-
+           action blocks pinch/two-finger pan; ctrl+wheel and ctrl+-/+/0
+           zoom are blocked in JS below (sidebar.js), since WebKitGTK's
+           page-zoom shortcut isn't a CSS-addressable behavior. */
+        touch-action: none;
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+
+      /* ---------- Collapsed: just the icon ---------- */
+      /* This is the ONLY window in the app now (besides the transient
+         region-select drag surface) — see docs/architecture/overview.md's
+         "Windows" note. It used to be three separate windows (main, icon,
+         sidebar): main existed purely because it had to be click-through
+         everywhere except this button, and a single window can't be
+         click-through in one spot and not another. Now that there's no
+         full-screen highlight window at all, that reason is gone, so the
+         button and the panel can safely share one always-interactive
+         window that just resizes itself (see setShellSize in sidebar.js). */
+      #collapsed {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #collapsed.hidden {
+        display: none;
+      }
+
+      #panel-icon {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: grab;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      #panel-icon.dragging {
+        cursor: grabbing;
+      }
+
+      #panel-icon svg {
+        width: 62px;
+        height: 62px;
+        filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+        -webkit-user-drag: none;
+        pointer-events: none;
+      }
+
+      #panel-icon .logo-bubble {
+        fill: #0577fc;
+      }
+
+      #panel-icon .logo-cursor {
+        fill: #ffffff;
+      }
+
+      /* ---------- Expanded panel ---------- */
+
+      #panel {
+        display: none;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+        box-sizing: border-box;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+
+      #panel.active {
+        display: flex;
+      }
+
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .bar-title {
+        font-weight: 600;
+        font-size: 13px;
+        flex: 1;
+      }
+
+      .bar-subtitle {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .bar-icon-btn {
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 12px;
+      }
+
+      .bar-icon-btn:hover {
+        background: #2a3241;
+        color: var(--text);
+      }
+
+      .view {
+        display: none;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .view.active {
+        display: flex;
+      }
+
+      /* ---------- Login ---------- */
+
+      #view-login {
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        text-align: center;
+      }
+
+      #view-login p {
+        color: var(--muted);
+        font-size: 11px;
+        margin: 4px 0 16px;
+      }
+
+      .login-field {
+        width: 100%;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-bottom: 8px;
+        font: inherit;
+      }
+
+      .btn-primary {
+        width: 100%;
+        background: var(--blue);
+        color: var(--text);
+        border: none;
+        border-radius: 6px;
+        padding: 9px 10px;
+        font-weight: 600;
+        margin-top: 6px;
+      }
+
+      .btn-primary:hover {
+        background: var(--blue-hover);
+      }
+
+      /* ---------- Setup ---------- */
+
+      #view-setup {
+        padding: 16px;
+      }
+
+      #view-setup p {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.5;
+        margin: 0 0 12px;
+      }
+
+      #setup-region {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        background: var(--panel-raised);
+        border-radius: 6px;
+        padding: 8px 10px;
+        margin-bottom: 12px;
+        font-size: 11px;
+      }
+
+      #setup-region-label {
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      #setup-region-select {
+        background: #2a3241;
+        color: var(--text);
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 11px;
+        flex-shrink: 0;
+      }
+
+      #setup-region-select:hover {
+        background: #343e4f;
+      }
+
+      /* ---------- Skills list ---------- */
+
+      .skills-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .skill-card {
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+
+      .skill-card:hover {
+        border-color: var(--blue-border);
+      }
+
+      .skill-card h3 {
+        margin: 0 0 3px;
+        font-size: 12px;
+      }
+
+      .skill-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .skill-card-empty {
+        border-style: dashed;
+        color: var(--muted);
+        cursor: default;
+        text-align: center;
+        font-size: 11px;
+      }
+
+      .new-goal-row {
+        display: flex;
+        gap: 6px;
+        padding: 12px 12px 0;
+        flex-shrink: 0;
+      }
+
+      #new-goal-input {
+        flex: 1;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 7px 9px;
+        font: inherit;
+        min-width: 0;
+      }
+
+      #new-goal-input:disabled {
+        opacity: 0.6;
+      }
+
+      #new-goal-send {
+        background: var(--blue);
+        color: var(--text);
+        border: none;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      #new-goal-send:hover {
+        background: var(--blue-hover);
+      }
+
+      #new-goal-send:disabled {
+        background: var(--panel-raised);
+        color: var(--muted);
+      }
+
+      .new-goal-error {
+        padding: 0 12px;
+        color: var(--pink);
+        font-size: 10px;
+        flex-shrink: 0;
+      }
+
+      .new-goal-error:empty {
+        display: none;
+      }
+
+      /* ---------- Path view ---------- */
+
+      .path-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px 16px;
+      }
+
+      .step-row {
+        display: flex;
+        gap: 10px;
+      }
+
+      .step-rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+        width: 14px;
+      }
+
+      .step-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid var(--blue);
+        background: var(--blue);
+        flex-shrink: 0;
+        margin-top: 3px;
+      }
+
+      .step-dot.locked {
+        border-color: var(--muted);
+        background: transparent;
+        border-style: dashed;
+      }
+
+      .step-line {
+        width: 2px;
+        flex: 1;
+        background: var(--border);
+        margin-top: 3px;
+      }
+
+      .step-main {
+        flex: 1;
+        padding-bottom: 16px;
+        min-width: 0;
+      }
+
+      .step-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .step-head.locked {
+        cursor: default;
+      }
+
+      .step-title {
+        font-weight: 600;
+        font-size: 12px;
+      }
+
+      .step-title.locked {
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .step-chevron {
+        color: var(--muted);
+        font-size: 10px;
+        transition: transform 0.15s ease;
+      }
+
+      .step-chevron.expanded {
+        transform: rotate(90deg);
+      }
+
+      .step-caption {
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 2px;
+      }
+
+      .step-watch-for {
+        color: var(--pink);
+      }
+
+      .substep-list {
+        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .substep-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: var(--panel-raised);
+        cursor: pointer;
+        font-size: 11px;
+      }
+
+      .substep-row:hover {
+        background: #2a3241;
+      }
+
+      .substep-row.origin-ai {
+        border-left: 3px solid var(--blue);
+      }
+
+      .substep-row.origin-user {
+        border-left: 3px solid var(--pink);
+      }
+
+      .substep-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        margin-top: 3px;
+        flex-shrink: 0;
+      }
+
+      .substep-row.origin-ai .substep-dot {
+        background: var(--blue);
+      }
+
+      .substep-row.origin-user .substep-dot {
+        background: var(--pink);
+      }
+
+      .substep-text .label {
+        color: var(--muted);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        display: block;
+        margin-bottom: 1px;
+      }
+
+      .step-open {
+        margin-top: 8px;
+        background: var(--blue-soft);
+        border: 1px solid var(--blue-border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 11px;
+      }
+
+      .step-open:hover {
+        background: var(--blue);
+      }
+
+      /* ---------- Chat / step view ---------- */
+
+      .chat-hint {
+        padding: 6px 12px;
+        font-size: 10px;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .chat-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .bubble-ai {
+        align-self: flex-start;
+        max-width: 92%;
+        background: var(--panel-raised);
+        border: 1px solid var(--blue-border);
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+
+      .bubble-user-block {
+        align-self: flex-end;
+        max-width: 92%;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+      }
+
+      .bubble-question {
+        align-self: flex-end;
+        background: var(--pink);
+        color: #1a0a12;
+        border-radius: 8px 8px 2px 8px;
+        padding: 7px 10px;
+        font-size: 11px;
+      }
+
+      .bubble-answer {
+        align-self: flex-end;
+        background: var(--pink-soft);
+        border: 1px solid var(--pink-border);
+        border-radius: 8px 8px 8px 2px;
+        padding: 7px 10px;
+        font-size: 11px;
+      }
+
+      .bubble-target {
+        color: var(--muted);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin-bottom: 3px;
+      }
+
+      .bubble-instruction {
+        font-size: 11px;
+      }
+
+      .bubble-show {
+        margin-top: 6px;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 5px;
+        padding: 3px 7px;
+        font-size: 10px;
+      }
+
+      .bubble-show:hover {
+        border-color: var(--blue-border);
+        color: var(--text);
+      }
+
+      /* Schematic preview: NOT a real window drawn over the target app —
+         a small proportional diagram, rendered entirely inside this
+         panel, of roughly where the element sits. See sidebar.js's
+         renderSchematic — this replaces the old main.js overlay window
+         entirely. */
+      .schematic {
+        position: relative;
+        width: 100%;
+        margin-top: 6px;
+        background: repeating-linear-gradient(
+          45deg,
+          rgba(246, 247, 245, 0.03),
+          rgba(246, 247, 245, 0.03) 6px,
+          transparent 6px,
+          transparent 12px
+        );
+        background-color: rgba(246, 247, 245, 0.04);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .schematic-box {
+        position: absolute;
+        border: 2px solid #ff3b3b;
+        background: rgba(255, 59, 59, 0.18);
+        border-radius: 2px;
+      }
+
+      .schematic-caption {
+        margin-top: 4px;
+        font-size: 9px;
+        color: var(--muted);
+      }
+
+      .chat-footer {
+        display: flex;
+        gap: 6px;
+        padding: 10px 12px;
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      #chat-input {
+        flex: 1;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 7px 9px;
+        font: inherit;
+        min-width: 0;
+      }
+
+      #chat-send {
+        background: var(--blue);
+        color: var(--text);
+        border: none;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      #chat-send:hover {
+        background: var(--blue-hover);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="collapsed">
+      <!-- assets/brand/message-cursor-logo.svg, inlined so .logo-bubble /
+           .logo-cursor can be recolored per interactive state. -->
+      <button id="panel-icon" type="button" aria-label="Open Tutoria">
+        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+          <g transform="translate(0,1024) scale(0.1,-0.1)" stroke="none">
+            <path
+              class="logo-bubble"
+              d="M7014 8434 c251 -40 513 -165 701 -335 224 -203 362 -436 433 -732 l27 -112 0 -1650 c0 -1805 3 -1689 -56 -1889 -77 -257 -266 -523 -496 -698 -147 -112 -357 -211 -525 -248 -140 -30 -211 -32 -1263 -39 l-1080 -6 -66 -31 c-102 -48 -175 -102 -321 -236 -254 -235 -714 -632 -756 -654 -60 -31 -134 -10 -171 49 -20 33 -21 46 -21 445 0 336 -3 413 -14 424 -8 8 -66 22 -133 31 -171 24 -278 57 -438 137 -378 187 -641 521 -748 950 -21 85 -21 93 -25 1695 -2 1178 0 1636 8 1705 55 447 337 848 748 1063 91 48 288 113 392 130 71 12 388 15 1894 16 1613 1 1820 -1 1910 -15z"
+            />
+            <path
+              class="logo-cursor"
+              d="M4342 7146 c32 -17 793 -695 1633 -1456 498 -451 525 -477 525 -512 0 -15 -9 -37 -20 -48 -25 -25 -69 -25 -574 -5 -203 8 -371 14 -373 12 -3 -4 102 -239 319 -717 168 -369 172 -378 159 -419 -6 -21 -21 -47 -33 -58 -13 -11 -118 -62 -235 -112 -279 -120 -303 -120 -364 1 -35 70 -397 859 -442 965 -17 40 -34 70 -39 67 -10 -6 -147 -170 -357 -429 -90 -110 -175 -212 -189 -227 -31 -34 -73 -37 -102 -8 -20 20 -20 33 -20 1463 0 1527 -2 1460 45 1485 26 15 35 15 67 -2z"
+            />
+          </g>
+        </svg>
+      </button>
+    </div>
+
+    <div id="panel">
+      <div class="bar">
+        <button class="bar-icon-btn" id="bar-back" type="button" hidden>← Back</button>
+        <div style="flex: 1; min-width: 0">
+          <div class="bar-title" id="bar-title">Tutoria</div>
+          <div class="bar-subtitle" id="bar-subtitle"></div>
+        </div>
+        <button class="bar-icon-btn" id="bar-collapse" type="button" title="Minimize">–</button>
+      </div>
+
+      <!-- Placeholder auth — no validation, just a gate to the rest of
+           the demo. See docs/decisions/0004-cloudflare-infrastructure-proposal.md
+           for the (still-proposed) real account story this stands in for. -->
+      <section id="view-login" class="view active">
+        <p>Sign-in isn't wired up yet — this is a placeholder.</p>
+        <input class="login-field" type="text" placeholder="Email" disabled />
+        <input class="login-field" type="password" placeholder="Password" disabled />
+        <button class="btn-primary" id="login-continue" type="button">Continue</button>
+      </section>
+
+      <section id="view-setup" class="view">
+        <p>
+          Optional: scope which part of the screen gets captured for
+          vision calls. Otherwise the full screen is used. This is a
+          one-time setup step, not per-question.
+        </p>
+        <div id="setup-region">
+          <span id="setup-region-label">Region: full screen</span>
+          <button id="setup-region-select" type="button">Select region</button>
+        </div>
+        <button class="btn-primary" id="setup-continue" type="button">Continue</button>
+      </section>
+
+      <section id="view-skills" class="view">
+        <div class="new-goal-row">
+          <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
+          <button id="new-goal-send" type="button">Ask</button>
+        </div>
+        <div class="new-goal-error" id="new-goal-error"></div>
+        <div class="skills-body" id="skills-list"></div>
+      </section>
+
+      <section id="view-path" class="view">
+        <div class="path-body" id="path-body"></div>
+      </section>
+
+      <section id="view-chat" class="view">
+        <div class="chat-hint">
+          No overlay window is drawn on your screen — this preview is
+          schematic, shown only here.
+        </div>
+        <div class="chat-body" id="chat-body"></div>
+        <div class="chat-footer">
+          <input id="chat-input" type="text" placeholder="Ask a question…" />
+          <button id="chat-send" type="button">Send</button>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="sidebar.js"></script>
+  </body>
+</html>

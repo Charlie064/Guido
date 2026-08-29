@@ -1,0 +1,23 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability shared by both windows: sidebar (the whole app — collapsed icon or expanded login/setup/skills/path/chat panel, always interactive, never click-through) and region-select (shown only during a region drag) — see spikes/tauri-overlay/src-tauri/src/lib.rs and docs/architecture/overview.md for why there are only these two",
+  "windows": ["sidebar", "region-select"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-close",
+    "core:window:allow-current-monitor",
+    "core:window:allow-inner-size",
+    "core:window:allow-outer-position",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:event:allow-emit",
+    "core:event:allow-emit-to",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
+}

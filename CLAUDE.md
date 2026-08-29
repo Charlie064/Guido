@@ -68,6 +68,8 @@ before shipping beyond a demo.)
 | First demo scope, step-by-step build/test plan | `docs/planning/demo-v0.md` |
 | Overnight plan across the whole team | `docs/planning/overnight-plan.md` |
 | Website scope (Pauline) | `docs/planning/website-v0.md` |
+| What to work on without a Claude Code session | `docs/planning/offline-planning-guide.md` |
+| Skill generation/editing/storage algorithm | `docs/features/skills.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.
