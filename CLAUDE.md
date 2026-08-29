@@ -48,6 +48,18 @@ before shipping beyond a demo.)
 - Main only takes completed, tested merges.
 - **Co-change rule**: a behavior change updates its one canonical doc in the
   same commit. See `docs/workflows/development.md`.
+- **Handoff rule**: a plan written for someone else to build (not the
+  person requesting it) goes in `docs/planning/<name>` and includes a
+  "Before `<person>` can start" section listing exactly what access,
+  accounts, or decisions have to come from someone else first — don't
+  leave those as buried prose for the assignee to trip over. Any real
+  open decision inside the plan (scope, tiers, which provider, etc.) is
+  either answered by the requester before the doc is finalized, or is
+  explicitly assigned as part of the assignee's own task — never quietly
+  decided on their behalf. If the plan depends on undecided product scope
+  that isn't specific to this one task, give it its own `BL-NNN` entry in
+  `docs/BACKLOG.md` (checking for numbering collisions with any
+  in-flight, unmerged branches) rather than folding it into the plan.
 
 ## Load map
 
@@ -70,6 +82,7 @@ before shipping beyond a demo.)
 | Website scope (Pauline) | `docs/planning/website-v0.md` |
 | What to work on without a Claude Code session | `docs/planning/offline-planning-guide.md` |
 | Skill generation/editing/storage algorithm | `docs/features/skills.md` |
+| Login, Google account link, membership check (Quentin) | `docs/planning/login-membership-plan.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.
