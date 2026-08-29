@@ -48,20 +48,46 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+const PERSONAS = new Set([
+  "uni_student",
+  "young_professional",
+  "high_school_student",
+  "entrepreneur",
+  "other",
+]);
+
 async function handleWaitlistSignup(request: Request, env: Env): Promise<Response> {
   let email: string | undefined;
+  let name: string | undefined;
+  let phone: string | null | undefined;
+  let persona: string | null | undefined;
   try {
-    ({ email } = await request.json<{ email?: string }>());
+    ({ email, name, phone, persona } = await request.json<{
+      email?: string;
+      name?: string;
+      phone?: string | null;
+      persona?: string | null;
+    }>());
   } catch {
-    return json({ error: "Invalid email" }, 400);
+    return json({ error: "Invalid request" }, 400);
   }
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: "Invalid email" }, 400);
   }
+  if (!name || !name.trim()) {
+    return json({ error: "Name is required" }, 400);
+  }
+  if (persona && !PERSONAS.has(persona)) {
+    return json({ error: "Invalid persona" }, 400);
+  }
 
   try {
-    await env.DB.prepare("INSERT INTO waitlist (email) VALUES (?)").bind(email).run();
+    await env.DB.prepare(
+      "INSERT INTO waitlist (email, name, phone, persona) VALUES (?, ?, ?, ?)",
+    )
+      .bind(email, name.trim(), phone?.trim() || null, persona || null)
+      .run();
   } catch (err) {
     if (!(err instanceof Error) || !err.message.includes("UNIQUE")) {
       return json({ error: "Could not save signup" }, 500);

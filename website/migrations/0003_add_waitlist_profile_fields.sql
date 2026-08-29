@@ -1,0 +1,3 @@
+ALTER TABLE waitlist ADD COLUMN name TEXT;
+ALTER TABLE waitlist ADD COLUMN phone TEXT;
+ALTER TABLE waitlist ADD COLUMN persona TEXT;
