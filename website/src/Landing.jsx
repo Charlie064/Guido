@@ -13,7 +13,6 @@ import {
   Command,
   Video,
 } from "lucide-react";
-import GlassMascot from "@mascot/GlassMascot.jsx";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
 import { FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
 
@@ -23,134 +22,39 @@ const MODE_COLORS = {
   do: { accent: "#A78BFA", text: "#0A0A0A" }, // violet — video editor
 };
 
-function clamp(n, min, max) {
-  return Math.min(max, Math.max(min, n));
-}
+const INTRO_MS = 4200;
 
-function easeOutCubic(t) {
-  return 1 - (1 - t) ** 3;
-}
-
-function IntroAnimation() {
+function IntroAnimation({ onDone }) {
   const [visible, setVisible] = useState(true);
-  const [face, setFace] = useState("idle");
-  const overlayRef = useRef(null);
-  const mascotRef = useRef(null);
-  const cursorRef = useRef(null);
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   useEffect(() => {
     const reduceMotion =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduceMotion) {
-      const t = setTimeout(() => setVisible(false), 280);
-      return () => clearTimeout(t);
-    }
-
-    const RADIUS = 128;
-    const ORBIT_MS = 2100;
-    const IN_MS = 820;
-    const CLICK_MS = 160;
-    const CURSOR_FADE_MS = 520;
-    const MASCOT_AT = ORBIT_MS + IN_MS - 80;
-    const MASCOT_MS = 980;
-    const OUTRO_AT = MASCOT_AT + 720;
-    const OUTRO_MS = 640;
-    const TOTAL = OUTRO_AT + OUTRO_MS;
-
-    let raf = 0;
-    let revealed = false;
-    let t0 = null;
-
-    const frame = (now) => {
-      const overlay = overlayRef.current;
-      const mascot = mascotRef.current;
-      const cursor = cursorRef.current;
-      if (!overlay || !mascot || !cursor) {
-        raf = requestAnimationFrame(frame);
-        return;
-      }
-      if (t0 == null) t0 = now;
-      const elapsed = now - t0;
-
-      const fadeIn = easeOutCubic(clamp(elapsed / 240, 0, 1));
-      let angle = -Math.PI / 2;
-      let radius = RADIUS;
-      let scale = 1;
-      let cursorOpacity = fadeIn;
-
-      if (elapsed < ORBIT_MS) {
-        angle = -Math.PI / 2 + (elapsed / ORBIT_MS) * Math.PI * 2;
-      } else if (elapsed < ORBIT_MS + IN_MS) {
-        const u = easeOutCubic((elapsed - ORBIT_MS) / IN_MS);
-        angle = -Math.PI / 2 + Math.PI * 2 + u * 0.28;
-        radius = RADIUS * (1 - u);
-      } else {
-        const after = elapsed - ORBIT_MS - IN_MS;
-        angle = -Math.PI / 2 + Math.PI * 2 + 0.28;
-        radius = 0;
-        if (after < CLICK_MS) {
-          scale = 1 - 0.07 * Math.sin((after / CLICK_MS) * Math.PI);
-        } else {
-          cursorOpacity = 1 - easeOutCubic(clamp((after - CLICK_MS) / CURSOR_FADE_MS, 0, 1));
-        }
-      }
-
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
-      cursor.style.opacity = String(cursorOpacity);
-      cursor.style.transform = `translate(${x - 5}px, ${y - 3}px) scale(${scale})`;
-
-      const mt = easeOutCubic(clamp((elapsed - MASCOT_AT) / MASCOT_MS, 0, 1));
-      mascot.style.opacity = String(mt);
-      mascot.style.transform = `translate(-50%, calc(-50% + ${(1 - mt) * 16}px)) scale(${0.96 + 0.04 * mt})`;
-
-      if (!revealed && elapsed >= MASCOT_AT + 180) {
-        revealed = true;
-        setFace("happy");
-      }
-
-      const outro = easeOutCubic(clamp((elapsed - OUTRO_AT) / OUTRO_MS, 0, 1));
-      overlay.style.opacity = String(1 - outro);
-
-      if (elapsed < TOTAL) {
-        raf = requestAnimationFrame(frame);
-      } else {
-        setVisible(false);
-      }
-    };
-
-    raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    const t = setTimeout(() => {
+      setVisible(false);
+      onDoneRef.current?.();
+    }, reduceMotion ? 200 : INTRO_MS);
+    return () => clearTimeout(t);
   }, []);
 
   if (!visible) return null;
 
   return (
-    <div
-      ref={overlayRef}
-      className="fixed inset-0 z-[100] pointer-events-none"
-      style={{ background: "#ffffff" }}
-    >
-      <div
-        ref={mascotRef}
-        className="absolute top-1/2 left-1/2 will-change-transform"
-        style={{ opacity: 0, transform: "translate(-50%, calc(-50% + 16px)) scale(0.96)" }}
-      >
-        <GlassMascot state={face} size={118} />
+    <div className="intro-overlay" aria-hidden="true">
+      <div className="intro-mascot">
+        <img src="/assets/mascot/mascot-happy.svg" alt="" width="118" height="136" draggable="false" />
       </div>
-      <div
-        ref={cursorRef}
-        className="absolute top-1/2 left-1/2 will-change-transform"
-        style={{ opacity: 0, transform: "translate(-5px, -3px)" }}
-      >
-        <MousePointer2
-          size={28}
-          color="#111111"
-          fill="#f7f7f7"
-          strokeWidth={2.2}
-          style={{ filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.18))" }}
-        />
+      <div className="intro-orbit">
+        <div className="intro-radius">
+          <div className="intro-pointer">
+            <div className="intro-pointer-press">
+              <MousePointer2 size={26} color="#111111" fill="#f6f6f6" strokeWidth={2.2} />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -456,6 +360,7 @@ export default function Landing() {
   const [shaking, setShaking] = useState(false);
   const [demoExpanded, setDemoExpanded] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [introDone, setIntroDone] = useState(false);
   const [touchPointer] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   );
@@ -499,8 +404,8 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
-      <IntroAnimation />
-      <GlassMascotCursor disabled={touchPointer} size={72} style={{ zIndex: 20 }} />
+      <IntroAnimation onDone={() => setIntroDone(true)} />
+      {introDone ? <GlassMascotCursor disabled={touchPointer} size={72} style={{ zIndex: 20 }} /> : null}
 
       {/* Nav */}
       <header className="sticky top-0 z-30 backdrop-blur-md bg-white/85 border-b border-black/[0.06]">

@@ -12,9 +12,10 @@
   `stretch` / `tilt`) is a body transform on top of any state.
 - **What’s wired:** website can import the React components via the
   `@mascot` Vite alias; landing and `/login` mount the cursor-follow
-  buddy on pointer devices. The landing intro is a quiet circular
-  pointer that clicks center, then the glass mascot fades in — the
-  header mark stays `guido-icon.png`. Desktop login uses the same
+  buddy on pointer devices. The landing intro is CSS-only (orbit,
+  click, fade) using the static happy SVG so it stays on the GPU; the
+  cursor buddy mounts after the intro. The header mark stays
+  `guido-icon.png`. Desktop login uses the same
   `guido-icon.png` as the website login header. **Not yet:** desktop
   overlay that follows the OS cursor, or driving `thinking` / `success`
   from live locate/research calls.

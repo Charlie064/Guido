@@ -41,6 +41,107 @@ html, body {
   to { transform: translateX(-50%); }
 }
 
+/* Intro: compositor-only (transform + opacity). No filters, no JS frames. */
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  background: #ffffff;
+  animation: intro-overlay-out 560ms cubic-bezier(0.22, 1, 0.36, 1) 3640ms both;
+}
+
+.intro-mascot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 118px;
+  height: 136px;
+  margin-left: -59px;
+  margin-top: -68px;
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  animation: intro-mascot-in 900ms cubic-bezier(0.22, 1, 0.36, 1) 2780ms both;
+}
+
+.intro-mascot img {
+  display: block;
+  width: 118px;
+  height: 136px;
+}
+
+.intro-orbit {
+  position: absolute;
+  inset: 0;
+  transform: rotate(-90deg);
+  animation: intro-spin 2100ms linear both;
+}
+
+.intro-radius {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  transform: translate3d(128px, 0, 0);
+  animation: intro-in 780ms cubic-bezier(0.22, 1, 0.36, 1) 2100ms both;
+}
+
+.intro-pointer {
+  position: absolute;
+  top: -10px;
+  left: -6px;
+  transform: rotate(90deg);
+  animation: intro-unspin 2100ms linear both;
+}
+
+.intro-pointer-press {
+  animation: intro-click 420ms ease-out 2880ms both;
+}
+
+@keyframes intro-spin {
+  from { transform: rotate(-90deg); }
+  to { transform: rotate(270deg); }
+}
+
+@keyframes intro-unspin {
+  from { transform: rotate(90deg); }
+  to { transform: rotate(-270deg); }
+}
+
+@keyframes intro-in {
+  from { transform: translate3d(128px, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes intro-click {
+  0% { opacity: 1; transform: scale(1); }
+  35% { opacity: 1; transform: scale(0.94); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+@keyframes intro-mascot-in {
+  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes intro-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-overlay,
+  .intro-mascot,
+  .intro-orbit,
+  .intro-radius,
+  .intro-pointer,
+  .intro-pointer-press {
+    animation: none;
+  }
+  .intro-overlay { opacity: 0; }
+}
+
 @keyframes shake-no {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-10px); }
