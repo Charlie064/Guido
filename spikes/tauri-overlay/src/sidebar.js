@@ -127,78 +127,61 @@ window.addEventListener("keydown", (e) => {
 // Window-pick, not region-draw: per
 // docs/decisions/0005-window-anchored-overlay-coordinates.md, macOS/
 // Windows/Linux X11 can enumerate live windows with real geometry, so
-// picking one from a list beats drawing a box by hand — and unlike a
-// fixed region, a window pick survives that window being resized or
-// moved (locate_element re-resolves its rect live every capture, see
-// lib.rs). No full-screen drag surface is needed for this — it's a
-// plain list, rendered as an in-panel modal (#window-picker).
+// picking one beats drawing a box by hand — and unlike a fixed region, a
+// window pick survives that window being resized or moved
+// (locate_element re-resolves its rect live every capture, see lib.rs).
+//
+// The pick gesture itself is "click the window you want", not choosing
+// from a text list: delegates to the region-select window's click-catcher
+// (see region-select.js's runClickSelect) for the actual click, the same
+// way region-drag already delegated its drag gesture there — a real
+// window over the whole screen is what makes that click land reliably
+// no matter what's underneath, rather than sidebar trying to interpret
+// clicks that land outside its own bounds. The click point (absolute
+// screen px) is then resolved to a window via the `window_at_point`
+// command (window_provider.rs), which walks front-to-back so overlapping
+// windows resolve to whichever one is actually visible at that point.
 
 function formatWindowLabel() {
   if (!selectedWindow) return "Window: full screen";
   return `Window: ${selectedWindow.app_name || "(unnamed)"} — ${selectedWindow.title || "untitled"}`;
 }
 
-function closeWindowPicker() {
-  document.querySelector("#window-picker").classList.remove("active");
-}
-
-// Resolves to the picked WindowInfo, or null if cancelled. Filters out
-// this app's own windows (sidebar/region-select) so the list never shows
-// itself — list_windows() has no reason to know which window is "us".
-function pickWindowFromList(windows) {
-  const picker = document.querySelector("#window-picker");
-  const list = document.querySelector("#picker-list");
-  const cancelBtn = document.querySelector("#picker-cancel");
-  list.innerHTML = "";
-
-  const candidates = windows.filter((w) => !/tutoria/i.test(w.app_name) && !/tutoria/i.test(w.title));
-
-  if (candidates.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "picker-empty";
-    empty.textContent = "No other windows found.";
-    list.appendChild(empty);
-  }
-
-  return new Promise((resolve) => {
-    for (const w of candidates) {
-      const row = document.createElement("div");
-      row.className = "picker-row";
-      row.innerHTML = `<span class="app">${w.app_name || "(unnamed)"}</span><span class="title">${w.title || "untitled"}</span>`;
-      row.addEventListener("click", () => {
-        closeWindowPicker();
-        resolve(w);
-      });
-      list.appendChild(row);
-    }
-
-    cancelBtn.onclick = () => {
-      closeWindowPicker();
-      resolve(null);
-    };
-
-    picker.classList.add("active");
-  });
-}
-
 async function selectWindow() {
   const label = document.querySelector("#setup-region-label");
   const button = document.querySelector("#setup-region-select");
-  button.disabled = true;
   const previousLabel = label.textContent;
-  label.textContent = "Loading windows…";
+  button.disabled = true;
+  label.textContent = "Click the window you want…";
 
-  try {
-    const windows = await invoke("list_windows");
-    const picked = await pickWindowFromList(windows);
-    selectedWindow = picked ?? selectedWindow;
-  } catch (err) {
-    label.textContent = `Couldn't list windows: ${err}`;
-    button.disabled = false;
-    return;
+  await getCurrentWindow().hide();
+
+  const point = await new Promise(async (resolve) => {
+    const unlisten = await listen("tutoria:window-point-selected", (event) => {
+      unlisten();
+      resolve(event.payload);
+    });
+    emit("tutoria:begin-window-select");
+  });
+
+  if (point) {
+    try {
+      selectedWindow = await invoke("window_at_point", { x: Math.round(point.x), y: Math.round(point.y) });
+    } catch (err) {
+      label.textContent = `Nothing there — try clicking directly on a window (${err})`;
+      await getCurrentWindow().show();
+      await getCurrentWindow().setFocus();
+      button.disabled = false;
+      setTimeout(() => {
+        if (label.textContent.startsWith("Nothing there")) label.textContent = previousLabel;
+      }, 3000);
+      return;
+    }
   }
 
   label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
+  await getCurrentWindow().show();
+  await getCurrentWindow().setFocus();
   button.disabled = false;
 }
 

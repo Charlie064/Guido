@@ -71,11 +71,36 @@ pub fn get_window_rect(id: &str) -> Result<WindowInfo, String> {
     }
 }
 
+// The app's own windows ("Tutoria" / "tutoria-region-select", product
+// name "tauri-overlay") should never be offered as a pick target — a
+// click that lands on the sidebar, or on the now-hidden click-catcher
+// itself between hide() and this query landing, shouldn't resolve to us.
+fn is_own_window(w: &WindowInfo) -> bool {
+    let haystack = format!("{} {}", w.app_name, w.title).to_lowercase();
+    haystack.contains("tutoria") || haystack.contains("tauri-overlay")
+}
+
+// Resolves a click (in absolute screen px, the same space `WindowInfo`'s
+// x/y/width/height are in) to whichever real window is topmost at that
+// point — the actual mechanism behind "click the window you want" in
+// sidebar.js's window-select flow. Relies on `list_windows()` returning
+// front-to-back (topmost-first) order; see each backend's own note on how
+// it gets that order for free from its native API.
+pub fn window_at_point(x: i64, y: i64) -> Result<WindowInfo, String> {
+    list_windows()?
+        .into_iter()
+        .filter(|w| !is_own_window(w))
+        .find(|w| x >= w.x && x < w.x + w.width && y >= w.y && y < w.y + w.height)
+        .ok_or_else(|| "no window found at that point".to_string())
+}
+
 // ---------- macOS: CGWindowListCopyWindowInfo ----------
 //
 // Public API, no Accessibility permission needed (unlike AXUIElement) —
 // per ADR 0005's research this is the same free path BL-004 wants for
-// app-name/icon detection. Declared as a raw extern rather than pulling in
+// app-name/icon detection. `kCGWindowListOptionOnScreenOnly` is documented
+// as returning windows front-to-back, which is what window_at_point above
+// relies on. Declared as a raw extern rather than pulling in
 // the `core-graphics` crate's own window-list wrapper, so this doesn't
 // depend on that crate's exact const/fn names matching across versions —
 // only the framework's own stable C ABI (CGWindowListCopyWindowInfo's
@@ -179,7 +204,9 @@ mod macos {
 // GetWindowRect: on Windows 10/11 GetWindowRect includes an invisible
 // resize-grab border that isn't actually part of what's drawn, so it
 // overshoots the real visible bounds — DWM's extended frame bounds is what
-// matches what the user actually sees.
+// matches what the user actually sees. EnumWindows is documented as
+// enumerating in Z order, top window first — window_at_point above relies
+// on that for front-to-back ordering.
 #[cfg(target_os = "windows")]
 mod windows_backend {
     use super::WindowInfo;
@@ -360,13 +387,22 @@ mod linux_x11 {
         let (conn, screen_num) = connect()?;
         let root = conn.setup().roots[screen_num].root;
 
-        let net_client_list = atom(&conn, "_NET_CLIENT_LIST")?;
+        // _NET_CLIENT_LIST_STACKING (not plain _NET_CLIENT_LIST, which is
+        // in mapping order, not z-order) is bottom-to-top — reversed here
+        // so this list is front-to-back, topmost window first. That's what
+        // `window_at_point` below needs to resolve a click to the actual
+        // topmost window under the cursor when windows overlap; it also
+        // makes the setup-view picker list show the frontmost/most-likely
+        // window first for free.
+        let net_client_list_stacking = atom(&conn, "_NET_CLIENT_LIST_STACKING")?;
         let net_wm_name = atom(&conn, "_NET_WM_NAME")?;
         let wm_class = atom(&conn, "WM_CLASS")?;
         let wm_name: u32 = AtomEnum::WM_NAME.into();
 
         let mut out = Vec::new();
-        for win in get_property_windows(&conn, root, net_client_list) {
+        let mut windows = get_property_windows(&conn, root, net_client_list_stacking);
+        windows.reverse();
+        for win in windows {
             let title = get_property_string(&conn, win, net_wm_name)
                 .or_else(|| get_property_string(&conn, win, wm_name))
                 .unwrap_or_default();

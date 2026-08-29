@@ -193,12 +193,24 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   (`CGWindowListCopyWindowInfo` on macOS, `EnumWindows`+
   `DwmGetWindowAttribute` on Windows, `x11rb` against `_NET_CLIENT_LIST`
   on Linux — the last also covers XWayland sessions).
-  - Setup view (`sidebar.html`/`sidebar.js`) now shows a "Select window"
-    button opening an in-panel list picker (`#window-picker`), not the
-    old full-screen region-drag — `region-select.html`/`.js` and the
-    `region-select` Tauri window are left in place as the
-    `CaptureScope::Region` fallback's implementation, just no longer
-    wired to any setup-UI button.
+  - Setup view (`sidebar.html`/`sidebar.js`) shows a "Select window"
+    button that starts a **click-to-pick** gesture, not a text list: it
+    reuses `region-select`'s full-screen click-catcher window (previously
+    only the region-drag surface — see `region-select.js`'s new
+    `runClickSelect`), so the user clicks directly on the window they
+    want, same interaction as region-drag's box but a single click
+    instead of a drag. The click point resolves to a `WindowInfo` via the
+    new `window_at_point(x, y)` command (`window_provider.rs`), which
+    walks `list_windows()` front-to-back so it picks whichever window is
+    actually topmost/visible at that point, filtering out the app's own
+    windows (sidebar/region-select). Getting front-to-back order is free
+    from the OS on macOS (`CGWindowListCopyWindowInfo` is documented
+    front-to-back) and Windows (`EnumWindows` is Z-order top-first); the
+    Linux backend was changed from `_NET_CLIENT_LIST` (mapping order) to
+    `_NET_CLIENT_LIST_STACKING` (reversed) to get the same guarantee.
+    An earlier version of this used an in-panel text-list picker instead
+    — replaced after feedback that selection should be "press the window
+    you want," not choose from a list.
   - `locate_element` (`lib.rs`) takes a `CaptureScope` (`Region` or
     `Window{id}`) instead of a bare `Option<Region>`; for `Window`, it
     calls `window_provider::get_window_rect(id)` and re-derives the
@@ -229,8 +241,10 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     each OS's public API per ADR 0005's research, but this environment
     can't compile or run either target, so they're unverified until built
     on that OS. Also not verified end-to-end with a live display: the
-    window-picker UI flow and a real `locate_element` round trip (needs a
-    real pointer/display, same limitation as the pin-icon work above).
+    click-to-pick UI flow and a real `locate_element` round trip (needs a
+    real pointer/display and a real second window to click on — this
+    sandbox has no window manager surface to test against and no
+    synthetic-input tool, same limitation as the pin-icon work above).
   - Branch: `claudev/charlie/window-select-capture`, not yet merged.
 
 - **Lazy per-step substep generation — first real piece of the designed
@@ -247,6 +261,16 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   - Not yet built from `docs/features/skills.md`'s full design: reactive
     user-question substeps feeding back into planning, user-editable path,
     no-screenshot skill storage, opt-in refresh on replay.
+  - **Reliability fix, found while exercising this**: `research.py` and
+    `plan_step.py` calls could silently hang for minutes — reproduced
+    live. Root cause: the SDK retries a timed-out request `max_retries`
+    (2, by default) more times, so setting `timeout` alone doesn't bound
+    the wait (a single stall became 270s+ across 3 attempts at
+    `timeout=90`). Fixed with `max_retries=0` on both clients, plus
+    `research.py`'s `max_uses` trimmed 3→2 for latency. Also fixed while
+    testing: web search's inline `<cite>` tags leaking into `watch_for`
+    text, and multi-block responses getting truncated because only the
+    last text block was parsed instead of all of them joined.
   - Branch: `claudev/charlie/step-substep-generation`, not yet merged.
 
 ## What's next

@@ -137,6 +137,15 @@ fn refresh_window_rect(id: String) -> Result<window_provider::WindowInfo, String
     window_provider::get_window_rect(&id)
 }
 
+// Backs the "click the window you want" flow in sidebar.js: x/y are
+// absolute screen px (the region-select overlay window is sized+positioned
+// to exactly cover the monitor, so its click coordinates already are
+// screen coordinates — see region-select.js's resizeToMonitor).
+#[tauri::command]
+fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, String> {
+    window_provider::window_at_point(x, y)
+}
+
 // Research runs once per chat, on just the goal text — no screenshot, no
 // sidebar to hide (see locate_element above for why that one needs it).
 // See docs/features/skills.md's "Research" step.
@@ -332,7 +341,8 @@ pub fn run() {
             research_goal,
             plan_step,
             list_windows,
-            refresh_window_rect
+            refresh_window_rect,
+            window_at_point
         ])
         .setup(|app| {
             use tauri::Manager;
