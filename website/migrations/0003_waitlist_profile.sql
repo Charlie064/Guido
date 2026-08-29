@@ -1,4 +1,4 @@
-ALTER TABLE waitlist ADD COLUMN name TEXT;
+-- `name` already exists on the live D1 table (added outside this series).
 ALTER TABLE waitlist ADD COLUMN apps TEXT;
 ALTER TABLE waitlist ADD COLUMN apps_other TEXT;
 ALTER TABLE waitlist ADD COLUMN role TEXT;
