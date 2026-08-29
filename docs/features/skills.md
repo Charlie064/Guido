@@ -24,7 +24,8 @@
   distinguished for quality signal, and the path itself isn't
   user-editable. App grouping (BL-004) is also still **faked** on the
   home screen: one “Excel chats” row opens the fixture skill;
-  detection/icons from the OS are not wired.
+  detection/icons from the OS are not wired. The Verify step (below,
+  under "Per-step loop") has its backend built and tested but no UI yet.
 - Implements the per-step mechanics of the
   Goal → Research → See → Guide → Do → Verify → Learn loop from
   [philosophy/vision.md](../philosophy/vision.md), inside the four-layer
@@ -58,11 +59,23 @@
    knows the goal — so its output is deliberately limited to goal-scoped
    facts (true regardless of what the user's screen looks like when they
    get there), not screen-specific detail like exact click targets.
-   Produces an ordered list of coarse top-level steps, each with:
+   Produces a `title` for the whole chat — a short, AI-written
+   description of the goal, the same idea as ChatGPT auto-titling a
+   conversation (2026-08-29) — plus an ordered list of coarse top-level
+   steps, each with:
    - `title` — short step name
    - `brief` — one sentence on what the step accomplishes and why
    - `watch_for` — a UI-version caveat or pitfall worth flagging up
      front (e.g. "the ribbon may be collapsed"), or `""` if none
+
+   The chat-level `title` is what's shown everywhere a skill is listed
+   (the home screen's chat rows, the path view's title bar) — the raw
+   goal text (`skill.goal`) is often typed as a run-on question and
+   doesn't read well as a label, so it stays around as the subtitle/AI
+   input instead. Generated in this same call, not a separate one — the
+   model already has the goal in context while writing `steps`, so a
+   second "summarize this" call would just re-derive a fact this one
+   already has.
 
    Uses Claude's own `web_search_20260209` server tool rather than a
    separate search provider — this is what fills the "Web research"
@@ -118,7 +131,17 @@ When the user reaches a top-level step:
   automatically per substep.
 - Advancing to the next top-level step is **manual** — the user decides
   they're done, not an automatic screen-diff/verify (that's roadmap P1
-  item 12, not built here).
+  item 12, not built here). **Backend piece now exists** (2026-08-29,
+  untested against a real UI): `plan_step` generates an `expected_outcome`
+  per substep, and a new `verify_substep` call checks a screenshot
+  against it (`verify.py`/`verify_step.py`, `lib.rs`), instead of trusting
+  a "Done" click — this is the actual Guide → Do → Verify step from
+  [philosophy/vision.md](../philosophy/vision.md), prioritized over
+  on-screen highlight placement per Charlie's direction. See
+  [planning/vision-driven-substep-loop.md](../planning/vision-driven-substep-loop.md)
+  for the full design (confirm+optional-verify per substep, gating the
+  next step's `plan_step` on the current one being confirmed, a failed
+  verify becoming a reactive substep) — not yet wired to any UI.
 - The resulting blue/pink sequence is **user-editable**: steps judged
   unnecessary can be deleted before/after the fact. This pruning is what
   turns a raw Q&A trace into a clean, reusable skill — the step-by-step

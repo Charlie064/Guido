@@ -200,6 +200,16 @@ answer there. The
 on the real screen" promise is therefore delivered on three of four
 platform tiers, not universally.
 
+**Further investment here is deliberately deprioritized** (2026-08-29) —
+this section describes what's built, and it stays built, but Charlie
+judged the Guide → Do → Verify confirmation loop (checking the user's
+work against an AI-generated `expected_outcome`, rather than trusting a
+"Done" click) more central to the product and cheaper to build than
+either polishing highlight/callout placement or the animated cursor
+indicator ([BL-010](../BACKLOG.md)) that would otherwise be the next step
+up from a static box. See
+[planning/vision-driven-substep-loop.md](../planning/vision-driven-substep-loop.md).
+
 **Windows: one plain fixed-size panel, a transient region-drag/click-catch
 window, and the click-through overlay** [built] — down from an earlier
 four/five-window design

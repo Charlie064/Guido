@@ -132,6 +132,53 @@ function hideNotice() {
   els.notice.style.display = "none";
 }
 
+// Picks whichever side of the highlight box actually has room for the
+// callout — below, then above, then right, then left — instead of only
+// ever choosing between below/above (the previous behavior: an element
+// hard against the left or right edge with no room above or below used
+// to fall back to a horizontally-clamped "below" placement that could
+// still overlap the box). Pure geometry against the four available-space
+// measurements; no AI involved, and no reason for it to be — this is a
+// deterministic layout problem, not a judgment call.
+function placeCallout({ boxLeft, boxTop, boxWidth, boxHeight, cw, ch, viewW, viewH, gap }) {
+  const spaceBelow = viewH - (boxTop + boxHeight) - gap;
+  const spaceAbove = boxTop - gap;
+  const spaceRight = viewW - (boxLeft + boxWidth) - gap;
+  const spaceLeft = boxLeft - gap;
+
+  let left, top;
+  if (spaceBelow >= ch) {
+    top = boxTop + boxHeight + gap;
+    left = boxLeft;
+  } else if (spaceAbove >= ch) {
+    top = boxTop - ch - gap;
+    left = boxLeft;
+  } else if (spaceRight >= cw) {
+    left = boxLeft + boxWidth + gap;
+    top = boxTop;
+  } else if (spaceLeft >= cw) {
+    left = boxLeft - cw - gap;
+    top = boxTop;
+  } else {
+    // Nothing fully fits — the target roughly fills the screen. Falls
+    // back to the same below-and-clamp placement this function replaces,
+    // so there's always a deterministic answer rather than an unhandled
+    // case.
+    top = boxTop + boxHeight + gap;
+    left = boxLeft;
+  }
+
+  // Clamp into the viewport regardless of which side was chosen — a
+  // right/left placement can still run off the opposite edge for a wide
+  // callout near a corner.
+  if (left + cw > viewW - 8) left = viewW - cw - 8;
+  if (left < 8) left = 8;
+  if (top + ch > viewH - 8) top = viewH - ch - 8;
+  if (top < 8) top = 8;
+
+  return { left, top };
+}
+
 async function draw() {
   if (!active) return;
 
@@ -166,10 +213,10 @@ async function draw() {
   els.box.style.height = `${height}px`;
   els.box.style.display = "block";
 
-  // Callout goes below the box by default, flipping above when it would
-  // run off the bottom of the screen, and clamped horizontally so it's
-  // never half off-screen for an element near an edge. Measured after
-  // display:block so offsetWidth/Height are real.
+  // Callout placement: prefers below, then above, then right, then left —
+  // whichever side actually has room for it, rather than only ever
+  // choosing between below/above. Measured after display:block so
+  // offsetWidth/Height are real.
   els.callout.style.display = "block";
   const GAP = 10;
   const viewW = document.documentElement.clientWidth;
@@ -177,13 +224,17 @@ async function draw() {
   const cw = els.callout.offsetWidth;
   const ch = els.callout.offsetHeight;
 
-  let left = topLeft.x;
-  if (left + cw > viewW - 8) left = viewW - cw - 8;
-  if (left < 8) left = 8;
-
-  let top = topLeft.y + height + GAP;
-  if (top + ch > viewH - 8) top = topLeft.y - ch - GAP;
-  if (top < 8) top = 8;
+  const { left, top } = placeCallout({
+    boxLeft: topLeft.x,
+    boxTop: topLeft.y,
+    boxWidth: width,
+    boxHeight: height,
+    cw,
+    ch,
+    viewW,
+    viewH,
+    gap: GAP,
+  });
 
   els.callout.style.left = `${left}px`;
   els.callout.style.top = `${top}px`;

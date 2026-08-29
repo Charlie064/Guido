@@ -49,9 +49,16 @@ point — this file should never pose as a source of truth for what's done.
     The chat list (`renderAppsList` in `sidebar.js`) shows it, looking it
     up by app name with no window id — a cache-only read, which is why the
     cache is keyed per app rather than per window.
+    The `.desktop` fallback named above is now built
+    (`window_provider::icon_for_app_name`) and is what `window_icon` falls
+    back to whenever there's no window to extract from — an app that sets
+    no `_NET_WM_ICON`, a Wayland portal pick, or a chat whose window is
+    long closed.
+    The per-app grouping this entry describes is built too: the chat list
+    is one card per app titled "<App> chats", ranked by its newest chat,
+    with that app's chats inside it under the group's shared icon.
     Remaining: the macOS (`NSRunningApplication.icon` off the window's
-    owner pid) and Windows (`WM_GETICON`/`ExtractIconEx`) backends, and a
-    `.desktop` fallback for X11 apps that set no `_NET_WM_ICON`.
+    owner pid) and Windows (`WM_GETICON`/`ExtractIconEx`) backends.
   - **Not verified against a real app.** The `_NET_WM_ICON` decode has
     unit tests (`window_provider.rs`) but has never run on real pixels:
     the dev machine is GNOME Wayland, where Mutter publishes no
@@ -99,21 +106,46 @@ point — this file should never pose as a source of truth for what's done.
   Needed before the login flow in
   [planning/login-membership-plan.md](planning/login-membership-plan.md)
   can use a stable OAuth redirect origin instead of a `workers.dev` URL.
-- **BL-009 — No app identity at all on Wayland.** BL-004 assumes the
-  fallback for Wayland is manual entry ("user names the app, same as
-  today"), but there is no such fallback in the build: on the portal
-  backend `selectedAppName()` returns `null`, so a chat saves
-  `appName: null`, Research gets no app to scope its search to, and the
-  chat list can show no icon. Verified, not theoretical — the portal's
-  only identifying output is `"window (1920x1080)"` (`describe()` in
-  `spikes/vision-detect/portal_capture.py`); it never discloses which
-  app the user picked, by design.
-  - This is the *whole* app-identity story on GNOME/KDE Wayland, which is
-    the dev machine and a large share of Linux users — not an edge case.
-  - Cheapest fix: let the user type/confirm the app name in setup on the
-    portal backend, and key the icon cache off that. Same manual entry
-    BL-004 already names, just actually built.
-  - Decide before building: whether manual entry is portal-only or offered
-    everywhere as an override (a native pick can also resolve "wrong",
-    e.g. a browser-hosted app reporting only "Chrome" — the known gap
-    already noted under BL-005).
+- **BL-009 — No app identity at all on Wayland.** **Largely done — read
+  the identity off the pixels instead of asking the OS.** The premise
+  still holds: the portal's only identifying output is
+  `"window (1920x1080)"` (`describe()` in
+  `spikes/vision-detect/portal_capture.py`) and it never discloses which
+  app the user picked, by design. What changed is the fallback. Rather
+  than the manual entry BL-004 assumed, one vision call now names the app
+  from the captured frame (`spikes/vision-detect/identify_app.py`, the
+  `identify_app` command), running once right after a pick — never per
+  step. Its answer feeds `selectedAppName()`, so Research is scoped and
+  the chat saves a real `appName`; the icon then comes from a
+  desktop-entry lookup keyed on that name
+  (`window_provider::icon_for_app_name`), which needs no window and so
+  works on Wayland and for long-closed windows alike. A null answer ("I
+  can't tell") is kept as null rather than guessed at.
+  - What's left: the model can still be *wrong*, and nothing lets the user
+    correct it — the manual-entry override this entry originally proposed
+    is now the fix for that narrower problem, and is still unbuilt. Same
+    open question as before about whether the override is portal-only or
+    offered everywhere (a native pick can also resolve "wrong", e.g. a
+    browser-hosted app reporting only "Chrome" — see BL-005).
+  - Not yet exercised against a real portal pick: the identification
+    prompt is verified against a saved VS Code screenshot ("Visual Studio
+    Code" / "Welcome") and the icon lookup against this machine's real
+    icon themes, but the two have not been run end to end through an
+    actual portal capture.
+- **BL-010 — Animated cursor-movement indicator.** Deliberately deferred
+  (2026-08-29) in favor of the Guide → Do → Verify confirmation loop
+  (`docs/planning/vision-driven-substep-loop.md`), which Charlie
+  prioritized as more central to the product and cheaper to build than
+  on-screen highlight/callout work. Not dropped — Charlie explicitly
+  wants to keep it, just later: a cursor-movement indicator is a lighter,
+  less fragile way to point at something than a highlight box, since it
+  doesn't depend on a bounding box landing exactly right (a box drawn a
+  few pixels off looks broken; an animated cursor drifting toward the
+  right neighborhood still reads as "over there"). Ties to the `action:
+  "move-cursor"` value `plan_step.py` already generates per substep
+  (`VALID_ACTIONS` in that file) — today that value exists in the data
+  model and is rendered as plain instruction text only; nothing animates
+  a cursor anywhere. Needs its own design pass (where does the cursor
+  actually move relative to the real system cursor, what triggers it,
+  does it work through the same window-scope/portal constraints
+  `locate_element` already has) — not scoped here.

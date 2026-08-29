@@ -67,6 +67,36 @@ pub fn window_icon(id: &str) -> Result<Option<IconImage>, String> {
     }
 }
 
+// An icon found by name rather than extracted from a window. `data_uri`
+// is ready for an <img src>; `source` is the file it came from, for
+// logging when a lookup picks something surprising.
+pub struct FoundIcon {
+    pub data_uri: String,
+    pub source: String,
+}
+
+// The app's icon looked up from its *name* alone, with no window
+// involved. This is the path that makes icons work on Wayland at all: the
+// portal never hands back a window to extract from, so once identify_app
+// has read the app's name off the pixels (see identify_app.py) this is
+// what turns that name into a picture. It's also how a chat saved months
+// ago still shows an icon.
+//
+// Freedesktop only: macOS and Windows have their own by-name lookups
+// (LaunchServices, the Start-menu shortcut's exe) and neither is written
+// yet — reported as "no icon" so the caller draws a letter avatar.
+pub fn icon_for_app_name(app_name: &str) -> Result<Option<FoundIcon>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        freedesktop_icons::icon_for_app_name(app_name)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app_name;
+        Ok(None)
+    }
+}
+
 // Which pick-and-capture strategy this session actually supports.
 //
 // `Native`: windows can be enumerated and given live screen rects, so the
@@ -635,5 +665,268 @@ mod linux_x11 {
             width,
             height,
         })
+    }
+}
+
+// ---------- Linux: icons by app name, from desktop entries ----------
+//
+// The freedesktop story in two hops: a `.desktop` entry maps a
+// human-readable `Name=` to a themed icon name, and the icon theme maps
+// that name to a file on disk. Both hops are plain directory scans of
+// well-known paths — no D-Bus, no toolkit, nothing that needs a display
+// connection, which matters because this runs off the main thread while
+// the sidebar is hidden.
+//
+// Deliberately not using GTK's own `IconTheme` even though gtk is already
+// a dependency: those calls must happen on the GTK main thread, and this
+// lookup is called from a blocking task pool.
+#[cfg(target_os = "linux")]
+mod freedesktop_icons {
+    use super::FoundIcon;
+    use std::path::{Path, PathBuf};
+
+    // Comparison form for app names, so "Microsoft Excel", "microsoft-excel"
+    // and "MicrosoftExcel" all meet. The vision model writes product names
+    // as a person would ("Visual Studio Code"), desktop entries are written
+    // however each vendor felt ("Visual Studio Code", "Code - OSS"), and an
+    // X11 WM_CLASS is a third convention again — normalising is what lets
+    // one lookup serve all three sources.
+    fn normalize(s: &str) -> String {
+        s.chars().filter(|c| c.is_alphanumeric()).flat_map(|c| c.to_lowercase()).collect()
+    }
+
+    fn data_dirs() -> Vec<PathBuf> {
+        let mut dirs: Vec<PathBuf> = Vec::new();
+        if let Some(home) = std::env::var_os("HOME") {
+            let home = PathBuf::from(home);
+            dirs.push(home.join(".local/share"));
+            dirs.push(home.join(".local/share/flatpak/exports/share"));
+        }
+        if let Some(xdg) = std::env::var_os("XDG_DATA_DIRS") {
+            dirs.extend(std::env::split_paths(&xdg));
+        }
+        // The spec's defaults, for a session that sets no XDG_DATA_DIRS.
+        dirs.push(PathBuf::from("/usr/local/share"));
+        dirs.push(PathBuf::from("/usr/share"));
+        dirs.push(PathBuf::from("/var/lib/flatpak/exports/share"));
+        dirs.retain(|d| d.is_dir());
+        dirs.dedup();
+        dirs
+    }
+
+    // One desktop entry's two fields of interest. `name` is what the user
+    // would call the app; `icon` is a themed icon name or an absolute path.
+    struct Entry {
+        name: String,
+        icon: String,
+    }
+
+    fn parse_entry(path: &Path) -> Option<Entry> {
+        let text = std::fs::read_to_string(path).ok()?;
+        let mut name = None;
+        let mut icon = None;
+        let mut in_desktop_entry = false;
+        for line in text.lines() {
+            let line = line.trim();
+            if line.starts_with('[') {
+                // Only the main group describes the app itself; the
+                // "Desktop Action ..." groups below it have their own
+                // Name=/Icon= for right-click menu items ("New Window"),
+                // which must not be mistaken for the app's.
+                in_desktop_entry = line == "[Desktop Entry]";
+                continue;
+            }
+            if !in_desktop_entry {
+                continue;
+            }
+            // Unlocalised keys only: `Name[de]=` would otherwise overwrite
+            // `Name=` depending on file order.
+            if let Some(v) = line.strip_prefix("Name=") {
+                name.get_or_insert_with(|| v.trim().to_string());
+            } else if let Some(v) = line.strip_prefix("Icon=") {
+                icon.get_or_insert_with(|| v.trim().to_string());
+            } else if line == "NoDisplay=true" || line == "Hidden=true" {
+                return None;
+            }
+        }
+        Some(Entry { name: name?, icon: icon? })
+    }
+
+    // Higher is better; None means "not this app at all". Exact beats
+    // prefix beats containment, so a query for "Code" prefers the entry
+    // actually named Code over "Code - OSS" or "QR Code Generator".
+    fn score(query: &str, entry_name: &str, file_stem: &str) -> Option<u32> {
+        let q = normalize(query);
+        if q.is_empty() {
+            return None;
+        }
+        let n = normalize(entry_name);
+        let stem = normalize(file_stem);
+        if n == q || stem == q {
+            return Some(100);
+        }
+        if stem.ends_with(&q) || n.starts_with(&q) {
+            return Some(80);
+        }
+        // Only in this direction: an entry whose name contains the query
+        // ("Microsoft Excel" for "Excel") is a plausible hit, whereas the
+        // reverse would match every short entry name against a long query.
+        if n.contains(&q) {
+            return Some(60);
+        }
+        None
+    }
+
+    fn find_entry(app_name: &str) -> Option<Entry> {
+        let mut best: Option<(u32, Entry)> = None;
+        for dir in data_dirs() {
+            let Ok(read) = std::fs::read_dir(dir.join("applications")) else {
+                continue;
+            };
+            for item in read.flatten() {
+                let path = item.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("desktop") {
+                    continue;
+                }
+                let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                let Some(entry) = parse_entry(&path) else {
+                    continue;
+                };
+                let Some(s) = score(app_name, &entry.name, stem) else {
+                    continue;
+                };
+                if best.as_ref().is_none_or(|(bs, _)| s > *bs) {
+                    best = Some((s, entry));
+                }
+            }
+        }
+        best.map(|(_, e)| e)
+    }
+
+    fn mime_for(path: &Path) -> Option<&'static str> {
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("png") => Some("image/png"),
+            Some("svg") | Some("svgz") => Some("image/svg+xml"),
+            // .xpm is the other thing found in /usr/share/pixmaps and no
+            // browser renders it, so it's not worth inlining.
+            _ => None,
+        }
+    }
+
+    // How good a candidate file is: PNGs are ranked by how close they are
+    // to the 40px the chat rows draw at without going under it, and an SVG
+    // outranks every PNG because it's resolution-independent.
+    fn rank(path: &Path) -> u32 {
+        if mime_for(path) == Some("image/svg+xml") {
+            return 1000;
+        }
+        let size = path
+            .components()
+            .filter_map(|c| c.as_os_str().to_str())
+            .filter_map(|s| s.split('x').next().and_then(|n| n.parse::<u32>().ok()))
+            .max()
+            .unwrap_or(0);
+        if size >= 40 {
+            // Prefer the smallest that still covers the display size, so
+            // nothing is ever upscaled (the same rule the _NET_WM_ICON
+            // decoder uses).
+            900_u32.saturating_sub(size)
+        } else {
+            size
+        }
+    }
+
+    fn search_dir(dir: &Path, stem: &str, depth: u32, best: &mut Option<(u32, PathBuf)>) {
+        if depth == 0 {
+            return;
+        }
+        let Ok(read) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for item in read.flatten() {
+            let path = item.path();
+            let Ok(kind) = item.file_type() else { continue };
+            if kind.is_dir() {
+                search_dir(&path, stem, depth - 1, best);
+            } else if path.file_stem().and_then(|s| s.to_str()) == Some(stem)
+                && mime_for(&path).is_some()
+            {
+                let r = rank(&path);
+                if best.as_ref().is_none_or(|(br, _)| r > *br) {
+                    *best = Some((r, path));
+                }
+            }
+        }
+    }
+
+    fn resolve_icon(icon: &str) -> Option<PathBuf> {
+        // An entry may name an absolute path instead of a themed name.
+        let direct = Path::new(icon);
+        if direct.is_absolute() && direct.is_file() && mime_for(direct).is_some() {
+            return Some(direct.to_path_buf());
+        }
+
+        let mut best: Option<(u32, PathBuf)> = None;
+        for dir in data_dirs() {
+            // Depth 4 covers the whole spec layout
+            // (icons/<theme>/<size>/<category>/<file>) without walking into
+            // anything deeper by accident.
+            search_dir(&dir.join("icons"), icon, 4, &mut best);
+            search_dir(&dir.join("pixmaps"), icon, 2, &mut best);
+        }
+        best.map(|(_, p)| p)
+    }
+
+    pub fn icon_for_app_name(app_name: &str) -> Result<Option<FoundIcon>, String> {
+        let Some(entry) = find_entry(app_name) else {
+            return Ok(None);
+        };
+        let Some(path) = resolve_icon(&entry.icon) else {
+            return Ok(None);
+        };
+        let Some(mime) = mime_for(&path) else {
+            return Ok(None);
+        };
+        let bytes = std::fs::read(&path).map_err(|e| format!("couldn't read {}: {e}", path.display()))?;
+
+        use base64::Engine;
+        Ok(Some(FoundIcon {
+            data_uri: format!(
+                "data:{mime};base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(&bytes)
+            ),
+            source: path.display().to_string(),
+        }))
+    }
+}
+
+// Exercises the by-name lookup against whatever this machine actually has
+// installed rather than a fixture: the thing being tested is the walk over
+// real freedesktop directories, and a fixture tree would only prove the
+// walker can read a tree we wrote ourselves. Skips (rather than fails) on
+// a machine with no desktop entries at all, so it stays green in CI.
+#[cfg(all(test, target_os = "linux"))]
+mod freedesktop_icon_tests {
+    #[test]
+    fn finds_an_icon_for_some_installed_app() {
+        let candidates = ["Firefox", "Files", "Text Editor", "Terminal", "Settings"];
+        let mut found = 0;
+        for name in candidates {
+            if let Ok(Some(icon)) = super::icon_for_app_name(name) {
+                assert!(icon.data_uri.starts_with("data:image/"), "{name}: {}", icon.source);
+                assert!(icon.data_uri.len() > 200, "{name}: suspiciously small icon");
+                found += 1;
+                eprintln!("{name} -> {}", icon.source);
+            }
+        }
+        if std::path::Path::new("/usr/share/applications").is_dir() {
+            assert!(found > 0, "no icon found for any of {candidates:?}");
+        }
+    }
+
+    #[test]
+    fn unknown_app_is_none_not_an_error() {
+        let r = super::icon_for_app_name("Definitely Not An Installed Application 9000");
+        assert!(matches!(r, Ok(None)), "{r:?}", r = r.map(|o| o.map(|i| i.source)));
     }
 }

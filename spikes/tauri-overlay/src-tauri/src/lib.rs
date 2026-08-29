@@ -95,6 +95,18 @@ struct ResearchStep {
     watch_for: String,
 }
 
+// research.py's whole response: `title` is a short, AI-written
+// description of the goal — the same idea as ChatGPT auto-titling a
+// conversation — generated in the same call as the steps rather than a
+// separate one, since the model already has the goal in context. Shown
+// in place of the user's raw prompt everywhere a skill is listed
+// (sidebar.js's home chat list, the path view's title bar).
+#[derive(Serialize, Deserialize, Debug)]
+struct ResearchResult {
+    title: String,
+    steps: Vec<ResearchStep>,
+}
+
 // vision-detect lives at spikes/vision-detect, a sibling of this crate's
 // grandparent dir (spikes/tauri-overlay/src-tauri) — resolved from
 // CARGO_MANIFEST_DIR so it doesn't depend on the process's cwd.
@@ -192,6 +204,200 @@ fn locate_element_blocking(
     sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
 
     result
+}
+
+// The Guide -> Do -> Verify check: does the screen now match a substep's
+// `expected_outcome`, instead of the user clicking "Done" and being
+// trusted. `observed` is shown to the user regardless of `matches` — a
+// wrong-but-specific answer ("Exposure reads +0.2") is more useful for
+// fixing the problem than a bare pass/fail would be.
+#[derive(Serialize, Deserialize, Debug)]
+struct VerifyResult {
+    matches: bool,
+    observed: String,
+}
+
+// Structurally locate_element's twin — same "hide the sidebar, resolve
+// the capture scope, shell out, re-show the sidebar" shape — but not
+// sharing its code: locate_element_blocking's scope-resolution match is
+// duplicated here rather than extracted, since refactoring a working,
+// already-tested path for one new caller risks the working one for no
+// real gain. If a third caller ever needs the same resolution, that's
+// the point to extract it.
+#[tauri::command]
+async fn verify_substep(
+    app: tauri::AppHandle,
+    expected_outcome: String,
+    scope: Option<CaptureScope>,
+    context: Option<String>,
+) -> Result<VerifyResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        verify_substep_blocking(&app, &expected_outcome, scope, context.as_deref())
+    })
+    .await
+    .map_err(|e| format!("verify_substep task panicked: {e}"))?
+}
+
+fn verify_substep_blocking(
+    app: &tauri::AppHandle,
+    expected_outcome: &str,
+    scope: Option<CaptureScope>,
+    context: Option<&str>,
+) -> Result<VerifyResult, String> {
+    use tauri::Manager;
+
+    let sidebar = app
+        .get_webview_window("sidebar")
+        .expect("\"sidebar\" window declared in tauri.conf.json must exist");
+    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+
+    let mut portal_scope: Option<String> = None;
+    let region = match scope {
+        None => None,
+        Some(CaptureScope::Region(r)) => Some(r),
+        Some(CaptureScope::Portal { scope, .. }) => {
+            portal_scope = Some(scope);
+            None
+        }
+        Some(CaptureScope::Window { id }) => match window_provider::get_window_rect(&id) {
+            Ok(w) => Some(Region { x: w.x, y: w.y, width: w.width, height: w.height }),
+            Err(e) => {
+                let _ = sidebar.show();
+                return Err(format!("selected window is no longer available: {e}"));
+            }
+        },
+    };
+
+    let result = run_verify(expected_outcome, &region, portal_scope.as_deref(), context);
+
+    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+
+    result
+}
+
+fn run_verify(
+    expected_outcome: &str,
+    region: &Option<Region>,
+    portal_scope: Option<&str>,
+    context: Option<&str>,
+) -> Result<VerifyResult, String> {
+    let dir = vision_detect_dir();
+    let python = dir.join(".venv").join("bin").join("python3");
+    let script = dir.join("verify_step.py");
+
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script).arg(expected_outcome);
+    if let Some(scope) = portal_scope {
+        cmd.arg("--portal").arg(scope);
+    } else if let Some(r) = region {
+        cmd.arg(format!("{},{},{},{}", r.x, r.y, r.width, r.height));
+    }
+    if let Some(ctx) = context {
+        cmd.arg("--context").arg(ctx);
+    }
+
+    let output = cmd
+        .current_dir(&dir)
+        .output()
+        .map_err(|e| format!("failed to run verify_step.py: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "verify_step.py exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("failed to parse verify_step.py output ({stdout}): {e}"))
+}
+
+// What the vision model read off the picked frame — see identify_app.py.
+// Both fields are optional: "I can't tell" is a real answer here and is
+// preferable to a confident wrong one, which would silently scope every
+// later Research call to software the user isn't in.
+#[derive(Serialize, Deserialize, Debug)]
+struct AppIdentity {
+    app_name: Option<String>,
+    window_title: Option<String>,
+}
+
+// The only way to learn which app was picked on a Wayland session: the
+// portal reports a stream and a size and nothing else, and Mutter
+// publishes no X11 client list to fall back on (see `BL-009`). Called
+// once, right after a pick — not per step. Same hide-the-sidebar dance as
+// locate_element, for the same reason: this app's own window must not be
+// in the frame the model is asked to name.
+#[tauri::command]
+async fn identify_app(app: tauri::AppHandle, scope: Option<CaptureScope>) -> Result<AppIdentity, String> {
+    tauri::async_runtime::spawn_blocking(move || identify_app_blocking(&app, scope))
+        .await
+        .map_err(|e| format!("identify_app task panicked: {e}"))?
+}
+
+fn identify_app_blocking(app: &tauri::AppHandle, scope: Option<CaptureScope>) -> Result<AppIdentity, String> {
+    use tauri::Manager;
+
+    let sidebar = app
+        .get_webview_window("sidebar")
+        .expect("\"sidebar\" window declared in tauri.conf.json must exist");
+    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+
+    let mut portal_scope: Option<String> = None;
+    let region = match scope {
+        None => None,
+        Some(CaptureScope::Region(r)) => Some(r),
+        Some(CaptureScope::Portal { scope, .. }) => {
+            portal_scope = Some(scope);
+            None
+        }
+        Some(CaptureScope::Window { id }) => match window_provider::get_window_rect(&id) {
+            Ok(w) => Some(Region { x: w.x, y: w.y, width: w.width, height: w.height }),
+            Err(e) => {
+                let _ = sidebar.show();
+                return Err(format!("selected window is no longer available: {e}"));
+            }
+        },
+    };
+
+    let result = run_identify_app(&region, portal_scope.as_deref());
+
+    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+
+    result
+}
+
+fn run_identify_app(region: &Option<Region>, portal_scope: Option<&str>) -> Result<AppIdentity, String> {
+    let dir = vision_detect_dir();
+    let python = dir.join(".venv").join("bin").join("python3");
+    let script = dir.join("identify_app.py");
+
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script);
+    if let Some(scope) = portal_scope {
+        cmd.arg("--portal").arg(scope);
+    } else if let Some(r) = region {
+        cmd.arg(format!("{},{},{},{}", r.x, r.y, r.width, r.height));
+    }
+
+    let output = cmd
+        .current_dir(&dir)
+        .output()
+        .map_err(|e| format!("failed to run identify_app.py: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "identify_app.py exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("failed to parse identify_app.py output ({stdout}): {e}"))
 }
 
 // Window enumeration/re-query never needs the sidebar hidden — no
@@ -295,11 +501,28 @@ async fn window_icon(
             }
         }
 
+        // Extraction from a live window is the better answer (it's the
+        // icon that window is actually showing), so it goes first — but
+        // there is no window to extract from on a Wayland portal pick, and
+        // there won't be for a chat whose window is long closed. The
+        // desktop-entry lookup needs nothing but the name, which
+        // identify_app can now supply on any session.
+        let by_name = || match window_provider::icon_for_app_name(&app_name) {
+            Ok(Some(found)) => Ok(Some(found.data_uri)),
+            Ok(None) => Ok(None),
+            // A missing/unreadable icon theme is a "no icon", not a
+            // failure the user can do anything about.
+            Err(e) => {
+                eprintln!("icon_for_app_name({app_name}) failed: {e}");
+                Ok(None)
+            }
+        };
+
         let Some(id) = id else {
-            return Ok(None);
+            return by_name();
         };
         let Some(icon) = window_provider::window_icon(&id)? else {
-            return Ok(None);
+            return by_name();
         };
         let png = encode_png(&icon)?;
         if let Some(path) = &cached {
@@ -399,7 +622,7 @@ fn run_portal_pick(scope: &str) -> Result<PortalPick, String> {
 // setup still allows staying on full-screen/region capture, where there's
 // no window to name.
 #[tauri::command]
-async fn research_goal(goal: String, app_name: Option<String>) -> Result<Vec<ResearchStep>, String> {
+async fn research_goal(goal: String, app_name: Option<String>) -> Result<ResearchResult, String> {
     tauri::async_runtime::spawn_blocking(move || run_research(&goal, app_name.as_deref()))
         .await
         .map_err(|e| format!("research_goal task panicked: {e}"))?
@@ -455,7 +678,7 @@ async fn save_skills_json(app: tauri::AppHandle, json: String) -> Result<(), Str
     .map_err(|e| format!("save_skills_json task panicked: {e}"))?
 }
 
-fn run_research(goal: &str, app_name: Option<&str>) -> Result<Vec<ResearchStep>, String> {
+fn run_research(goal: &str, app_name: Option<&str>) -> Result<ResearchResult, String> {
     let dir = vision_detect_dir();
     let python = dir.join(".venv").join("bin").join("python3");
     let script = dir.join("research.py");
@@ -494,6 +717,14 @@ struct PlannedSubstep {
     target_description: String,
     instruction_text: String,
     action: String,
+    // What the screen should show once this one substep is actually
+    // done (see plan_step.py's prompt) — the Guide -> Do -> Verify input,
+    // checked against a later screenshot by verify_substep below instead
+    // of the user clicking "Done" and being trusted. Without this field
+    // here, serde would silently drop it on the way to JS: an unlisted
+    // JSON field is ignored, not an error, so plan_step.py could produce
+    // it correctly and it would still vanish before ever reaching the UI.
+    expected_outcome: String,
 }
 
 // Runs once per top-level step, lazily, the first time the user reaches
@@ -654,6 +885,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             locate_element,
+            verify_substep,
             research_goal,
             plan_step,
             list_windows,
@@ -663,7 +895,8 @@ pub fn run() {
             save_skills_json,
             refresh_window_rect,
             window_at_point,
-            window_icon
+            window_icon,
+            identify_app
         ])
         .setup(|app| {
             use tauri::Manager;

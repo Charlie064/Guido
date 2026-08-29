@@ -15,7 +15,7 @@
 //   for platforms with no live window rect (a Wayland portal capture never
 //   discloses screen position) and as a non-intrusive "roughly where".
 import { SKILLS, nextCannedReply } from "./fake-skill.js";
-import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon } from "./icons.js";
+import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon } from "./icons.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -67,6 +67,25 @@ let portalPick = null;
 // native path.
 let captureBackend = "native";
 
+// The window-pick control exists twice — once in the setup view, once
+// inlined at the top of home — and both are always in the DOM, so every
+// update writes to both rather than to "the" control. They'd otherwise
+// disagree the moment a pick was made from one of them.
+const REGION_MOUNTS = ["setup", "home"];
+const regionEls = (part) => REGION_MOUNTS.map((m) => document.querySelector(`#${m}-region-${part}`));
+
+function setRegionLabel(text) {
+  for (const el of regionEls("label")) el.textContent = text;
+}
+
+function regionLabelText() {
+  return document.querySelector("#setup-region-label").textContent;
+}
+
+function setRegionBusy(busy) {
+  for (const el of regionEls("select")) el.disabled = busy;
+}
+
 async function initCaptureBackend() {
   try {
     captureBackend = await invoke("capture_backend");
@@ -76,24 +95,54 @@ async function initCaptureBackend() {
   const portal = captureBackend === "portal";
   document.querySelector("#setup-blurb-native").hidden = portal;
   document.querySelector("#setup-blurb-portal").hidden = !portal;
-  document.querySelector("#setup-region-select").textContent =
-    portal ? "Choose source" : "Select window";
-  document.querySelector("#setup-region-label").textContent = formatWindowLabel();
+  for (const el of regionEls("select")) {
+    el.textContent = portal ? "Choose source" : "Select window";
+  }
+  setRegionLabel(formatWindowLabel());
+  refreshHomeSteps();
 }
 
 // Sent as the second research_goal arg (see lib.rs) so Research scopes
 // its search to the actual target app instead of guessing it from goal
 // text alone — this is the "OS info in the research query" piece.
-// The portal deliberately never tells us which app was picked, so on that
-// backend Research gets no app name and falls back to inferring the target
-// app from the goal text alone (see run_research in lib.rs).
+//
+// The portal itself never says which app was picked — its `label` is only
+// a source kind and size ("window (1920x1080)", see describe() in
+// portal_capture.py). `detectedApp` is how that gap is closed: one vision
+// call right after the pick reads the app's name off the frame (see
+// identify_app.py / the identify_app command), which is the only source of
+// app identity on a Wayland session. Shape: {app_name, window_title}, or
+// null before/if identification hasn't produced one.
+let detectedApp = null;
+
+// The OS's own answer wins where there is one — it's free and exact — and
+// the vision read is the fallback that makes Wayland work at all. Null
+// only when neither is available, in which case Research infers the target
+// app from goal text alone (see run_research in lib.rs).
 function selectedAppName() {
-  return selectedWindow ? selectedWindow.app_name : null;
+  return selectedWindow?.app_name ?? detectedApp?.app_name ?? null;
+}
+
+// Whether the user has actually chosen what to capture. Distinct from
+// "capture will work": the native backend can always fall back to the full
+// screen, but that's a default, not a pick, and the home view's second
+// step only ticks on a real choice (or on explicitly accepting full
+// screen, below).
+let fullScreenAccepted = false;
+
+function hasCaptureSource() {
+  return Boolean(selectedWindow || portalPick || fullScreenAccepted);
 }
 
 // { kind: "window", id } | { kind: "region", ... } | null (full screen) —
 // what locate_element's `scope` param expects (CaptureScope in lib.rs).
-function currentCaptureScope() {
+// Derived from whatever is currently picked in setup/home — the *global*
+// pick, not any particular skill's own. Two callers need exactly this:
+// (1) snapshotting a scope onto a brand-new skill at the moment it's
+// created (submitNewGoal — currentSkill isn't that skill yet), and (2) a
+// fallback for a skill persisted before per-skill scope existed, which
+// has no captureScope of its own to fall back on.
+function deriveScopeFromGlobals() {
   if (portalPick) {
     return {
       kind: "portal",
@@ -106,6 +155,15 @@ function currentCaptureScope() {
   }
   if (!selectedWindow) return null;
   return { kind: "window", id: selectedWindow.id };
+}
+
+// Every other caller (the substep locate button, future auto-locate)
+// wants the scope of the skill actually being viewed, not whatever the
+// picker happens to hold right now — those can differ once scope is
+// per-skill: picking a new window for a second skill must not silently
+// change where the first skill's substeps locate against.
+function currentCaptureScope() {
+  return currentSkill?.captureScope ?? deriveScopeFromGlobals();
 }
 
 let currentSkill = null;
@@ -175,6 +233,7 @@ const views = {
   login: document.querySelector("#view-login"),
   setup: document.querySelector("#view-setup"),
   home: document.querySelector("#view-home"),
+  group: document.querySelector("#view-group"),
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
 };
@@ -182,11 +241,15 @@ const views = {
 // Compact shell sizes — keep the panel as small as the current view
 // allows so it can sit next to Excel instead of covering it.
 const VIEW_SIZE = {
-  login: [320, 440],
-  setup: [320, 400],
-  home: [320, 440],
-  path: [320, 560],
-  chat: [320, 560],
+  login: [400, 460],
+  setup: [400, 420],
+  // Wider and taller than the other views: home is a fixed 40/60 split,
+  // and the ask row now carries its tick inline and the picker row a
+  // label, a tick and a button — at the old 320-340px they crowded.
+  home: [420, 620],
+  group: [420, 620],
+  path: [400, 600],
+  chat: [400, 600],
 };
 
 async function fitWindow(name) {
@@ -195,7 +258,7 @@ async function fitWindow(name) {
     const LogicalSize = window.__TAURI__.dpi?.LogicalSize ?? window.__TAURI__.window.LogicalSize;
     const win = getCurrentWindow();
     await win.setSize(new LogicalSize(w, h));
-    await win.setMinSize(new LogicalSize(300, 320));
+    await win.setMinSize(new LogicalSize(360, 400));
   } catch {
     // Browser preview / missing Tauri API — leave CSS to fill the webview.
   }
@@ -210,6 +273,8 @@ function viewMeta(name) {
       return ["Set up", "", "home"];
     case "home":
       return ["Chats", "", null];
+    case "group":
+      return [`${currentGroup?.appName ?? "Unsorted"} chats`, `${currentGroup?.skills.length ?? 0} chats`, "home"];
     case "path":
       return [currentSkill.title, currentSkill.goal, "home"];
     case "chat":
@@ -226,7 +291,11 @@ function setProfileOpen(open) {
   els.profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
 }
 
-function showView(name) {
+// `fade` is opt-in rather than always-on: navigating back and forth should
+// feel instant, but the hand-off from a finished research call to the step
+// list is a result arriving, and a beat of animation is what marks it as
+// one.
+function showView(name, { fade = false } = {}) {
   // Leaving the chat view drops the on-screen overlay: it belongs to one
   // substep in one step, so leaving that context would otherwise strand a
   // highlight box on screen with nothing in the UI still pointing at it
@@ -236,11 +305,16 @@ function showView(name) {
   // Refreshed on every visit, not just after a new goal — this is also
   // how a skill generated earlier (or restored from disk) stays reachable
   // after navigating away from it, see renderAppsList's comment.
-  if (name === "home") renderAppsList();
+  if (name === "home") {
+    renderAppsList();
+    refreshHomeSteps();
+  }
   currentView = name;
   for (const [key, el] of Object.entries(views)) {
     el.classList.toggle("active", key === name);
+    el.classList.remove("fade-in");
   }
+  if (fade) views[name].classList.add("fade-in");
   const [title, subtitle, backTarget] = viewMeta(name);
   els.barTitle.textContent = title;
   els.barSubtitle.textContent = subtitle;
@@ -328,26 +402,89 @@ async function appIcon(app, id = null) {
 }
 
 async function updateWindowIcon() {
-  const img = document.querySelector("#setup-region-icon");
-  const uri = await appIcon(selectedWindow?.app_name, selectedWindow?.id);
-  img.hidden = !uri;
-  if (uri) img.src = uri;
+  // Keyed on selectedAppName(), not selectedWindow: on the portal backend
+  // the detected name is the only key there is, and window_icon falls back
+  // to a desktop-entry lookup when it gets a name but no window id (see
+  // icon_for_app_name in window_provider.rs).
+  const appName = selectedAppName();
+  const uri = await appIcon(appName, selectedWindow?.id);
+  for (const img of regionEls("icon")) {
+    img.hidden = !uri;
+    if (uri) img.src = uri;
+  }
+  // The drawn/letter mark stands in whenever no icon file could be found —
+  // the same fallback the chat rows use, so the picker and the list show
+  // the same app the same way.
+  for (const mark of regionEls("mark")) {
+    mark.hidden = Boolean(uri) || !appName;
+    if (!mark.hidden) setFallbackMark(mark, appName, 20);
+  }
 }
 
+// Once an app has been identified, its name alone is the label — the
+// picker sits behind a tick and an icon, so "Capturing:" and "Window:"
+// were narrating what the row already shows. The name is what the user
+// needs to check at a glance, and it gets the whole width to do it in.
 function formatWindowLabel() {
+  const identified = selectedAppName();
+  if (identified) return identified;
   if (portalPick) {
-    // Says which highlight the user is going to get, since that is the one
-    // consequence of screen-vs-window they can't otherwise see coming.
-    const how = portalPick.source_type === "screen" ? "on-screen box" : "diagram only";
-    return `Capturing: ${portalPick.label} — ${how}`;
+    // Nothing identified yet — fall back to the portal's own description
+    // ("window (1920x1080)"), which at least says whether a screen or a
+    // single window was picked while identify_app is still in flight.
+    return portalPick.label;
   }
-  if (selectedWindow) {
-    return `Window: ${selectedWindow.app_name || "(unnamed)"} — ${selectedWindow.title || "untitled"}`;
-  }
+  if (selectedWindow) return selectedWindow.title || "(unnamed window)";
   // On the portal backend "full screen" isn't a working default the way it
   // is elsewhere — nothing can be captured until the user has picked a
   // source once — so the empty state has to read as a required step.
-  return captureBackend === "portal" ? "Nothing chosen yet" : "Window: full screen";
+  return captureBackend === "portal" ? "Nothing chosen yet" : "Full screen";
+}
+
+// One vision call, right after a pick — never per step. Runs whenever the
+// OS didn't hand us a name (always, on the portal backend), and updates the
+// label and icon in place when it lands rather than blocking the pick on
+// it: the user should get their tick the instant they've chosen, and a
+// name arriving a few seconds later is a detail filling in, not a step
+// they're waiting on.
+//
+// A null app_name is a real answer ("I can't tell what this is") and is
+// left as null rather than guessed at — a wrong name would silently scope
+// every later Research call to the wrong software.
+async function identifyPickedApp() {
+  if (selectedWindow?.app_name) return;
+  try {
+    const identity = await withStatus(
+      "Working out which app that is",
+      () => invoke("identify_app", { scope: deriveScopeFromGlobals() }),
+      { slowAfter: 4, stallAfter: 45 },
+    );
+    if (!identity?.app_name) return;
+    detectedApp = identity;
+    setRegionLabel(formatWindowLabel());
+    await updateWindowIcon();
+
+    // A chat can be created before this lands (research runs the moment
+    // the goal is submitted, and the pick may come after), so the two that
+    // could still be missing a name get it now — otherwise a chat made in
+    // that window would keep `appName: null` for good and never show an
+    // icon in the list.
+    let changed = false;
+    for (const skill of [pendingSkill, currentSkill]) {
+      if (skill && !skill.appName) {
+        skill.appName = identity.app_name;
+        changed = true;
+      }
+    }
+    if (changed) {
+      await persistSkills();
+      renderAppsList();
+    }
+  } catch (err) {
+    // The pick itself already succeeded and capture works without a name,
+    // so this failing costs only the label and the icon.
+    console.error("identify_app failed", err);
+  }
 }
 
 // Wayland path: the compositor runs the whole gesture (its own dialog,
@@ -355,11 +492,9 @@ function formatWindowLabel() {
 // catch and no rect to resolve, so none of the region-select window's
 // machinery below is involved.
 async function selectPortalSource() {
-  const label = document.querySelector("#setup-region-label");
-  const button = document.querySelector("#setup-region-select");
-  const previousLabel = label.textContent;
-  button.disabled = true;
-  label.textContent = "Choose a screen or window in the system prompt…";
+  const previousLabel = regionLabelText();
+  setRegionBusy(true);
+  setRegionLabel("Choose a screen or window in the system prompt…");
 
   try {
     // "any" so the system picker offers both its Screen and Window tabs.
@@ -380,20 +515,25 @@ async function selectPortalSource() {
       },
     );
     selectedWindow = null;
+    // A new source is a new app until proven otherwise — carrying the old
+    // detection over would label the new pick with the previous app's name.
+    detectedApp = null;
     updateWindowIcon();
-    label.textContent = formatWindowLabel();
+    let text = formatWindowLabel();
     if (!portalPick.persisted) {
       // Without a restore token every capture re-prompts, which would make
       // the guided loop unusable — say so now rather than mid-skill.
-      label.textContent += " — your desktop won't remember this, so each capture will ask again";
+      text += " — your desktop won't remember this, so each capture will ask again";
     }
+    setRegionLabel(text);
+    onCaptureSourcePicked();
   } catch (err) {
-    label.textContent = `Couldn't pick a source (${err})`;
+    setRegionLabel(`Couldn't pick a source (${err})`);
     setTimeout(() => {
-      if (label.textContent.startsWith("Couldn't pick")) label.textContent = previousLabel;
+      if (regionLabelText().startsWith("Couldn't pick")) setRegionLabel(previousLabel);
     }, 5000);
   } finally {
-    button.disabled = false;
+    setRegionBusy(false);
     await getCurrentWindow().setFocus();
   }
 }
@@ -401,11 +541,9 @@ async function selectPortalSource() {
 async function selectWindow() {
   if (captureBackend === "portal") return selectPortalSource();
 
-  const label = document.querySelector("#setup-region-label");
-  const button = document.querySelector("#setup-region-select");
-  const previousLabel = label.textContent;
-  button.disabled = true;
-  label.textContent = "Click the window you want…";
+  const previousLabel = regionLabelText();
+  setRegionBusy(true);
+  setRegionLabel("Click the window you want…");
 
   await getCurrentWindow().hide();
 
@@ -421,28 +559,140 @@ async function selectWindow() {
     try {
       selectedWindow = await invoke("window_at_point", { x: Math.round(point.x), y: Math.round(point.y) });
     } catch (err) {
-      label.textContent = `Nothing there — try clicking directly on a window (${err})`;
+      setRegionLabel(`Nothing there — try clicking directly on a window (${err})`);
       await getCurrentWindow().show();
       await getCurrentWindow().setFocus();
-      button.disabled = false;
+      setRegionBusy(false);
       setTimeout(() => {
-        if (label.textContent.startsWith("Nothing there")) label.textContent = previousLabel;
+        if (regionLabelText().startsWith("Nothing there")) setRegionLabel(previousLabel);
       }, 3000);
       return;
     }
   }
 
-  label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
+  setRegionLabel(selectedWindow ? formatWindowLabel() : previousLabel);
   updateWindowIcon();
   await getCurrentWindow().show();
   await getCurrentWindow().setFocus();
-  button.disabled = false;
+  setRegionBusy(false);
+  if (selectedWindow) onCaptureSourcePicked();
 }
 
-document.querySelector("#setup-region-select").addEventListener("click", selectWindow);
+for (const el of regionEls("select")) el.addEventListener("click", selectWindow);
 document.querySelector("#setup-continue").addEventListener("click", () => {
   showView("home");
 });
+
+// ---------- Home: two-step gate + research loader ----------
+//
+// A chat needs two things and doesn't care in which order they arrive: a
+// goal to research, and a window to watch. Each gets its own tick in the
+// home view's top pane; the step list opens once both have landed. That's
+// why research isn't blocked on a window pick — it's the slow half, so it
+// runs the moment the goal is submitted and its result waits (as
+// `pendingSkill`) for the pick if the pick hasn't happened yet.
+
+let pendingSkill = null;
+let researchInFlight = false;
+let phraseTimer = null;
+
+const homeEls = {
+  stepGoal: document.querySelector("#home-step-goal"),
+  stepWindow: document.querySelector("#home-step-window"),
+  research: document.querySelector("#home-research"),
+  researchText: document.querySelector("#home-research-text"),
+  researchSkip: document.querySelector("#home-research-skip"),
+  goalInput: document.querySelector("#new-goal-input"),
+};
+
+// The two ticks live inside the controls they describe (the ask pill and
+// the picker row), so there is no label to keep in sync — only the filled
+// state.
+function refreshHomeSteps() {
+  const goalDone = researchInFlight || pendingSkill !== null || homeEls.goalInput.value.trim() !== "";
+  homeEls.stepGoal.classList.toggle("done", goalDone);
+  homeEls.stepWindow.classList.toggle("done", hasCaptureSource());
+}
+
+// Cycled while research is in flight so a 30-60s call reads as progress
+// rather than a frozen line of text. The status bar still carries the
+// authoritative elapsed-time/stall wording (see beginStatus) — this is the
+// in-context, human half of the same wait.
+const RESEARCH_PHRASES = [
+  "Researching…",
+  "Reading the documentation…",
+  "Working out how this app does it…",
+  "Finding the shortest path…",
+  "Writing your steps…",
+];
+
+function startResearchTicker() {
+  let i = 0;
+  homeEls.research.hidden = false;
+  homeEls.researchSkip.hidden = true;
+  const show = () => {
+    homeEls.researchText.textContent = RESEARCH_PHRASES[i % RESEARCH_PHRASES.length];
+    // Restarting the CSS entry animation needs the element out of the
+    // document's animation list for a frame; toggling the class alone
+    // wouldn't re-trigger it.
+    homeEls.researchText.style.animation = "none";
+    void homeEls.researchText.offsetWidth;
+    homeEls.researchText.style.animation = "";
+    i++;
+  };
+  show();
+  phraseTimer = setInterval(show, 2600);
+}
+
+function stopResearchTicker() {
+  clearInterval(phraseTimer);
+  phraseTimer = null;
+  homeEls.research.hidden = true;
+  homeEls.researchSkip.hidden = true;
+}
+
+// Called from both pick paths (native click-to-pick and the portal
+// dialog). The 1s pause is deliberate: when research finished first, the
+// pick is the last thing standing between the user and the step list, and
+// jumping views the instant they click would swallow the tick they just
+// earned. Nothing is waiting on the pick, so no pause.
+function onCaptureSourcePicked() {
+  refreshHomeSteps();
+  // Not awaited: identification is a vision round trip, and the step list
+  // must not sit behind it. Whatever it learns is backfilled onto the chat
+  // afterwards (see identifyPickedApp), which is why the open below can go
+  // ahead without a name in hand. Skipped when the user chose full screen
+  // rather than an app — there's nothing there to identify.
+  if (selectedWindow || portalPick) identifyPickedApp();
+  if (pendingSkill) openPendingSkill(1000);
+}
+
+function openPendingSkill(delayMs) {
+  const skill = pendingSkill;
+  pendingSkill = null;
+  setTimeout(async () => {
+    stopResearchTicker();
+    // Both are only knowable once the window has been picked, and research
+    // can finish before that — so they're snapshotted here, at the moment
+    // the chat actually opens, rather than when it was created.
+    skill.captureScope = skill.captureScope ?? deriveScopeFromGlobals();
+    if (!skill.appName) skill.appName = selectedAppName();
+    await persistSkills();
+    renderAppsList();
+    refreshHomeSteps();
+    openSkill(skill, { fade: true });
+  }, delayMs);
+}
+
+// Escape hatch so a finished research call can't strand the user behind a
+// pick they don't want to make: the native backend captures the whole
+// screen perfectly well without one.
+homeEls.researchSkip.addEventListener("click", () => {
+  fullScreenAccepted = true;
+  onCaptureSourcePicked();
+});
+
+homeEls.goalInput.addEventListener("input", refreshHomeSteps);
 
 // ---------- Login ----------
 
@@ -475,64 +725,204 @@ document.querySelector("#profile-attach").addEventListener("click", () => {
   showView("setup");
 });
 
-// One row per skill actually in SKILLS, not a single hardcoded "Excel
-// chats" button — that button only ever opened the fixture (or
-// SKILLS[0], which is the fixture too, since it's first in the array and
-// loadPersistedSkills keeps save order). A skill was otherwise reachable
-// only in the instant right after asking (openSkill at the end of
-// submitNewGoal); leaving that view for any reason orphaned it — still
-// safely on disk (persistSkills already saved it), just nothing in the
-// UI could get back to it. Call this after every SKILLS mutation and
-// before showing the home view, so it's always current.
-// With nothing saved, the whole Apps section goes away — heading included
-// — rather than leaving an empty header over a blank strip. The ask box
-// above it is already the "what do you do here" affordance on a fresh
-// install, so a second empty-state line under a lone heading is just
-// chrome with nothing behind it.
+// Logos we ship, for apps whose icon can't be extracted from a live
+// window — the Excel fixtures have no window to extract from at all, so
+// without this the demo rows are the only ones in the list with an empty
+// icon slot. Matched loosely because the same app arrives named
+// differently depending on the source (X11 WM_CLASS, the vision model's
+// product name, or the fixture's own string); kept narrow enough that
+// Calc and Sheets don't end up wearing Excel's logo.
+//
+// Only reached when no real icon could be found: where the machine
+// actually has the app installed, icon_for_app_name resolves its real
+// icon file and that wins (see the appIcon call in renderAppsList).
+const APP_MARK_IMAGES = [
+  [/\bexcel\b|xlsx?/i, "assets/excel.png"],
+];
+
+function setFallbackMark(el, appName, size = 40) {
+  const logo = APP_MARK_IMAGES.find(([pattern]) => pattern.test(appName ?? ""));
+  if (logo) {
+    // `drawn` drops the neutral tile the letter avatar needs — a real logo
+    // brings its own shape and background.
+    el.classList.add("drawn");
+    el.innerHTML = `<img src="${logo[1]}" alt="" width="${size}" height="${size}" />`;
+    return;
+  }
+  el.classList.remove("drawn");
+  el.textContent = (appName ?? "?").trim().charAt(0).toUpperCase() || "?";
+}
+
+// Chats are grouped by the app they're about — one card per app, titled
+// "<App> chats", with every chat for that app listed inside it under the
+// group's own icon. One flat row per skill was fine at two or three chats
+// and stops being fine at twenty, where the same app's chats end up
+// scattered down the list with no way to see them together.
+//
+// Ranking is recency, twice over: chats inside a group are newest-first,
+// and the groups themselves sort by their own newest chat — so the app you
+// last asked about is the card at the top.
+//
+// Call this after every SKILLS mutation and before showing the home view,
+// so it's always current. A skill is otherwise reachable only in the
+// instant right after asking (openSkill at the end of submitNewGoal);
+// leaving that view for any reason used to orphan it — still safely on
+// disk, just nothing in the UI could get back to it. With nothing saved
+// the whole section including its heading is hidden, rather than an empty
+// header over a blank strip: the ask box above is already the "what do you
+// do here" affordance on a fresh install.
+
+// Chats about the same app must land in the same group even though the
+// app's name reaches us by several routes that disagree — an X11 WM_CLASS
+// ("libreoffice-calc"), the vision model's product name ("Microsoft
+// Excel"), a fixture's own shorthand ("Excel"). Normalising case and
+// punctuation gets most of it; dropping the vendor word is what makes
+// "Excel" and "Microsoft Excel" one group rather than two.
+const VENDOR_PREFIXES = /^(microsoft|apple|google|adobe|jetbrains|mozilla)\s+/i;
+
+function appGroupKey(appName) {
+  if (!appName) return "";
+  return appName.trim().replace(VENDOR_PREFIXES, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Sort key. Chats saved before createdAt existed have none, so they fall
+// back to their position in SKILLS — which is save order, since
+// persistSkills writes the array as-is and loadPersistedSkills reads it
+// back in order. That keeps an old skills.json ordered sensibly instead of
+// collapsing every pre-existing chat to the same timestamp.
+function skillTime(skill) {
+  const t = Date.parse(skill.createdAt ?? "");
+  return Number.isFinite(t) ? t : SKILLS.indexOf(skill);
+}
+
+function groupSkills() {
+  const groups = new Map();
+  for (const skill of SKILLS) {
+    const key = appGroupKey(skill.appName);
+    if (!groups.has(key)) groups.set(key, { key, skills: [] });
+    groups.get(key).skills.push(skill);
+  }
+  for (const group of groups.values()) {
+    group.skills.sort((a, b) => skillTime(b) - skillTime(a));
+    // The newest chat also names the group and supplies its icon: it's the
+    // most recent thing the app was called, which is the best guess at
+    // what it's actually called now.
+    group.appName = group.skills[0].appName ?? null;
+    group.newest = skillTime(group.skills[0]);
+  }
+  return [...groups.values()].sort((a, b) => b.newest - a.newest);
+}
+
+// Home lists one button per app; opening one goes to its own page (the
+// `group` view) listing that app's chats. One long scroll holding every
+// group expanded was fine at two apps and stops being fine at ten, where
+// finding a chat means scrolling past every other app's.
 function renderAppsList() {
   const list = document.querySelector("#apps-list");
   const kicker = document.querySelector("#apps-kicker");
   list.innerHTML = "";
   kicker.hidden = SKILLS.length === 0;
 
-  for (const skill of SKILLS) {
+  for (const group of groupSkills()) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "chat-group";
+    card.innerHTML = `
+      <img class="chat-group-icon" alt="" hidden />
+      <span class="chat-group-mark"></span>
+      <div class="chat-group-text">
+        <div class="chat-group-title"></div>
+        <div class="chat-group-meta"></div>
+      </div>
+      <div class="chat-group-count"></div>
+      ${ChevronDownIcon({ size: 16 })}
+    `;
+    card.querySelector(".chat-group-title").textContent = `${group.appName ?? "Unsorted"} chats`;
+    // The newest chat's title, as a hint at what's inside without opening
+    // it — the group name alone says nothing a user recognises.
+    card.querySelector(".chat-group-meta").textContent = `Latest: ${group.skills[0].title}`;
+    card.querySelector(".chat-group-count").textContent = group.skills.length;
+    card.addEventListener("click", () => openGroup(group.key));
+
+    applyGroupIcon(group, [[card.querySelector(".chat-group-icon"), card.querySelector(".chat-group-mark"), 34]]);
+    list.appendChild(card);
+  }
+}
+
+// Resolves the group's icon once and applies it to every slot that should
+// wear it — the group button, and later every row on its page. The whole
+// point of grouping is that these chats share an app, so they share one
+// lookup rather than each doing its own.
+//
+// `slots` is [imgEl, markEl, size] triples: the mark renders immediately
+// (a shipped logo, or the app's initial) and is swapped for the real icon
+// if the async lookup finds one, so nothing reflows from icon-less to
+// icon-ful.
+function applyGroupIcon(group, slots) {
+  for (const [, mark, size] of slots) setFallbackMark(mark, group.appName, size);
+  appIcon(group.appName).then((uri) => {
+    if (!uri) return;
+    for (const [img, mark] of slots) {
+      mark.hidden = true;
+      img.src = uri;
+      img.hidden = false;
+    }
+  });
+}
+
+// Which group's page is open. Held as a key, not the object: groups are
+// derived fresh from SKILLS on every render, so the object identity from
+// one render is stale by the next (after a delete, say).
+let currentGroupKey = null;
+let currentGroup = null;
+
+function openGroup(key) {
+  currentGroupKey = key;
+  renderGroupView();
+  showView("group");
+}
+
+function renderGroupView() {
+  currentGroup = groupSkills().find((g) => g.key === currentGroupKey) ?? null;
+  const body = document.querySelector("#group-body");
+  body.innerHTML = "";
+  // Deleting a group's last chat leaves nothing to show — the page would
+  // otherwise sit there empty with a back button as its only content.
+  if (!currentGroup) {
+    showView("home");
+    return;
+  }
+
+  const slots = [];
+  for (const skill of currentGroup.skills) {
     const generated = skill.steps.filter((s) => s.generated).length;
     // A div, not a button: the delete control is itself a button and
     // nesting one inside another is invalid, so the row is a container
     // with a full-width "open" button plus the delete button beside it.
     const row = document.createElement("div");
-    row.className = "app-group";
+    row.className = "chat-row";
     row.innerHTML = `
-      <button class="app-group-main" type="button">
-        <img alt="" hidden />
+      <button class="chat-row-main" type="button">
+        <img class="chat-row-icon" alt="" hidden />
+        <span class="chat-row-mark"></span>
         <div>
-          <div class="app-group-title"></div>
-          <div class="app-group-meta"></div>
+          <div class="chat-row-title"></div>
+          <div class="chat-row-meta"></div>
         </div>
       </button>
-      <button class="app-group-delete" type="button" title="Delete this chat">
-        ${TrashIcon({ size: 15 })}
+      <button class="chat-row-delete" type="button" title="Delete this chat">
+        ${TrashIcon({ size: 14 })}
       </button>
     `;
-    row.querySelector(".app-group-title").textContent = skill.title;
-    row.querySelector(".app-group-meta").textContent =
+    row.querySelector(".chat-row-title").textContent = skill.title;
+    row.querySelector(".chat-row-meta").textContent =
       `${generated}/${skill.steps.length} steps ready · ${skill.goal}`;
-    row.querySelector(".app-group-main").addEventListener("click", () => openSkill(skill));
-    row.querySelector(".app-group-delete").addEventListener("click", () => deleteSkill(skill));
-
-    // Cache-only lookup (no live window id) — the icon was extracted and
-    // written to disk when the app was picked in setup. Async so a chat
-    // whose app has no icon just never shows one, rather than blocking
-    // the row from rendering at all.
-    const img = row.querySelector("img");
-    appIcon(skill.appName).then((uri) => {
-      if (!uri) return;
-      img.src = uri;
-      img.hidden = false;
-    });
-
-    list.appendChild(row);
+    row.querySelector(".chat-row-main").addEventListener("click", () => openSkill(skill));
+    row.querySelector(".chat-row-delete").addEventListener("click", () => deleteSkill(skill));
+    slots.push([row.querySelector(".chat-row-icon"), row.querySelector(".chat-row-mark"), 26]);
+    body.appendChild(row);
   }
+  applyGroupIcon(currentGroup, slots);
 }
 
 async function deleteSkill(skill) {
@@ -547,6 +937,9 @@ async function deleteSkill(skill) {
     showView("home");
   }
   renderAppsList();
+  // The open group page is a view onto SKILLS too, and it's the view the
+  // delete was almost certainly clicked from.
+  if (currentView === "group") renderGroupView();
   await persistSkills();
 }
 
@@ -615,6 +1008,9 @@ async function submitNewGoal() {
   button.disabled = true;
   errorEl.textContent = "";
   input.value = "";
+  researchInFlight = true;
+  refreshHomeSteps();
+  startResearchTicker();
 
   try {
     // Real Claude web-search round trip, routinely 30-60s — see the
@@ -622,7 +1018,7 @@ async function submitNewGoal() {
     // still in flight rather than hung. stallAfter is well past the
     // typical range before it starts suggesting something's actually
     // wrong, so a normal slow call never gets flagged.
-    const researchSteps = await withStatus(
+    const research = await withStatus(
       `Researching "${goal}"`,
       () => invoke("research_goal", { goal, appName: selectedAppName() }),
       {
@@ -633,10 +1029,22 @@ async function submitNewGoal() {
     );
     const skill = {
       id: `skill-${nextSkillId++}`,
-      title: goal,
+      // AI-written, ChatGPT-style short description of the goal (see
+      // research.py) — shown everywhere the chat is listed instead of
+      // the user's raw prompt, which is often a run-on question and
+      // doesn't read well as a label. `goal` (the actual prompt) is kept
+      // separately below — still what Research/plan_step reason about,
+      // still the path view's subtitle. Falls back to the raw goal only
+      // if research.py ever returns an empty title, which its own
+      // validation shouldn't allow, but an empty title-as-label would be
+      // a confusing empty row where the fallback is at least legible.
+      title: research.title || goal,
       goal,
       appName: selectedAppName(),
-      steps: researchSteps.map((step, i) => ({
+      // What the chat list ranks by — newest chat first within its app's
+      // group, and the group with the newest chat first overall.
+      createdAt: new Date().toISOString(),
+      steps: research.steps.map((step, i) => ({
         id: `s${i + 1}`,
         title: step.title,
         brief: step.brief,
@@ -646,8 +1054,25 @@ async function submitNewGoal() {
       })),
     };
     SKILLS.push(skill);
+    // Saved and listed before the step list opens, not after: this is what
+    // makes a brand-new chat show up under "Previous chats" even if the
+    // user never gets as far as opening it (or picks no window at all).
     await persistSkills();
-    openSkill(skill);
+    pendingSkill = skill;
+    renderAppsList();
+
+    if (hasCaptureSource()) {
+      openPendingSkill(0);
+    } else {
+      // Research landed first — hold the result and say what's left.
+      // Kept to one line: the skip button below it needs the second one,
+      // and the top pane is a fixed fraction of the panel.
+      homeEls.researchText.textContent =
+        captureBackend === "portal"
+          ? "Steps ready — choose what to capture."
+          : "Steps ready — pick your window.";
+      homeEls.researchSkip.hidden = captureBackend === "portal";
+    }
   } catch (err) {
     // Logged as well as shown in the UI: the UI message is truncated/plain
     // text, but the console gets the full error object (stack, cause) —
@@ -655,9 +1080,12 @@ async function submitNewGoal() {
     // an actual answer.
     console.error("research_goal failed", err);
     errorEl.textContent = `Couldn't research that: ${err}`;
+    stopResearchTicker();
   } finally {
+    researchInFlight = false;
     input.disabled = false;
     button.disabled = false;
+    refreshHomeSteps();
   }
 }
 
@@ -666,13 +1094,13 @@ document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitNewGoal();
 });
 
-function openSkill(skill) {
+function openSkill(skill, { fade = false } = {}) {
   currentSkill = skill;
   expandedSteps.clear();
   const first = skill.steps.find((s) => s.generated);
   if (first) expandedSteps.add(first.id);
   renderPath();
-  showView("path");
+  showView("path", { fade });
 }
 
 // Generates this step's AI-planned substeps via plan_step (see
