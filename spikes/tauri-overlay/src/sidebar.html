@@ -555,6 +555,14 @@
       .chat-row-mark { font-size: 11px; }
       .chat-group-mark { font-size: 14px; }
 
+      /* Author `display` on these classes otherwise beats the UA
+         [hidden]{display:none} rule, so the letter mark stayed visible
+         underneath the real icon once applyGroupIcon resolved one. */
+      .chat-row-mark[hidden],
+      .chat-group-mark[hidden] {
+        display: none;
+      }
+
       /* A drawn mark brings its own shape and colour — drop the tile. */
       .chat-row-mark.drawn,
       .chat-group-mark.drawn {
@@ -587,11 +595,23 @@
         color: var(--pink);
       }
 
+      /* Missing on this wrapper (unlike .chat-group-text) let the row's
+         flex item grow to fit its content instead of clipping it — a long
+         goal string in .chat-row-meta pushed the whole row past the panel
+         edge instead of ellipsizing. */
+      .chat-row-text {
+        flex: 1;
+        min-width: 0;
+      }
+
       .chat-row-title {
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-size: 13px;
         font-weight: 600;
         letter-spacing: -0.02em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .chat-row-meta {
@@ -987,6 +1007,28 @@
         border-style: dashed;
       }
 
+      /* Same brand-green-and-tick language as .field-tick.done — green
+         means "the user moved past this step," not "every substep
+         verified" (Verify stays optional; see advanceToNextStep). */
+      .step-dot.completed {
+        border-color: var(--brand);
+        background: var(--brand)
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%230A0A0A' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+          center / 9px 9px no-repeat;
+        box-shadow: 0 0 0 3px rgba(182, 255, 62, 0.25);
+      }
+
+      /* Guido stands in for the plain dot on whichever step is currently
+         expanded — the accordion has exactly one "current" step, so
+         there's never more than one mascot on screen. */
+      .step-mascot {
+        width: 20px;
+        height: 20px;
+        margin-top: -4px;
+        margin-left: -4px;
+        flex-shrink: 0;
+      }
+
       .step-line {
         width: 2px;
         flex: 1;
@@ -1059,25 +1101,37 @@
       .substep-row {
         display: flex;
         align-items: flex-start;
-        gap: 6px;
-        padding: 8px 10px;
-        border-radius: 10px;
+        gap: 8px;
+        padding: 9px 11px;
+        border-radius: 12px;
         border: 1px solid var(--border);
         background: #ffffff;
         cursor: pointer;
         font-size: 12px;
+        line-height: 1.45;
+        transition: background 120ms ease, box-shadow 120ms ease;
       }
 
       .substep-row:hover {
-        box-shadow: 0 0 0 4px var(--halo);
+        background: var(--sunken);
       }
 
       .substep-row.origin-ai {
-        border-left: 3px solid var(--blue);
+        background: var(--blue-soft);
+        border-color: var(--blue-border);
+      }
+
+      .substep-row.origin-ai:hover {
+        box-shadow: 0 0 0 3px var(--halo);
       }
 
       .substep-row.origin-user {
-        border-left: 3px solid var(--pink);
+        background: var(--pink-soft);
+        border-color: var(--pink-border);
+      }
+
+      .substep-row.origin-user:hover {
+        box-shadow: 0 0 0 3px var(--pink-soft);
       }
 
       .substep-dot {

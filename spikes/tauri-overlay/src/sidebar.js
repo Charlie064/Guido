@@ -168,7 +168,10 @@ function currentCaptureScope() {
 
 let currentSkill = null;
 let currentStep = null;
-const expandedSteps = new Set();
+// Single id, not a Set: the path view is a true accordion — expanding a
+// step collapses whichever other one was open, so only one step's
+// substeps are ever on screen at once.
+let expandedStepId = null;
 
 const els = {
   barBack: document.querySelector("#bar-back"),
@@ -905,7 +908,7 @@ function renderGroupView() {
       <button class="chat-row-main" type="button">
         <img class="chat-row-icon" alt="" hidden />
         <span class="chat-row-mark"></span>
-        <div>
+        <div class="chat-row-text">
           <div class="chat-row-title"></div>
           <div class="chat-row-meta"></div>
         </div>
@@ -1007,7 +1010,6 @@ async function submitNewGoal() {
   input.disabled = true;
   button.disabled = true;
   errorEl.textContent = "";
-  input.value = "";
   researchInFlight = true;
   refreshHomeSteps();
   startResearchTicker();
@@ -1027,6 +1029,10 @@ async function submitNewGoal() {
         stalledHint: "Research calls are normally done within a minute. If your Anthropic API key is out of credit, this call fails fast instead of hanging — so this most likely means it's still genuinely working.",
       },
     );
+    // Only clear now that research actually succeeded — clearing eagerly
+    // on submit meant a failed research_goal call (bad network, no API
+    // credit) lost the typed goal with no way to retry without retyping it.
+    input.value = "";
     const skill = {
       id: `skill-${nextSkillId++}`,
       // AI-written, ChatGPT-style short description of the goal (see
@@ -1096,9 +1102,8 @@ document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
 
 function openSkill(skill, { fade = false } = {}) {
   currentSkill = skill;
-  expandedSteps.clear();
   const first = skill.steps.find((s) => s.generated);
-  if (first) expandedSteps.add(first.id);
+  expandedStepId = first ? first.id : null;
   renderPath();
   showView("path", { fade });
 }
@@ -1139,7 +1144,7 @@ async function generateStepSubsteps(step) {
       last_known_bbox: null,
     }));
     step.generated = true;
-    expandedSteps.add(step.id);
+    expandedStepId = step.id;
     await persistSkills();
   } catch (err) {
     step.planError = String(err);
@@ -1157,16 +1162,20 @@ function renderPath() {
 
   currentSkill.steps.forEach((step, i) => {
     const isLast = i === currentSkill.steps.length - 1;
-    const expanded = expandedSteps.has(step.id);
+    const expanded = expandedStepId === step.id;
 
     const row = document.createElement("div");
     row.className = "step-row";
 
     const rail = document.createElement("div");
     rail.className = "step-rail";
-    rail.innerHTML = `<div class="step-dot ${step.generated ? "" : "locked"}"></div>${
-      isLast ? "" : '<div class="step-line"></div>'
-    }`;
+    // Guido replaces the plain dot only on the one step currently open —
+    // the accordion guarantees there's at most one "current" step at a
+    // time, so this never has to pick among several candidates.
+    const marker = expanded
+      ? `<img class="step-mascot" src="assets/mascot/mascot-${step.planning ? "thinking" : "idle"}.svg" alt="" />`
+      : `<div class="step-dot ${step.completed ? "completed" : step.generated ? "" : "locked"}"></div>`;
+    rail.innerHTML = `${marker}${isLast ? "" : '<div class="step-line"></div>'}`;
     row.appendChild(rail);
 
     const main = document.createElement("div");
@@ -1180,8 +1189,7 @@ function renderPath() {
     `;
     if (step.generated) {
       head.addEventListener("click", () => {
-        if (expandedSteps.has(step.id)) expandedSteps.delete(step.id);
-        else expandedSteps.add(step.id);
+        expandedStepId = expandedStepId === step.id ? null : step.id;
         renderPath();
       });
     } else if (!step.planning) {
@@ -1617,6 +1625,12 @@ async function advanceToNextStep() {
   const index = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
   const next = currentSkill.steps[index + 1];
   if (!next) return;
+  // Green means "the user moved on," not "every substep verified" — Verify
+  // stays optional per updateStepAdvanceButton's note above, so completion
+  // tracks the same self-confirm rather than adding a stricter gate.
+  currentStep.completed = true;
+  expandedStepId = next.id;
+  await persistSkills();
   if (!next.generated && !next.planning) {
     await generateStepSubsteps(next);
   }
