@@ -121,6 +121,26 @@ export default function Landing({ startWaitlist = false }) {
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   );
   const heroGuidoRef = useRef(null);
+  const heroVideoRef = useRef(null);
+
+  useEffect(() => {
+    const video = heroVideoRef.current;
+    if (!video) return;
+    const settle = () => {
+      const t = Number.isFinite(video.duration) ? Math.min(0.45, video.duration * 0.16) : 0.4;
+      video.muted = true;
+      const freeze = () => {
+        video.pause();
+        video.currentTime = t;
+      };
+      const play = video.play();
+      if (play && typeof play.then === "function") play.then(freeze).catch(freeze);
+      else freeze();
+    };
+    if (video.readyState >= 2) settle();
+    else video.addEventListener("loadeddata", settle, { once: true });
+    return () => video.removeEventListener("loadeddata", settle);
+  }, []);
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
@@ -167,20 +187,23 @@ export default function Landing({ startWaitlist = false }) {
         >
           <div className="max-w-3xl mx-auto px-6 text-center">
             <div
-              className="relative w-full max-w-3xl mx-auto overflow-hidden mb-8"
+              className="hero-mark relative w-full max-w-3xl mx-auto overflow-hidden mb-8"
               style={{
                 background: "#fcfcfc",
                 maskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
                 WebkitMaskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
               }}
             >
-              <video
-                src="/assets/hero-demo.mp4"
-                className="w-full h-auto block"
-                autoPlay
-                muted
-                playsInline
-              />
+              <div className="hero-mark-bob">
+                <video
+                  ref={heroVideoRef}
+                  src="/assets/hero-demo.mp4"
+                  className="w-full h-auto block"
+                  muted
+                  playsInline
+                  preload="auto"
+                />
+              </div>
               <span ref={heroGuidoRef} className="hero-guido-rest" aria-hidden="true" />
             </div>
 

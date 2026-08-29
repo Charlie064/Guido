@@ -250,6 +250,16 @@ html, body {
   pointer-events: none;
 }
 
+.hero-mark-bob {
+  animation: hero-quiet-bob 6.8s ease-in-out infinite;
+}
+
+@keyframes hero-quiet-bob {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -3px, 0); }
+}
+
+
 .waitlist-mark {
   position: relative;
   width: min(720px, 92vw);
@@ -503,6 +513,7 @@ html, body {
     transition: none;
     transform: none;
   }
+  .hero-mark-bob,
   .waitlist-overlay,
   .waitlist-mark,
   .waitlist-mark-buddy,
