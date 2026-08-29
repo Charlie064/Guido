@@ -146,30 +146,73 @@ for the core MVP loop:
 
 ### Visual overlay
 
-**No overlay is drawn on top of the target application anymore.** An
-earlier design drew a real highlight box/bubble in a transparent,
-click-through, full-screen window (`main`) above whatever app the user was
-being taught. That was abandoned: in practice, *any* real, interactive
-window sitting over the target app blocks clicks into it — the sidebar's
-own panel has the same problem if it's large or centrally placed, quite
-apart from whatever `main`'s click-through state was doing. Rather than
-keep managing a full-screen window's interactivity at all, highlighting
-now renders as a fake overlay *inside the sidebar* (path + chat): a mini
-target-app window with a highlight box and a step textbox — placeholder
-for the real on-screen callout. Show still opens a small schematic
-diagram (a proportional box on a placeholder rectangle). Nothing is
-drawn on the real screen. See `overlayPlaceholderHtml` /
-`schematicHtml` in `spikes/tauri-overlay/src/sidebar.js` and
-[features/skills.md](../features/skills.md)'s substep model
-(`last_known_bbox` + `image_width`/`image_height` drive both). This is a real product trade-off, not just cleanup — the
-original "point at the real element on the real screen" promise in
-[philosophy/vision.md](../philosophy/vision.md) is not currently
-delivered; revisit if/when a way to highlight without blocking clicks is
-found (e.g. a true click-through box whose small element-sized region,
-not the whole monitor, is the only interactive-looking part — untried).
+**A real on-screen overlay is drawn again, alongside the schematic**
+[partial] — see [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md),
+which supersedes the "no overlay at all" position this section previously
+recorded. History, since it's the reason the current design looks the way
+it does: the original `main` window drew a real highlight box/bubble over
+the target app and was abandoned because *any* real, interactive window
+sitting over that app blocks clicks into it, and because a *toggled*
+click-through state was observed to get stuck in the interactive
+direction — trapping the whole screen with no recovery short of killing
+the app. Highlighting became a schematic diagram inside the sidebar's own
+chat view instead.
 
-**Windows: one plain fixed-size panel, plus a transient region-drag
-fallback window** [built] — down from an earlier four/five-window design
+What changed: click-through is now set **once, in Rust, at startup**
+(`set_ignore_cursor_events`, `src-tauri/src/lib.rs`) on a dedicated
+`overlay` window and is *never* toggled from JS, so there is no stuck
+state to reach — which was the actual failure, not click-through itself.
+`overlay.html`/`overlay.js` draw the highlight box plus the substep's
+instruction as a positioned text callout; `pointer-events: none` on
+everything is a second layer of defence under the OS-level passthrough.
+**Don't add a command that flips this** — if the overlay ever needs real
+input it needs a different design.
+
+Both renderings now coexist, per substep, in the sidebar's chat view (see
+`actionsHtml` in `sidebar.js`): an **eye** icon toggles the real on-screen
+overlay, a **note** icon toggles the in-panel schematic. The schematic is
+not legacy — it's the required fallback wherever no live window rect
+exists (a Wayland portal capture never discloses screen position, see
+"Screen understanding"), and a non-intrusive "roughly where" that doesn't
+take over the screen. A **target** icon re-runs `locate_element` live, so
+a box that has gone stale is one press from correct.
+
+Coordinate model (the part that makes this survive a resize):
+`last_known_bbox`'s `x0..y1` are **fractions** of `image_width`/
+`image_height` — the frame they were captured against, identified by
+`anchor` (see [ADR 0005](../decisions/0005-window-anchored-overlay-coordinates.md)).
+To draw, `overlay.js` re-multiplies the fraction by that frame's
+**current** geometry, re-queried every 200 ms (`refresh_window_rect`)
+rather than trusted from cache, then converts physical screen px to CSS px
+by dividing by the monitor's `scaleFactor` — without that last step
+everything is silently offset on any HiDPI/fractional-scaling display.
+Polling rather than native move/resize event hooks is deliberate: ADR 0005
+deferred the per-platform event backends, and ~5 cheap OS queries/sec
+while an overlay is visible buys the same behaviour with no new platform
+code, at the cost of a frame or two of lag while dragging.
+
+Platform reality: this works where a live window rect exists (macOS,
+Windows, Linux X11). On a Wayland session it does not — the compositor
+neither discloses window geometry nor lets a toplevel position itself
+absolutely — so the eye reports that plainly and the schematic is the
+answer there. The
+[philosophy/vision.md](../philosophy/vision.md) "point at the real element
+on the real screen" promise is therefore delivered on three of four
+platform tiers, not universally.
+
+**Further investment here is deliberately deprioritized** (2026-08-29) —
+this section describes what's built, and it stays built, but Charlie
+judged the Guide → Do → Verify confirmation loop (checking the user's
+work against an AI-generated `expected_outcome`, rather than trusting a
+"Done" click) more central to the product and cheaper to build than
+either polishing highlight/callout placement or the animated cursor
+indicator ([BL-010](../BACKLOG.md)) that would otherwise be the next step
+up from a static box. See
+[planning/vision-driven-substep-loop.md](../planning/vision-driven-substep-loop.md).
+
+**Windows: one plain fixed-size panel, a transient region-drag/click-catch
+window, and the click-through overlay** [built] — down from an earlier
+four/five-window design
 (`main` + `icon` + `sidebar` + a separate `app` window were all tried at
 various points). All of the UI — login, setup, skills list, step path,
 step chat — lives in **one window**, `sidebar`
@@ -181,11 +224,14 @@ earlier version resized itself between an 80×80 icon and a 380×560 panel
 always-on-top+undecorated window quirks that didn't hold up on GNOME;
 bringing a minimized mode back is tracked as future work, not an
 oversight (see `STATUS.md`). `region-select`
-(`region-select.html`/`region-select.js`) is unchanged: a temporary,
-fully-interactive, full-screen window, now used only as the
-`CaptureScope::Region` fallback behind window-pick capture (see "Screen
-understanding" above) — shown only for the duration of a region drag,
-hidden immediately after via a real `hide()` call.
+(`region-select.html`/`region-select.js`) is a temporary,
+fully-interactive, full-screen window serving two gestures: the
+`CaptureScope::Region` fallback's region drag, and the click-to-pick
+gesture that selects a window (see "Screen understanding" above) — shown
+only for the duration of either, hidden immediately after via a real
+`hide()` call. `overlay` (`overlay.html`/`overlay.js`) is the third
+window: transparent, always-on-top, permanently click-through, hidden
+until a substep's eye icon is pressed — see "Visual overlay" below.
 
 **Window-pick capture, region-drag as fallback** [partial] — the sidebar's
 setup view lets the user pick a live OS window from a list

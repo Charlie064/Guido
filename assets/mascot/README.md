@@ -3,7 +3,8 @@
 Canonical home in this repo: `assets/mascot/`. Behavior contract:
 [`docs/features/mascot.md`](../../docs/features/mascot.md). After
 editing `generate-svgs.mjs` or `generate-icon.mjs`, regenerate then run
-`./sync-static.sh` so the website and desktop copies stay in sync.
+`./sync-static.sh` (and `generate-tauri-icons.py` for the desktop bundle
+icon) so the website and desktop copies stay in sync.
 
 This is the approved "glass creature" mascot for Guido, ready to drop into the app. It's a small translucent, jelly-like blob with a simple two-eye face, built as vector SVG — a stylized *approximation* of a glass/glossy material (gradient fill + a soft blurred highlight + a soft ground shadow), not a literal 3D or photoreal render like the moodboard photos. That's what keeps it lightweight, crisp at any size, and easy to animate in CSS/React instead of shipping a 3D asset pipeline.
 
@@ -15,6 +16,7 @@ This is the approved "glass creature" mascot for Guido, ready to drop into the a
 - `generate-svgs.mjs` — the script that generated the 5 static SVGs below. Source of truth if the design ever needs to change (edit here, then `node generate-svgs.mjs` to regenerate).
 - `mascot-idle.svg`, `mascot-happy.svg`, `mascot-thinking.svg`, `mascot-success.svg`, `mascot-error.svg` — standalone static exports of the 5 states, for anywhere a plain image is easier than a component (favicon, marketing site, email, Figma).
 - `generate-icon.mjs` + `app-icon.svg` / `app-icon-*.png` — the app icon (Guido, happy, on a rounded gradient square), same source artwork, rasterized at the common sizes (16 up to 1024, plus 180 for iOS).
+- `generate-tauri-icons.py` — turns `app-icon-1024.png` into the desktop bundle icon set (`spikes/tauri-overlay/src-tauri/icons/`: PNGs, `icon.ico`, `icon.icns`, Windows Square logos). Run `python3 generate-tauri-icons.py` after `generate-icon.mjs`; needs Pillow.
 - `cursor-follow-demo.html` — the live, standalone prototype these two components were built from (open it directly in a browser). Useful as a feel reference, not meant to ship as-is.
 
 Every file has a transparent background (except the splash and the icon's own square) and no external dependencies (fonts, images, or otherwise) — safe to place on any surface.

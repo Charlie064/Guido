@@ -26,6 +26,22 @@
 //   a follow-up question; carries `question` (what they asked) in
 //   addition to `instruction_text` (the answer).
 
+// The reference frame these fixture coordinates were authored against.
+// This IS the "screen size parameter" that makes them scalable: every
+// x0..y1 below is a pixel position on a notional 1920x1080 frame, and
+// every consumer divides by these to get a 0..1 fraction before scaling to
+// whatever it's actually drawing on — the in-panel schematic uses them for
+// its aspect-ratio and percentage offsets (schematicHtml in sidebar.js),
+// and the real on-screen overlay re-multiplies the fraction by the target
+// window's *current* rect (overlay.js). So nothing here is tied to a
+// 1920x1080 display; these two numbers are only the denominator.
+//
+// 1920x1080 specifically because it's the most common desktop resolution,
+// so the fixture boxes land in plausible-looking places when the schematic
+// draws them, and because a real locate_element result carries the actual
+// captured frame's size in the same two fields — keeping the fixture in
+// the same shape means swapping fixtures for live data changes nothing
+// downstream.
 const REF_W = 1920;
 const REF_H = 1080;
 
@@ -33,12 +49,17 @@ function bbox(x0, y0, x1, y1) {
   return { x0, y0, x1, y1, image_width: REF_W, image_height: REF_H, anchor: { kind: "region" } };
 }
 
+// `createdAt` is what the chat list ranks by, newest first, both within a
+// group and between groups (a group sorts by its own newest chat). Fixture
+// dates are fixed rather than relative to "now" so the demo's ordering is
+// the same every run; a real chat gets Date.now() when it's created.
 export const SKILLS = [
   {
     id: "excel-chart",
     title: "Make a chart in Excel",
     goal: "How do I make a chart in Excel?",
     appName: "Excel",
+    createdAt: "2026-08-27T14:05:00.000Z",
     steps: [
       {
         id: "s1",
@@ -97,6 +118,47 @@ export const SKILLS = [
       {
         id: "s3",
         title: "Style your chart",
+        generated: false,
+        substeps: [],
+      },
+    ],
+  },
+  {
+    // Deliberately named "Microsoft Excel" where the one above says
+    // "Excel": the two are the same app under two of the names its
+    // identity can arrive under (an X11 WM_CLASS vs. what the vision model
+    // calls it, see identify_app.py), and grouping them together is the
+    // case appGroupKey() in sidebar.js exists to handle.
+    id: "excel-pivot",
+    title: "Make a pivot table",
+    goal: "How do I make a pivot table in Excel?",
+    appName: "Microsoft Excel",
+    createdAt: "2026-08-28T09:20:00.000Z",
+    steps: [
+      {
+        id: "s1",
+        title: "Select the source data",
+        generated: true,
+        substeps: [
+          {
+            id: "s1-1",
+            origin: "ai",
+            target_description: "the range of cells to summarise, including headers",
+            instruction_text: "Select A1:D40 — a pivot table needs the header row to name its fields.",
+            action: "select",
+            last_known_bbox: bbox(220, 260, 780, 700),
+          },
+        ],
+      },
+      {
+        id: "s2",
+        title: "Insert the pivot table",
+        generated: false,
+        substeps: [],
+      },
+      {
+        id: "s3",
+        title: "Choose rows, columns and values",
         generated: false,
         substeps: [],
       },

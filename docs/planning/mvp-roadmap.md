@@ -1,6 +1,6 @@
 **Contract**
 - A plan, not a source of truth — graduates into `features/` docs + ADRs as
-  items get built, then gets archived/deleted per
+  items get built, then gets deleted per
   [meta/style-guide.md](../meta/style-guide.md). Don't treat this as current
   status; check [STATUS.md](../../STATUS.md) for that.
 - Priority tiers P0/P1/P2, in build order, for a hackathon-scale MVP.
@@ -14,16 +14,27 @@
 3. Vision model integration
 4. Goal input
 5. AI-generated step sequence
-6. Mouse movement
+6. Mouse movement — **deprioritized to [BL-010](../BACKLOG.md)**
+   (2026-08-29): Charlie judged the Guide → Do → Verify loop (item 12,
+   below) more central and cheaper to build than either this or item 10;
+   an animated cursor is wanted, just later, and preferred over more
+   highlight-box work specifically because it's less fragile (doesn't
+   depend on a bounding box landing exactly right).
 7. Click
 8. Keyboard input
 9. Screen re-analysis
-10. Visual overlay/highlighting
+10. Visual overlay/highlighting — **built** ([ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md)),
+    but further investment here (callout placement etc.) is
+    deprioritized below item 12, same reasoning as item 6.
 
 ## P1 — important
 
 11. Web research
-12. Step verification
+12. Step verification — **backend built and tested** (2026-08-29,
+    not wired to a UI yet): `plan_step` generates an `expected_outcome`
+    per substep, a new `verify_substep` call checks a screenshot against
+    it. Reprioritized *above* items 6 and 10, not just "important" —
+    see [planning/vision-driven-substep-loop.md](vision-driven-substep-loop.md).
 13. Teach / Do modes
 14. Progress indicator
 15. Global keyboard shortcut
