@@ -88,6 +88,10 @@ Should be able to reason about: visible text, buttons, menus, input fields,
 panels, icons, application layout, and approximate on-screen location of
 elements.
 
+Capture is scoped to a user-drawn region (default: full screen), never
+inferred from window focus — see
+[ADR 0003](../decisions/0003-capture-region-not-window-detection.md).
+
 ### Computer control
 
 Structured tool calls, not generated prose:
@@ -127,6 +131,14 @@ A transparent overlay drawn above the target application: highlight a
 button, box/arrow toward an element, dim irrelevant areas, number multiple
 elements, show current step. This is what makes the guidance feel pointed-at
 rather than described in text.
+
+**Region picker** [partial] — drag-to-select a capture box on the overlay
+before guidance starts (Escape or a plain click keeps the full-screen
+default); a sidebar row shows the current region and lets the user redraw
+it mid-session. Implemented in `spikes/tauri-overlay/src/main.js`
+(`selectRegion`). The selected region is not yet threaded into the
+`locate_element` vision call (still full-screen) — see ADR 0003
+consequences.
 
 **Instruction/explanation popup** — a short text bubble placed near (not
 on top of) the relevant element, used for two purposes: pointing ("click
