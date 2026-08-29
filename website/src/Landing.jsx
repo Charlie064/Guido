@@ -8,19 +8,15 @@ const INTRO_MS = 4200;
 
 function IntroAnimation({ onDone }) {
   const [visible, setVisible] = useState(true);
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
 
   useEffect(() => {
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const t = setTimeout(() => {
       setVisible(false);
-      onDoneRef.current?.();
+      onDone(true);
     }, reduceMotion ? 1400 : INTRO_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [onDone]);
 
   if (!visible) return null;
 
@@ -128,7 +124,7 @@ export default function Landing({ startWaitlist = false }) {
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
-      <IntroAnimation onDone={() => setIntroDone(true)} />
+      <IntroAnimation onDone={setIntroDone} />
       {introDone ? (
         <GlassMascotCursor
           disabled={touchPointer}

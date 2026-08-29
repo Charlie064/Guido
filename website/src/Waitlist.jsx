@@ -296,39 +296,38 @@ function WaitlistForm({ onClose, referredBy }) {
 }
 
 export default function WaitlistOverlay({ open, onClose, referredBy = "" }) {
-  const [mounted, setMounted] = useState(open);
   const [stage, setStage] = useState(open ? "enter" : "idle");
+  const [prevOpen, setPrevOpen] = useState(open);
+
+  if (open !== prevOpen) {
+    setPrevOpen(open);
+    setStage(open ? "enter" : "leave");
+  }
 
   useEffect(() => {
-    if (open) {
-      const reduce =
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      setMounted(true);
-      setStage("enter");
+    if (stage === "enter") {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const t = setTimeout(() => setStage("form"), reduce ? 40 : ENTER_MS);
       return () => clearTimeout(t);
     }
-    if (mounted) {
-      setStage("leave");
-      const t = setTimeout(() => {
-        setMounted(false);
-        setStage("idle");
-      }, LEAVE_MS);
+    if (stage === "leave") {
+      const t = setTimeout(() => setStage("idle"), LEAVE_MS);
       return () => clearTimeout(t);
     }
-  }, [open]);
+  }, [stage]);
+
+  const shown = stage !== "idle";
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!shown) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [mounted]);
+  }, [shown]);
 
-  if (!mounted) return null;
+  if (!shown) return null;
 
   return (
     <div
