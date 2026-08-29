@@ -23,3 +23,13 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# wlroots Wayland compositors (Sway, Hyprland, ...) draw status bars like
+# waybar via the wlr-layer-shell protocol, a stacking class Tauri's
+# alwaysOnTop (a plain toplevel window) can never render above. This lets
+# the overlay promote itself to a layer-shell surface on those compositors
+# so it stays on top there too — see init_layer_shell in src/lib.rs. Only
+# pulled in on Linux; alwaysOnTop alone is sufficient on macOS/Windows.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
+

@@ -10,7 +10,25 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "tutoria-overlay",
+        "label": "sidebar",
+        "title": "Tutoria",
+        "url": "sidebar.html",
+        "width": 80,
+        "height": 80,
+        "x": 24,
+        "y": 24,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "shadow": false,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false
+      },
+      {
+        "label": "region-select",
+        "title": "tutoria-region-select",
+        "url": "region-select.html",
         "width": 1920,
         "height": 1080,
         "x": 0,
@@ -20,7 +38,8 @@
         "alwaysOnTop": true,
         "shadow": false,
         "skipTaskbar": true,
-        "resizable": false
+        "resizable": false,
+        "visible": false
       }
     ],
     "security": {
