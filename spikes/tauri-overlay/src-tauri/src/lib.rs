@@ -2,6 +2,25 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+// x0..y1 are always fractions-of-`image_width`/`image_height` in spirit
+// (the schematic renderer already treats them that way) — what `anchor`
+// adds is *whose* frame that is, so a future real overlay knows what to
+// re-multiply the fraction against when the frame moves or resizes.
+// `Region`: captured against a free-drawn/full-screen box (today's only
+// path, ADR 0003) — there's no live handle to re-anchor to, so a stale box
+// is only fixable by a fresh `locate_element` call (see skills.md refresh).
+// `Window`: captured against a specific window's client rect. `label` is
+// just the window title/app name for now — resolving it back to a live,
+// trackable handle is BL-005/ADR 0005, not built yet. No caller constructs
+// this variant today; it exists so the schema doesn't need to change again
+// once BL-005 lands.
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum FrameAnchor {
+    Region,
+    Window { label: String },
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Box2D {
     x0: i64,
@@ -10,6 +29,8 @@ struct Box2D {
     y1: i64,
     image_width: i64,
     image_height: i64,
+    #[serde(default)]
+    anchor: Option<FrameAnchor>,
 }
 
 // A user-drawn capture region in absolute screen px, or omitted for full

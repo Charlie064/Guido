@@ -9,3 +9,4 @@ supersedes it and note the supersession in both files.
 - [0002 — Do-mode opt-in, hybrid screen understanding, platform order, subscription model](0002-agency-hybrid-vision-platform-business.md)
 - [0003 — Capture a user-defined region, not active-window detection](0003-capture-region-not-window-detection.md)
 - [0004 — Cloudflare for hosting, domain, database, and account validation](0004-cloudflare-infrastructure-proposal.md)
+- [0005 — Window-anchored coordinates for a future real overlay](0005-window-anchored-overlay-coordinates.md)

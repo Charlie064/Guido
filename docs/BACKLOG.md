@@ -38,6 +38,20 @@ point — this file should never pose as a source of truth for what's done.
     screenshot thumbnail would conflict with the "no screenshots stored"
     rule in [features/skills.md](features/skills.md) and the still-open
     screen-data non-negotiable in [CLAUDE.md](../CLAUDE.md).
+- **BL-005 — Live window-rect tracking backend + window-picker capture +
+  real on-screen overlay.** The actual OS calls behind
+  [ADR 0005](decisions/0005-window-anchored-overlay-coordinates.md)'s
+  coordinate model: `NSWorkspace`/`AXUIElement` (macOS),
+  `GetForegroundWindow`/`DwmGetWindowAttribute`/`WinEventHook` (Windows),
+  `_NET_ACTIVE_WINDOW`/`ConfigureNotify` (Linux X11),
+  `ext-foreign-toplevel-list-v1` (Linux Wayland + wlroots compositors only —
+  not GNOME/KDE, see ADR 0005). Needs: a window-picker replacing region-draw
+  on the working tier, resize/move event listeners feeding live rect
+  updates, and a real click-through overlay renderer (the "untried" idea
+  named in architecture/overview.md's Visual overlay section — a box scoped
+  to just the element, not the whole monitor). Shares its
+  `ActiveAppProvider`-style provider interface and platform matrix with
+  BL-004 — worth building together.
   - **Known gap, scoped out of v1**: browser-hosted apps (Google Sheets,
     Figma-web) only resolve to "Chrome" at the OS level — the OS can't see
     inside a tab. Fixing this needs a second, optional layer (a browser

@@ -79,11 +79,17 @@ No raw screenshots. Each substep is:
 | `target_description` | Plain-text description of the UI element ("the Insert menu") — the durable, reusable fact; passed to `locate_element` on refresh |
 | `instruction_text` | The bubble copy shown near the element |
 | `action` | none / click / type / move-cursor / keyboard-shortcut |
-| `last_known_bbox` | Cached pixel box from the last time this substep was located — a redraw hint, never trusted as ground truth |
+| `last_known_bbox` | Cached box from the last time this substep was located — a redraw hint, never trusted as ground truth. `x0..y1` are fractions of the captured frame (`image_width`/`image_height`); `anchor` says whose frame that is — `{kind: "region"}` (today's only real path, a free-drawn/full-screen capture, [ADR 0003](../decisions/0003-capture-region-not-window-detection.md)) or `{kind: "window", label}` (a window-picked capture, not built yet — see [BL-005](../BACKLOG.md)/[ADR 0005](../decisions/0005-window-anchored-overlay-coordinates.md)) |
 
 `target_description` is the source of truth; `last_known_bbox` is a cache.
 Coordinates don't survive a resized window, a different resolution, or a
-scrolled/changed layout — only the text description does.
+scrolled/changed layout — only the text description does. This is exactly
+what [ADR 0005](../decisions/0005-window-anchored-overlay-coordinates.md)
+scopes a fix for: on platforms with a live window handle (macOS, Windows,
+Linux X11, Linux Wayland + a wlroots compositor — not GNOME/KDE's Wayland
+sessions), a window-anchored bbox can be re-multiplied against the
+window's *current* rect instead of going stale. Not built yet — refresh
+(below) is still the only fix today, on every platform.
 
 ## Replay and refresh
 
