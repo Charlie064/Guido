@@ -89,10 +89,24 @@ fn resize_sidebar(app: tauri::AppHandle, width: u32, height: u32) -> Result<(), 
             {
                 use gtk::prelude::GtkWindowExt;
 
+                use gtk::prelude::WidgetExt;
+
                 let gtk_window = sidebar
                     .gtk_window()
                     .map_err(|e| format!("failed to get sidebar's GtkWindow: {e}"))?;
                 sidebar.hide().map_err(|e| format!("failed to hide sidebar for resize: {e}"))?;
+                // set_default_size()/resize() alone aren't enough: the
+                // WebKitWebView child re-requests its own "natural size" on
+                // its next layout pass (observed settling around 200x200,
+                // WebKitGTK's internal default, regardless of what this
+                // page's CSS actually needs), and an unconstrained GtkWindow
+                // renegotiates to that instead of what we asked for — the
+                // window visibly grows/drifts back on its own shortly after
+                // every resize. set_size_request pins a hard floor+ceiling
+                // (min==max==our target) on the window itself so the
+                // webview's own size request can never win that
+                // renegotiation.
+                gtk_window.set_size_request(width as i32, height as i32);
                 gtk_window.set_default_size(width as i32, height as i32);
                 gtk_window.resize(width as i32, height as i32);
                 sidebar.show().map_err(|e| format!("failed to re-show sidebar after resize: {e}"))?;
@@ -111,6 +125,64 @@ fn resize_sidebar(app: tauri::AppHandle, width: u32, height: u32) -> Result<(), 
     .map_err(|e| format!("failed to schedule resize on main thread: {e}"))?;
 
     rx.recv().map_err(|e| format!("resize_sidebar's main-thread closure never replied: {e}"))?
+}
+
+// Repositioning the sidebar. A layer-shell surface can't be dragged the
+// way a normal toplevel can — there's no interactive xdg_toplevel move, so
+// Tauri's start_dragging()/data-tauri-drag-region do nothing at all here
+// (see init_layer_shell's note). Moving it means rewriting the same
+// top/left anchor margins init_layer_shell set at startup.
+//
+// Unlike a resize (see resize_sidebar's doc comment), a margin change DOES
+// take effect while the surface stays mapped, so this needs no
+// hide/resize/show cycle — which matters, because this is called
+// repeatedly during a drag and a flicker per frame would be unusable.
+//
+// Same main-thread requirement as resize_sidebar, for the same reason:
+// raw gtk/gtk-layer-shell calls from a #[tauri::command] handler are not
+// on the GTK thread.
+//
+// x/y are absolute screen px of the window's top-left corner, matching the
+// units init_layer_shell derives its initial margins from
+// (outer_position()) — i.e. this assumes scale factor 1, the same
+// assumption already baked into that startup path.
+#[tauri::command]
+fn move_sidebar(app: tauri::AppHandle, x: i32, y: i32) -> Result<(), String> {
+    use tauri::Manager;
+
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    app.clone()
+        .run_on_main_thread(move || {
+            let result = (|| -> Result<(), String> {
+                let sidebar = app
+                    .get_webview_window("sidebar")
+                    .expect("\"sidebar\" window declared in tauri.conf.json must exist");
+
+                #[cfg(target_os = "linux")]
+                if gtk_layer_shell::is_supported() {
+                    use gtk_layer_shell::LayerShell;
+
+                    let gtk_window = sidebar
+                        .gtk_window()
+                        .map_err(|e| format!("failed to get sidebar's GtkWindow: {e}"))?;
+                    gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Top, y);
+                    gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Left, x);
+                    return Ok(());
+                }
+
+                // X11 (no layer-shell protocol), macOS, Windows: a plain
+                // always-on-top toplevel, so the ordinary move works.
+                sidebar
+                    .set_position(tauri::LogicalPosition::new(x as f64, y as f64))
+                    .map_err(|e| format!("failed to move sidebar: {e}"))
+            })();
+            let _ = tx.send(result);
+        })
+        .map_err(|e| format!("failed to schedule move on main thread: {e}"))?;
+
+    rx.recv()
+        .map_err(|e| format!("move_sidebar's main-thread closure never replied: {e}"))?
 }
 
 fn run_locate(target: &str, region: &Option<Region>) -> Result<Box2D, String> {
@@ -173,11 +245,17 @@ fn run_locate(target: &str, region: &Option<Region>) -> Result<Box2D, String> {
 //   window's own configured x/y in tauri.conf.json) instead of stretched
 //   edge to edge, so it grows/shrinks from its bottom-right corner
 //   (setSize, used to expand/collapse the panel) rather than drifting.
-//   Note this means it isn't draggable on Wayland — layer-shell surfaces
-//   don't support the interactive xdg_toplevel-style move Tauri's
-//   start_dragging/data-tauri-drag-region relies on — so its position is
-//   fixed for now. Revisit if that turns out to matter (e.g. an X11-only
-//   draggable fallback).
+//   These margins are the window's position, and rewriting them is how
+//   the user drags the icon around — layer-shell surfaces don't support
+//   the interactive xdg_toplevel-style move Tauri's start_dragging /
+//   data-tauri-drag-region relies on, so the drag is implemented by
+//   updating these instead. See move_sidebar.
+// Mirrors "sidebar"'s "x"/"y" in tauri.conf.json. See the comment where
+// this is used in init_layer_shell for why it can't just be read back
+// from the window at startup.
+#[cfg(target_os = "linux")]
+const SIDEBAR_START_POS: (i32, i32) = (24, 24);
+
 #[cfg(target_os = "linux")]
 fn init_layer_shell(window: &tauri::WebviewWindow, fill_screen: bool) -> tauri::Result<()> {
     use gtk_layer_shell::LayerShell;
@@ -197,11 +275,20 @@ fn init_layer_shell(window: &tauri::WebviewWindow, fill_screen: bool) -> tauri::
                 gtk_window.set_anchor(edge, true);
             }
         } else {
-            let pos = window.outer_position()?;
+            // window.outer_position() is unreliable here: the window isn't
+            // realized yet (this runs before the first show(), per the
+            // doc comment above), so GTK hasn't negotiated real geometry
+            // and the value drifts run to run (observed landing anywhere
+            // from (-2, 41) to (21, 114) instead of the configured spot).
+            // SIDEBAR_START_POS mirrors tauri.conf.json's declared "x"/"y"
+            // for the sidebar window directly, the same way sidebar.js's
+            // COLLAPSED_SIZE mirrors its "width"/"height" — same coupling,
+            // same reason: nothing this early can be trusted to read it
+            // back correctly.
             gtk_window.set_anchor(gtk_layer_shell::Edge::Top, true);
             gtk_window.set_anchor(gtk_layer_shell::Edge::Left, true);
-            gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Top, pos.y);
-            gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Left, pos.x);
+            gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Top, SIDEBAR_START_POS.1);
+            gtk_window.set_layer_shell_margin(gtk_layer_shell::Edge::Left, SIDEBAR_START_POS.0);
         }
         // Layer-shell surfaces get no keyboard focus by default (unlike
         // regular toplevels) — OnDemand lets the compositor still route
@@ -216,7 +303,11 @@ fn init_layer_shell(window: &tauri::WebviewWindow, fill_screen: bool) -> tauri::
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![locate_element, resize_sidebar])
+        .invoke_handler(tauri::generate_handler![
+            locate_element,
+            resize_sidebar,
+            move_sidebar
+        ])
         .setup(|app| {
             use tauri::Manager;
             // Two windows, not four: "sidebar" is the entire app — a small
@@ -239,6 +330,18 @@ pub fn run() {
 
             #[cfg(target_os = "linux")]
             init_layer_shell(&sidebar, false)?;
+
+            // Pin the size floor+ceiling before the very first show(), for
+            // the same reason resize_sidebar does it on every later resize
+            // (see its doc comment) — otherwise the collapsed icon flashes
+            // at WebKitGTK's ~200x200 natural content size for one frame
+            // before sidebar.js's own startup setShellSize() call corrects
+            // it a moment later.
+            #[cfg(target_os = "linux")]
+            {
+                use gtk::prelude::WidgetExt;
+                sidebar.gtk_window()?.set_size_request(80, 80);
+            }
 
             // Starts hidden (see init_layer_shell) so this is its first
             // real show, after layer-shell setup completes.

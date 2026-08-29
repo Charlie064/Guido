@@ -105,6 +105,30 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     the compositor level, and screenshotted each view through the whole
     flow including the schematic preview.
 
+- **Collapsed icon: fixed size, drag-to-move — built and verified.** Fixes
+  the icon appearing to "zoom and drift" during normal use. Root cause
+  (confirmed by reproducing on the untouched pre-fix code): `resize_sidebar`
+  only called `gtk_window.resize()`, which sets a size but doesn't pin it —
+  the WebKitGTK webview child re-requests its own ~200×200 natural size on
+  its next layout pass, and the unconstrained `GtkWindow` renegotiates back
+  to that, which is what looked like unprompted zooming. Fix:
+  `gtk_window.set_size_request()` now pins a hard floor+ceiling before every
+  resize (and once at startup, before the first `show()`, to kill the same
+  flash on load) — verified via `hyprctl layers` holding steady at exactly
+  80×80 across repeated checks, where the unfixed build drifted to 200×200
+  within seconds every time.
+  - Real "move" is a new `move_sidebar` Rust command (`src-tauri/src/lib.rs`)
+    that rewrites the layer-shell top/left margins live, since a layer-shell
+    surface can't use Tauri's native window drag (no interactive
+    `xdg_toplevel`-style move on Wayland) — see its doc comment for why.
+  - `sidebar.js`/`sidebar.html`: pointer-drag on the icon (with a small
+    movement threshold to still distinguish a plain click-to-expand),
+    plus `wheel`/`keydown` interception so ctrl+scroll and ctrl+-/+/0
+    (WebKitGTK's page-zoom gesture) can't resize the page content either.
+  - Position isn't persisted across restarts yet — tracked as a follow-up,
+    not done here.
+  - Branch: `claudev/charlie/draggable-icon`, not yet merged.
+
 ## What's next
 
 - **Morning: rehearse the actual demo script** (`docs/planning/demo-v0.md`)

@@ -23,6 +23,14 @@ const { invoke } = window.__TAURI__.core;
 const COLLAPSED_SIZE = { width: 80, height: 80 };
 const EXPANDED_SIZE = { width: 380, height: 560 };
 
+// Top-left screen position of the collapsed icon, in absolute px. Starts
+// at tauri.conf.json's configured x/y (the same value init_layer_shell
+// reads at startup via outer_position()) and is updated locally as the
+// user drags — see the pointer handlers below and move_sidebar in lib.rs.
+// Not persisted across restarts: an out-of-scope follow-up, not an
+// oversight (see docs/planning/mvp-build-plan.md for what's tracked).
+let COLLAPSED_POSITION = { x: 24, y: 24 };
+
 // Capture region: null means full screen (the default). Otherwise
 // {x0,y0,x1,y1} in screen px, set once during setup. See
 // docs/decisions/0003-capture-region-not-window-detection.md — this is a
@@ -102,7 +110,72 @@ async function collapse() {
   await setShellSize(COLLAPSED_SIZE);
 }
 
-document.querySelector("#panel-icon").addEventListener("click", expand);
+// ---------- Collapsed icon: fixed size, drag-to-move ----------
+//
+// Ctrl+wheel / ctrl+-/+/0 / pinch is WebKitGTK's page-zoom gesture, not a
+// CSS-addressable behavior — it has to be intercepted here. Without this,
+// zooming the (invisible, 80x80, content-less) page makes the icon appear
+// to grow and drift inside its own window, which is the "weird zoom/move"
+// this whole block exists to kill. touch-action: none in sidebar.html
+// covers the pinch/two-finger-pan half.
+window.addEventListener(
+  "wheel",
+  (e) => {
+    if (e.ctrlKey) e.preventDefault();
+  },
+  { passive: false },
+);
+window.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && (e.key === "+" || e.key === "-" || e.key === "=" || e.key === "0")) {
+    e.preventDefault();
+  }
+});
+
+// Real repositioning (the only way to "move" the icon now) is a drag
+// gesture on the icon itself, backed by the move_sidebar command — see
+// its doc comment in lib.rs for why a layer-shell surface can't use
+// Tauri's native window drag. A short movement threshold distinguishes a
+// drag from a plain click-to-expand.
+const panelIcon = document.querySelector("#panel-icon");
+const DRAG_THRESHOLD_PX = 4;
+let dragState = null;
+
+panelIcon.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  dragState = {
+    pointerId: e.pointerId,
+    startScreenX: e.screenX,
+    startScreenY: e.screenY,
+    originX: COLLAPSED_POSITION.x,
+    originY: COLLAPSED_POSITION.y,
+    moved: false,
+  };
+  panelIcon.setPointerCapture(e.pointerId);
+});
+
+panelIcon.addEventListener("pointermove", (e) => {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  const dx = e.screenX - dragState.startScreenX;
+  const dy = e.screenY - dragState.startScreenY;
+  if (!dragState.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+  dragState.moved = true;
+  panelIcon.classList.add("dragging");
+  COLLAPSED_POSITION = { x: dragState.originX + dx, y: dragState.originY + dy };
+  invoke("move_sidebar", { x: Math.round(COLLAPSED_POSITION.x), y: Math.round(COLLAPSED_POSITION.y) });
+});
+
+function endDrag(e) {
+  if (!dragState || e.pointerId !== dragState.pointerId) return;
+  panelIcon.releasePointerCapture(e.pointerId);
+  panelIcon.classList.remove("dragging");
+  const wasDrag = dragState.moved;
+  dragState = null;
+  if (!wasDrag) expand();
+}
+
+panelIcon.addEventListener("pointerup", endDrag);
+panelIcon.addEventListener("pointercancel", endDrag);
+
 document.querySelector("#bar-collapse").addEventListener("click", collapse);
 
 // ---------- Region setup ----------
