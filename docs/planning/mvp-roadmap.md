@@ -1,6 +1,6 @@
 **Contract**
 - A plan, not a source of truth — graduates into `features/` docs + ADRs as
-  items get built, then gets archived/deleted per
+  items get built, then gets deleted per
   [meta/style-guide.md](../meta/style-guide.md). Don't treat this as current
   status; check [STATUS.md](../../STATUS.md) for that.
 - Priority tiers P0/P1/P2, in build order, for a hackathon-scale MVP.

@@ -274,8 +274,170 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     last text block was parsed instead of all of them joined.
   - Branch: `claudev/charlie/step-substep-generation`, not yet merged.
 
+- **Real on-screen overlay restored, plus a shared icon pool — built,
+  unverifiable on this machine.** See
+  `docs/decisions/0006-restore-real-on-screen-overlay.md` (supersedes the
+  "no overlay at all" position in `docs/architecture/overview.md`).
+  - **New third window** `overlay` (`src/overlay.html`/`overlay.js`):
+    transparent, always-on-top, and **permanently click-through — set once
+    in Rust at startup, never toggled from JS.** That's the whole safety
+    argument: the original overlay was cut because a *toggled* passthrough
+    got stuck interactive and trapped the screen; with nothing flipping it
+    there's no stuck state to reach. `pointer-events: none` everywhere is a
+    second layer under the OS passthrough.
+  - **Substep UI is now three icon-only actions** (`actionsHtml` in
+    `sidebar.js`), replacing the two emoji text buttons: **eye** toggles
+    the real on-screen overlay (highlight box + the instruction as a
+    positioned text callout over the target app), **target** re-runs
+    `locate_element` live, **note** toggles the old in-panel schematic.
+    Only one substep can be overlaid at a time, and leaving the chat view
+    drops it so a box can't outlive the UI pointing at it.
+  - **The schematic is kept as a first-class peer, not legacy** — it's the
+    required fallback wherever no live window rect exists.
+  - **Coordinate handling — the two real bugs this had to avoid**: (1)
+    nothing is drawn from a cached rect; the stored fraction is
+    re-multiplied by the anchor frame's *current* geometry, re-queried
+    every 200 ms via `refresh_window_rect`, which is what makes a resize or
+    move survivable. Polling rather than native move/resize hooks is
+    deliberate (ADR 0005 deferred those backends; ~5 cheap queries/sec buys
+    the same behavior with no new platform code, costing a frame or two of
+    lag while dragging). (2) physical screen px are converted to CSS px by
+    dividing by the monitor's `scaleFactor` — without it everything is
+    silently offset on any HiDPI/fractional-scaling display but looks
+    perfect at 1.0 scale.
+  - **Refuses to draw for a Wayland portal capture**: the portal hands over
+    frames but never discloses the source's screen position, so there's no
+    correct place for the box — it says so and stops rather than drawing
+    somewhere plausible-looking.
+  - **Answered a question about the fixture coordinates**: they already
+    carried a reference frame (`REF_W`/`REF_H` = 1920×1080 in
+    `fake-skill.js`) and every consumer already divided by it, so no new
+    "screen size parameter" was needed — the two numbers are only a
+    denominator, not a tie to any display. Documented that in place, since
+    it wasn't obvious from reading the fixture.
+  - **New shared icon pool** `src/icons.js` (38 icons) ported from the
+    brainroot project's own pool — hand-drawn, no third-party icon set, so
+    no license question. Ported to plain functions returning SVG *strings*
+    (this app is vanilla JS, not React, and every call site builds markup
+    with template strings). `src/icons.html` is a gallery page that
+    enumerates the pool so the "check before drawing a new one" rule is
+    actually checkable; noted in `CLAUDE.md`'s load map.
+  - **Startup-abort bug found by running it, fixed.** First launch died
+    with `panic in a function that cannot unwind` / `thread caused
+    non-unwinding panic. aborting.` — an abort, not a catchable error.
+    Cause: `set_ignore_cursor_events(true)` on a window that has never been
+    shown. tao implements it as
+    `window.window().unwrap().input_shape_combine_region(..)`
+    (`linux/event_loop.rs`, `WindowRequest::CursorIgnoreEvents`), and
+    `gtk_widget_get_window` returns NULL until the widget is *realized* —
+    so the unwrap panicked inside a glib dispatch callback that can't
+    unwind, which escalates a panic to an immediate abort. `overlay` starts
+    `"visible": false` and has to stay invisible, so it was never realized.
+    Fix: `gtk_window().realize()` first — that creates the GdkWindow
+    without mapping it, so the window stays invisible but the input-shape
+    call has something to act on. Must run *after* `init_layer_shell`,
+    which requires init before realization.
+  - **Verified**: `cargo check` clean; all five JS files parse; all 38
+    icons validated as XML *and* rasterized with `rsvg-convert`, then
+    reviewed as a montage — none malformed, all legible. **App now
+    launches and stays running** (6s+ alive, clean exit on signal), with
+    only the pre-existing, documented-as-harmless GNOME "compositor does
+    not support the Layer Shell protocol" warning.
+  - **Not verified, and not verifiable here**: the overlay itself. This dev
+    box is GNOME/**Wayland**, where a toplevel can't position itself
+    absolutely and no window rect is available — so the one feature this
+    change is about is the one thing that can't run on this machine. Needs
+    an X11 session, a Mac, or a Windows box. The eye's failure path (the
+    "can't draw for a portal capture" notice) is the only branch this
+    machine can actually exercise.
+  - Note: a parallel workstream added the Wayland portal capture path
+    (`portal_capture.py`, `FrameAnchor::Portal`, `capture_backend`) to the
+    same tree while this was in progress; the two integrate but were
+    written separately.
+
+- **Wayland window/screen capture — built and verified live on this
+  machine.** GNOME Wayland gave neither a window list (X11's
+  `_NET_CLIENT_LIST_STACKING` comes back empty — every app here is
+  Wayland-native) nor working screenshots (`grim` needs `wlr-screencopy`,
+  which GNOME/KDE don't implement); both are now routed through the XDG
+  desktop portal instead. See
+  `docs/decisions/0007-portal-capture-backend-wayland.md` (amends ADR
+  0005's "Wayland is out of scope"). `window_provider::backend()` picks
+  `Native` (macOS/Windows/X11, unchanged) vs. `Portal` (Linux/Wayland) at
+  runtime. Confirmed end to end: picked a window and a screen through
+  GNOME's own share dialog, captured silently afterward with no further
+  prompt (`portal_capture.py capture` reusing a stored `restore_token`),
+  and ran a real `locate_element` vision call against a portal-captured
+  frame. Screen-scoped picks let the real overlay draw (portal reports
+  `position` for monitors, not windows); window-scoped picks fall back to
+  the in-panel schematic, which the setup label now states up front.
+  Two environment traps worth knowing, both documented in
+  `docs/workflows/development.md`: a stale `xdg-desktop-portal` process
+  left over from a different compositor routes ScreenCast to the wrong
+  backend and fails with a confusing D-Bus error; PyGObject isn't
+  pip-installable into the project venv, so `portal_capture.py` re-execs
+  into a system Python that has it.
+
+- **Skill persistence to disk — built, compiles, not yet exercised live.**
+  Every skill/step/substep now round-trips through one JSON file
+  (`save_skills_json`/`load_skills_json` in `lib.rs`, `persistSkills`/
+  `loadPersistedSkills` in `sidebar.js`) instead of living only in the
+  in-memory `SKILLS` array for the session — see the new "Storage" section
+  in `docs/features/skills.md`. Rust treats the file as an opaque JSON
+  blob (no typed mirror of the skill shape) and rewrites it whole on every
+  mutation. Loaded once at startup, replacing the `fake-skill.js` fixture
+  data in place if a save exists. A locked step's substep section also now
+  always shows a placeholder ("Substeps not generated yet — click to
+  generate.") instead of only when the step has no `brief` — a real
+  Research step always has one, so the placeholder previously never
+  appeared for real data, only for fixtures.
+  - **Not yet verified live**: the actual goal→steps call this all hangs
+    off is currently blocked by the project's Anthropic API key being out
+    of credit (`research.py` returns "Your credit balance is too low").
+    Add credits, then confirm a fresh goal survives an app restart by
+    checking `~/.local/share/com.charlie.tauri-overlay/skills.json`.
+
+- **Fixed: every Tauri command that shelled out or hit disk was blocking
+  the main event loop.** They were plain synchronous `fn`s, which Tauri
+  runs inline on the invoke-handler thread — the same thread pumping the
+  window's event loop — so a `research.py` call (30-60s) or a portal pick
+  (up to 5 minutes, waiting on the user) froze the whole window; GNOME
+  reported it as "Not Responding," a genuine hang, not a glitch. All of
+  them (`locate_element`, `research_goal`, `plan_step`,
+  `pick_portal_source`, `list_windows`, `refresh_window_rect`,
+  `window_at_point`, `load_skills_json`, `save_skills_json`) are now
+  `async fn` wrapping their blocking body in
+  `tauri::async_runtime::spawn_blocking`. See
+  `docs/workflows/development.md`'s new "Writing a new Tauri command"
+  section — this pattern is required for any future command that isn't
+  instant.
+- **Added a persistent status bar** (`#status-bar` in `sidebar.html`,
+  `withStatus`/`beginStatus` in `sidebar.js`) for the three calls that can
+  genuinely run long: researching a goal, planning a step's substeps, and
+  the portal source pick. Shows an elapsed counter and, past a
+  per-call threshold, an explicit "still going, here's why that's
+  probably OK" message — replacing the old approach of ticking one
+  input field's placeholder text, which was invisible the moment that
+  input lost focus or was replaced by another view.
+
 ## What's next
 
+- **Add credits to the project's Anthropic API key** — `research.py`
+  (goal→steps) and `plan_step.py` (per-step substep generation) both fail
+  with "Your credit balance is too low to access the Anthropic API."
+  Blocks live end-to-end testing of both the chat-to-steps flow and the
+  new disk persistence (below) until resolved.
+- **Verify skill persistence end-to-end** once credits are restored: ask a
+  real goal, confirm `~/.local/share/com.charlie.tauri-overlay/skills.json`
+  is written, restart the app, confirm the skill reloads instead of
+  falling back to the fixture demo data.
+- **Verify the real on-screen overlay on X11, macOS, or Windows** — it
+  cannot run on this GNOME/Wayland dev box at all (see ADR 0006). Check in
+  particular: that the box lands on the right element, that dragging the
+  target window moves it (the 200 ms poll), and that it's genuinely
+  click-through — try clicking *through* the highlight box into the app
+  underneath. A HiDPI/fractional-scaling display is the case most likely
+  to expose a coordinate bug.
 - **Verify window-pick capture on a real macOS and Windows machine** —
   `window_provider.rs`'s backends for both are unverified (this dev
   environment can't build either target). Also needs a real display to

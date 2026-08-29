@@ -7,21 +7,24 @@
   flagged undecided in [STATUS.md](../../STATUS.md).
 - **What's built**: the UI shape (steps/substeps, blue-vs-pink origin,
   expandable path, per-step chat) in `spikes/tauri-overlay/src/sidebar.js`,
-  originally driven by fixture data in `src/fake-skill.js`. Demo
-  substeps render as a fake overlay — a mini Excel window with a
-  highlight box and a step textbox — placeholder for the real
-  on-screen callout (see Visual overlay in
-  [architecture/overview.md](../architecture/overview.md)). Also
+  originally driven by fixture data in `src/fake-skill.js`. A substep now
+  draws a real highlight box on screen (not just a fake in-panel diagram)
+  — see Visual overlay in
+  [architecture/overview.md](../architecture/overview.md) and
+  [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md). Also
   built: the Research call (`spikes/vision-detect/research.py`,
-  invoked via the `research_goal` Tauri command in `lib.rs`); and
-  the first real per-step AI-planned substep generation (`plan_step`
-  command → `spikes/vision-detect/plan_step.py`, invoked lazily from
-  `generateStepSubsteps` in `sidebar.js` — see "Per-step loop" below).
-  **What isn't**: reactive user-question substeps, user-editable path,
-  and any persistence — a chat's substeps still live only in memory for
-  that session. App grouping (BL-004) is **faked** on the home screen:
-  one “Excel chats” row opens the fixture skill; detection/icons from
-  the OS are not wired.
+  invoked via the `research_goal` Tauri command in `lib.rs`); the first
+  real per-step AI-planned substep generation (`plan_step` command →
+  `spikes/vision-detect/plan_step.py`, invoked lazily from
+  `generateStepSubsteps` in `sidebar.js` — see "Per-step loop" below);
+  and, as of this pass, disk persistence of the whole skills/steps/
+  substeps tree — see "Storage" below.
+  **What isn't**: reactive user-question substeps are stored (persisted
+  alongside AI substeps, same as any other substep) but not yet
+  distinguished for quality signal, and the path itself isn't
+  user-editable. App grouping (BL-004) is also still **faked** on the
+  home screen: one “Excel chats” row opens the fixture skill;
+  detection/icons from the OS are not wired.
 - Implements the per-step mechanics of the
   Goal → Research → See → Guide → Do → Verify → Learn loop from
   [philosophy/vision.md](../philosophy/vision.md), inside the four-layer
@@ -47,6 +50,9 @@
    detection is still BL-004.
 2. **Goal** — the user states what they want to accomplish, in chat
    ("how do I make a chart"). The demo skill is “Make a chart in Excel”.
+   If no capture window is picked yet, Ask also opens the click-to-pick
+   gesture so Research can run while they click the target app
+   (`src/window-pick.js`).
 3. **Research** — one-shot, online, AI-assisted. Runs exactly once per
    chat, against the stated goal (not re-run per step). This is the
    expensive, highest-leverage call in the whole system: everything
@@ -165,6 +171,35 @@ window's *current* rect instead of going stale. Not built yet — refresh
   signal — surface it as "navigate to \<X\> first" (often already implied
   by the substep's own `instruction_text`), rather than silently drawing a
   stale or wrong box.
+
+## Storage
+
+Every skill a user has researched — its steps, and any substeps reached
+so far — is written to one JSON file in this app's OS-managed data
+directory: `save_skills_json`/`load_skills_json` in
+`spikes/tauri-overlay/src-tauri/src/lib.rs`, called from `persistSkills`/
+`loadPersistedSkills` in `sidebar.js`. On this Linux build (identifier
+`com.charlie.tauri-overlay`) that resolves to
+`~/.local/share/com.charlie.tauri-overlay/skills.json`; open it directly
+to inspect what's been saved, or to clear it and start fresh.
+
+- **Rust doesn't know the shape.** `save_skills_json`/`load_skills_json`
+  take/return an opaque JSON string — they read and write bytes, nothing
+  more. The skill/step/substep shape (this doc, `last_known_bbox`'s
+  `Box2D`/`FrameAnchor` fields, per-origin substep fields) lives entirely
+  in `sidebar.js`/`fake-skill.js` and is still actively changing there; a
+  second, typed copy on the Rust side would just be a second place to
+  update every time the UI's data model does.
+- **Whole-file rewrite on every mutation**, not incremental: a new goal
+  researched, a step's substeps generated, or a chat follow-up asked all
+  trigger a full `JSON.stringify(SKILLS)` write. The file is small enough
+  (a working set of skills, not a database) that this is simpler than
+  reasoning about partial writes, at the cost of a write per interaction.
+- **Loaded once at startup**, replacing the fixture demo data
+  (`fake-skill.js`) in place if a save exists; the fixture stays as the
+  first-run experience otherwise, same as before persistence existed.
+- No screenshots are written here either — same scope limit as
+  `last_known_bbox` above, for the same reason.
 
 ## Open / deferred
 

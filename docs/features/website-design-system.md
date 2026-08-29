@@ -74,10 +74,10 @@ view (login, setup, skills, path, chat):
 - Home puts the Research Ask field above the Apps list, then the same
   card + halo treatment for the fake “Excel chats” group
   (`assets/excel.png`).
-- Demo substeps use a fake overlay stage (dark window chrome, pink
-  highlight, white callout) as a stand-in for the real on-screen
-  step textbox. Teach steps get a blue callout border; user
-  follow-ups get pink.
+- Demo substeps draw on-screen glass cards: pink–white gradient, darker
+  pink edge, violet halo, step numbers, and a small `guido-icon.png`
+  mark (`excel-demo-overlay.html`). Teach/user accents stay on the
+  live sidebar path, not this harness.
 - Keycap buttons for Google sign-in, Continue, Ask, and Send.
 - Window-pick hint uses the dark-glass treatment from the download
   modal (`region-select.html`).

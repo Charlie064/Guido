@@ -658,124 +658,6 @@
         gap: 10px;
       }
 
-      /* Fake on-screen overlay — placeholder until a real Excel
-         callout is drawn over the target window. */
-      .overlay-ph {
-        cursor: pointer;
-      }
-
-      .overlay-stage {
-        position: relative;
-        aspect-ratio: 16 / 10;
-        background:
-          radial-gradient(ellipse 70% 60% at 50% 40%, #1c1c1f 0%, #0A0A0A 70%);
-        border-radius: 12px;
-        overflow: hidden;
-        border: 1px solid rgba(0, 0, 0, 0.12);
-        box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.45);
-      }
-
-      .overlay-chrome {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        padding: 6px 8px;
-        background: #141414;
-      }
-
-      .overlay-chrome i {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        display: block;
-      }
-
-      .overlay-chrome i:nth-child(1) { background: #FF5F57; }
-      .overlay-chrome i:nth-child(2) { background: #FEBC2E; }
-      .overlay-chrome i:nth-child(3) { background: #28C840; }
-
-      .overlay-chrome em {
-        margin-left: 6px;
-        color: rgba(255, 255, 255, 0.55);
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 9px;
-        font-style: normal;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-      }
-
-      .overlay-hit {
-        position: absolute;
-        border: 2px solid var(--pink);
-        background: rgba(255, 46, 154, 0.18);
-        border-radius: 4px;
-        box-shadow: 0 0 0 4px rgba(255, 46, 154, 0.12);
-        pointer-events: none;
-      }
-
-      .overlay-ph.compact .overlay-stage {
-        aspect-ratio: 16 / 7;
-      }
-
-      .overlay-ph.compact .overlay-callout-text {
-        font-size: 11px;
-      }
-
-      .overlay-ph:hover .overlay-stage {
-        box-shadow: 0 0 0 4px var(--halo);
-      }
-
-      .overlay-callout {
-        position: absolute;
-        left: 10px;
-        right: 10px;
-        padding: 8px 10px;
-        background: #ffffff;
-        border: 1px solid var(--blue-border);
-        border-radius: 12px;
-        box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.5);
-      }
-
-      .overlay-callout.callout-bottom {
-        bottom: 10px;
-      }
-
-      .overlay-callout.callout-top {
-        top: 30px;
-      }
-
-      .overlay-ph.origin-user .overlay-callout {
-        border-color: var(--pink-border);
-        background: #fff7fb;
-      }
-
-      .overlay-callout-kicker {
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--blue);
-        margin-bottom: 3px;
-      }
-
-      .overlay-ph.origin-user .overlay-callout-kicker {
-        color: var(--pink);
-      }
-
-      .overlay-callout-text {
-        font-size: 12px;
-        line-height: 1.4;
-        color: var(--ink);
-      }
-
-      .overlay-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
-      }
-
       .substep-row {
         display: flex;
         align-items: flex-start;
@@ -870,7 +752,6 @@
         padding: 10px 12px;
       }
 
-      .overlay-card,
       .bubble-user-block {
         align-self: stretch;
         display: flex;
@@ -909,31 +790,53 @@
         line-height: 1.45;
       }
 
-      .bubble-show,
-      .bubble-locate {
-        margin-top: 8px;
-        background: #ffffff;
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        color: var(--ink);
-        border-radius: 999px;
-        padding: 4px 10px;
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 11px;
-        font-weight: 600;
+      /* Per-substep actions: eye (draw the real on-screen overlay),
+         target (re-locate live), note (in-panel schematic) — icon-only,
+         from the shared pool in src/icons.js. Icons inherit `color` via
+         currentColor, so the hover/disabled states below tint the SVG
+         itself without each icon needing a color passed in. */
+      .bubble-actions {
+        display: flex;
+        gap: 4px;
+        margin-top: 7px;
       }
 
-      .bubble-locate {
-        margin-left: 4px;
+      .bubble-icon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 5px;
+        padding: 3px 5px;
+        line-height: 0;
       }
 
-      .bubble-show:hover,
-      .bubble-locate:hover {
-        box-shadow: 0 0 0 4px var(--halo-bloom);
+      .bubble-icon-btn:hover {
+        border-color: var(--blue-border);
+        color: var(--text);
       }
 
-      .bubble-locate:disabled {
+      .bubble-icon-btn:disabled {
         opacity: 0.6;
         cursor: default;
+      }
+
+      /* Mid-locate: the vision round trip takes seconds, so the button
+         has to visibly be doing something rather than just going dim. */
+      .bubble-icon-btn.busy {
+        animation: bubble-btn-pulse 1s ease-in-out infinite;
+      }
+
+      @keyframes bubble-btn-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+
+      .bubble-icon-btn.failed {
+        border-color: var(--pink-border);
+        color: var(--pink);
       }
 
       /* Schematic preview: NOT a real window drawn over the target app —
@@ -997,6 +900,59 @@
         margin-top: 0;
         padding: 10px 16px;
       }
+
+      /* Persistent status strip — outside every view, so an in-flight AI
+         call (research/plan/locate/portal pick) stays visible no matter
+         which screen the user is on, instead of the old approach of
+         repurposing one input field's placeholder text (which only
+         showed up if you happened to be looking at that exact input, and
+         gave no signal at all once the input regained focus/was
+         replaced). Hidden entirely when nothing is running. */
+      #status-bar {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 11px;
+        color: var(--muted);
+        background: #1c222c;
+        border-top: 1px solid #2a3241;
+        flex-shrink: 0;
+      }
+
+      #status-bar.active {
+        display: flex;
+      }
+
+      #status-bar.stalled {
+        color: var(--pink);
+      }
+
+      #status-spinner {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 2px solid #3a4354;
+        border-top-color: var(--blue);
+        flex-shrink: 0;
+        animation: status-spin 0.8s linear infinite;
+      }
+
+      #status-bar.stalled #status-spinner {
+        border-top-color: var(--pink);
+        animation-duration: 1.6s;
+      }
+
+      @keyframes status-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      #status-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
     </style>
   </head>
   <body>
@@ -1041,12 +997,25 @@
       </section>
 
       <section id="view-setup" class="view">
-        <p>
+        <!-- Two variants, one per capture backend (see
+             window_provider::backend): click-to-pick where windows can be
+             enumerated, the compositor's own picker on Wayland where they
+             can't. setup.js picks which paragraph to show. -->
+        <p id="setup-blurb-native">
           Optional: pick the application window this skill is about.
           Vision calls only capture that window, and it re-checks the
           window's current size each time — so the overlay never goes
           stale if you resize or move it. Otherwise the full screen is
           used. This is a one-time setup step, not per-question.
+        </p>
+        <p id="setup-blurb-portal" hidden>
+          Pick what this skill should watch. Your desktop asks you to
+          choose a screen or a window and to confirm — that prompt is
+          one-time, and every later capture is silent. Sharing a whole
+          screen also lets the highlight be drawn directly on it; with a
+          single window Wayland won't say where it is, so guidance falls
+          back to a diagram. The app you're learning never needs to be
+          fullscreen or focused.
         </p>
         <div id="setup-region">
           <span id="setup-region-label">Window: full screen</span>
@@ -1091,6 +1060,11 @@
           <button id="chat-send" type="button">Send</button>
         </div>
       </section>
+
+      <div id="status-bar">
+        <div id="status-spinner"></div>
+        <div id="status-text"></div>
+      </div>
     </div>
 
     <script type="module" src="sidebar.js"></script>

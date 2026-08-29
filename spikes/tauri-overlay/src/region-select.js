@@ -1,22 +1,37 @@
-// The region-drag window — see the comment at the top of
-// region-select.html for why this drag lives in its own window instead of
+// The region-drag / click-to-pick window — see the comment at the top of
+// region-select.html for why this lives in its own window instead of
 // toggling main's click-through state. This window is always fully
 // interactive (nothing here ever calls setIgnoreCursorEvents); "hidden"
-// means a real window hide(), not a cursor-passthrough toggle, which is
-// the more reliable operation that motivated this whole split.
-const { getCurrentWindow, currentMonitor } = window.__TAURI__.window;
+// means a real window hide(), not a cursor-passthrough toggle.
+const { getCurrentWindow, currentMonitor, PhysicalPosition, PhysicalSize } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
 
 const boxEl = () => document.querySelector("#box");
 const hintEl = () => document.querySelector("#hint");
 
-async function resizeToMonitor() {
+async function coverMonitor() {
   const win = getCurrentWindow();
   const monitor = await currentMonitor();
-  if (monitor) {
-    await win.setSize(monitor.size);
+  if (!monitor) return null;
+  if (PhysicalPosition && PhysicalSize) {
+    await win.setPosition(new PhysicalPosition(monitor.position.x, monitor.position.y));
+    await win.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
+  } else {
     await win.setPosition(monitor.position);
+    await win.setSize(monitor.size);
   }
+  return monitor;
+}
+
+function clickPayload(e) {
+  return {
+    x: e.clientX,
+    y: e.clientY,
+    clientX: e.clientX,
+    clientY: e.clientY,
+    screenX: e.screenX,
+    screenY: e.screenY,
+  };
 }
 
 // Runs one drag-to-select gesture: shows this window, captures the drag,
@@ -26,6 +41,7 @@ function runSelection() {
     const win = getCurrentWindow();
     hintEl().innerHTML = 'Drag to select a capture region — <kbd>Esc</kbd> or click for full screen';
     document.body.classList.add("active");
+    await coverMonitor();
     await win.show();
     await win.setFocus();
 
@@ -67,7 +83,7 @@ function runSelection() {
       if (!dragging) return;
       dragging = false;
       const b = bounds(e);
-      const MIN_SIZE = 8; // px — below this, treat it as an accidental click, not a drag
+      const MIN_SIZE = 8;
       finish(b.x1 - b.x0 > MIN_SIZE && b.y1 - b.y0 > MIN_SIZE ? b : null);
     }
 
@@ -93,27 +109,20 @@ function runSelection() {
   });
 }
 
-// Runs one click-to-pick-a-window gesture: shows this window (crosshair
-// cursor, dimmed screen — same click-catcher this file already had for
-// region-drag, see the file-header comment on region-select.html for why
-// a real window, not a click-through toggle), waits for a single click,
-// hides itself, and resolves with the click point in absolute screen px
-// (this window is sized+positioned to exactly cover the monitor via
-// resizeToMonitor, so clientX/clientY already are screen coordinates —
-// same space region-drag's box already used). The caller (sidebar.js)
-// resolves that point to a window via the `window_at_point` command,
-// since this window itself is hidden by the time that query runs and so
-// can never be the "window" a click resolves to.
+// Click-to-pick: cover the monitor, wait for one click, hide, resolve
+// with client + screen coords so window-pick.js can map Retina / extra
+// monitors into the same space window_provider.rs uses.
 function runClickSelect() {
   return new Promise(async (resolve) => {
     const win = getCurrentWindow();
-    hintEl().innerHTML = 'Click the window you want to select — <kbd>Esc</kbd> for full screen';
+    hintEl().innerHTML = 'Click the window you want — <kbd>Esc</kbd> to skip';
     document.body.classList.add("active");
+    await coverMonitor();
     await win.show();
     await win.setFocus();
 
     function onClick(e) {
-      finish({ x: e.clientX, y: e.clientY });
+      finish(clickPayload(e));
     }
 
     function onKeyDown(e) {
@@ -145,4 +154,4 @@ listen("tutoria:begin-window-select", async () => {
 
 listen("tutoria:quit", () => getCurrentWindow().close());
 
-window.addEventListener("DOMContentLoaded", resizeToMonitor);
+window.addEventListener("DOMContentLoaded", coverMonitor);

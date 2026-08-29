@@ -4,14 +4,19 @@
 // depended on always-on-top+undecorated quirks that didn't hold up on
 // GNOME anyway); `#panel` is always shown at the window's full size.
 //
-// Highlighting no longer draws a box on the real screen at all: that was
-// a full-screen always-on-top window ("main"), and even permanently
-// click-through, it turned out to be the thing actually blocking clicks
-// into the app being taught (a decorated, non-click-through app window
-// covering the middle of the screen has the same problem — any real,
-// interactive window does). So "showing" a substep now renders a small
-// schematic diagram inline, in this panel — see renderSchematic below.
+// Substeps offer two ways to be shown (see actionsHtml below):
+// - the eye: a real highlight box + text callout drawn over the target app
+//   by the separate, permanently click-through "overlay" window (see
+//   overlay.js / overlay.html). An earlier attempt at this was cut because
+//   a full-screen always-on-top window blocked clicks into the app being
+//   taught; what makes it viable now is that click-through is set once in
+//   Rust and never toggled, so it can't get stuck interactive.
+// - the note: the in-panel schematic diagram, which stays as the fallback
+//   for platforms with no live window rect (a Wayland portal capture never
+//   discloses screen position) and as a non-intrusive "roughly where".
 import { SKILLS, nextCannedReply } from "./fake-skill.js";
+import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon } from "./icons.js";
+import { pickNativeWindow } from "./window-pick.js";
 
 const { getCurrentWindow } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
@@ -28,9 +33,39 @@ const { invoke } = window.__TAURI__.core;
 // docs/decisions/0005-window-anchored-overlay-coordinates.md.
 let selectedWindow = null;
 
+// The portal equivalent of `selectedWindow`, for Wayland sessions where
+// windows can't be enumerated at all (see window_provider::backend and
+// portal_capture.py). Shape: {scope, width, height, source_type, label,
+// persisted}. There is no id/title/app_name here and no rect to refresh —
+// the portal's stored restore token is what re-resolves the source on the
+// next capture, so `scope` is the only field a capture actually needs.
+let portalPick = null;
+
+// "native" | "portal", resolved once at startup. Decides which pick
+// gesture the setup view offers; until it resolves, assume the historical
+// native path.
+let captureBackend = "native";
+
+async function initCaptureBackend() {
+  try {
+    captureBackend = await invoke("capture_backend");
+  } catch (err) {
+    console.error("capture_backend failed, assuming native", err);
+  }
+  const portal = captureBackend === "portal";
+  document.querySelector("#setup-blurb-native").hidden = portal;
+  document.querySelector("#setup-blurb-portal").hidden = !portal;
+  document.querySelector("#setup-region-select").textContent =
+    portal ? "Choose source" : "Select window";
+  document.querySelector("#setup-region-label").textContent = formatWindowLabel();
+}
+
 // Sent as the second research_goal arg (see lib.rs) so Research scopes
 // its search to the actual target app instead of guessing it from goal
 // text alone — this is the "OS info in the research query" piece.
+// The portal deliberately never tells us which app was picked, so on that
+// backend Research gets no app name and falls back to inferring the target
+// app from the goal text alone (see run_research in lib.rs).
 function selectedAppName() {
   return selectedWindow ? selectedWindow.app_name : null;
 }
@@ -38,6 +73,16 @@ function selectedAppName() {
 // { kind: "window", id } | { kind: "region", ... } | null (full screen) —
 // what locate_element's `scope` param expects (CaptureScope in lib.rs).
 function currentCaptureScope() {
+  if (portalPick) {
+    return {
+      kind: "portal",
+      scope: portalPick.scope,
+      // Whether the user picked a whole screen or a single window, as
+      // reported by the portal itself — decides whether the real overlay
+      // can draw or the schematic is used instead.
+      screen: portalPick.source_type === "screen",
+    };
+  }
   if (!selectedWindow) return null;
   return { kind: "window", id: selectedWindow.id };
 }
@@ -50,10 +95,60 @@ const els = {
   barBack: document.querySelector("#bar-back"),
   barTitle: document.querySelector("#bar-title"),
   barSubtitle: document.querySelector("#bar-subtitle"),
+  statusBar: document.querySelector("#status-bar"),
+  statusText: document.querySelector("#status-text"),
   profileWrap: document.querySelector("#bar-profile-wrap"),
   profileBtn: document.querySelector("#bar-profile"),
   profileMenu: document.querySelector("#profile-menu"),
 };
+
+// Persistent status strip (outside every view — see sidebar.html's
+// #status-bar) for any call that shells out to Python and can genuinely
+// take a while: research, per-step planning, the portal pick dialog.
+// Replaces the old approach of repurposing one input's placeholder text,
+// which was invisible unless the user happened to still be looking at
+// that exact input. `token` lets an overlapping/superseded call's `end()`
+// no-op instead of clobbering a newer status that started after it.
+let statusToken = 0;
+
+function beginStatus(label, { slowAfter = 5, stallAfter = 30, stalledHint } = {}) {
+  const token = ++statusToken;
+  const startedAt = Date.now();
+  els.statusBar.classList.add("active");
+  els.statusBar.classList.remove("stalled");
+
+  const tick = () => {
+    if (token !== statusToken) return;
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    if (elapsed >= stallAfter) {
+      els.statusBar.classList.add("stalled");
+      const hint = stalledHint ?? "The app itself is still responding, but this call is taking unusually long.";
+      els.statusText.textContent = `${label} — still going after ${elapsed}s. ${hint}`;
+    } else if (elapsed >= slowAfter) {
+      els.statusText.textContent = `${label} (${elapsed}s)…`;
+    } else {
+      els.statusText.textContent = label;
+    }
+  };
+  tick();
+  const interval = setInterval(tick, 1000);
+
+  return function endStatus() {
+    if (token !== statusToken) return;
+    clearInterval(interval);
+    els.statusBar.classList.remove("active", "stalled");
+    els.statusText.textContent = "";
+  };
+}
+
+async function withStatus(label, fn, opts) {
+  const end = beginStatus(label, opts);
+  try {
+    return await fn();
+  } finally {
+    end();
+  }
+}
 
 const views = {
   login: document.querySelector("#view-login"),
@@ -115,6 +210,12 @@ function setProfileOpen(open) {
 }
 
 function showView(name) {
+  // Leaving the chat view drops the on-screen overlay: it belongs to one
+  // substep in one step, so leaving that context would otherwise strand a
+  // highlight box on screen with nothing in the UI still pointing at it
+  // (and no visible way to dismiss it, since the eye that toggles it is
+  // in the view being left).
+  if (currentView === "chat" && name !== "chat") hideOverlay();
   currentView = name;
   for (const [key, el] of Object.entries(views)) {
     el.classList.toggle("active", key === name);
@@ -180,46 +281,92 @@ window.addEventListener("keydown", (e) => {
 // windows resolve to whichever one is actually visible at that point.
 
 function formatWindowLabel() {
-  if (!selectedWindow) return "Window: full screen";
-  return `Window: ${selectedWindow.app_name || "(unnamed)"} — ${selectedWindow.title || "untitled"}`;
+  if (portalPick) {
+    // Says which highlight the user is going to get, since that is the one
+    // consequence of screen-vs-window they can't otherwise see coming.
+    const how = portalPick.source_type === "screen" ? "on-screen box" : "diagram only";
+    return `Capturing: ${portalPick.label} — ${how}`;
+  }
+  if (selectedWindow) {
+    return `Window: ${selectedWindow.app_name || "(unnamed)"} — ${selectedWindow.title || "untitled"}`;
+  }
+  // On the portal backend "full screen" isn't a working default the way it
+  // is elsewhere — nothing can be captured until the user has picked a
+  // source once — so the empty state has to read as a required step.
+  return captureBackend === "portal" ? "Nothing chosen yet" : "Window: full screen";
+}
+
+// Wayland path: the compositor runs the whole gesture (its own dialog,
+// its own list of windows) and hands back a token — there is no click to
+// catch and no rect to resolve, so none of the region-select window's
+// machinery below is involved.
+async function selectPortalSource() {
+  const label = document.querySelector("#setup-region-label");
+  const button = document.querySelector("#setup-region-select");
+  const previousLabel = label.textContent;
+  button.disabled = true;
+  label.textContent = "Choose a screen or window in the system prompt…";
+
+  try {
+    // "any" so the system picker offers both its Screen and Window tabs.
+    // Both work for capture; they differ in whether the on-screen overlay
+    // can draw (screen: yes, window: schematic only — see FrameAnchor::
+    // Portal in lib.rs and ADR 0006), which is surfaced in the label below
+    // rather than taken away as a choice.
+    portalPick = await withStatus(
+      "Waiting for you to choose in the system prompt",
+      () => invoke("pick_portal_source", { scope: "any" }),
+      {
+        slowAfter: 3,
+        // This one waits on a human, not a computation — a long elapsed
+        // time here is normal, not a bug, so the "stalled" wording says
+        // so instead of implying something's broken.
+        stallAfter: 45,
+        stalledHint: "This is just waiting on you — look for a share dialog on another screen or workspace if you don't see one.",
+      },
+    );
+    selectedWindow = null;
+    label.textContent = formatWindowLabel();
+    if (!portalPick.persisted) {
+      // Without a restore token every capture re-prompts, which would make
+      // the guided loop unusable — say so now rather than mid-skill.
+      label.textContent += " — your desktop won't remember this, so each capture will ask again";
+    }
+  } catch (err) {
+    label.textContent = `Couldn't pick a source (${err})`;
+    setTimeout(() => {
+      if (label.textContent.startsWith("Couldn't pick")) label.textContent = previousLabel;
+    }, 5000);
+  } finally {
+    button.disabled = false;
+    await getCurrentWindow().setFocus();
+  }
 }
 
 async function selectWindow() {
+  if (captureBackend === "portal") return selectPortalSource();
+
   const label = document.querySelector("#setup-region-label");
   const button = document.querySelector("#setup-region-select");
   const previousLabel = label.textContent;
   button.disabled = true;
   label.textContent = "Click the window you want…";
 
-  await getCurrentWindow().hide();
-
-  const point = await new Promise(async (resolve) => {
-    const unlisten = await listen("tutoria:window-point-selected", (event) => {
-      unlisten();
-      resolve(event.payload);
-    });
-    emit("tutoria:begin-window-select");
-  });
-
-  if (point) {
-    try {
-      selectedWindow = await invoke("window_at_point", { x: Math.round(point.x), y: Math.round(point.y) });
-    } catch (err) {
-      label.textContent = `Nothing there — try clicking directly on a window (${err})`;
-      await getCurrentWindow().show();
-      await getCurrentWindow().setFocus();
-      button.disabled = false;
-      setTimeout(() => {
-        if (label.textContent.startsWith("Nothing there")) label.textContent = previousLabel;
-      }, 3000);
-      return;
+  try {
+    const picked = await pickNativeWindow();
+    if (picked) {
+      selectedWindow = picked;
+      portalPick = null;
     }
+    label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
+  } catch (err) {
+    label.textContent = `Nothing there — try clicking directly on a window (${err})`;
+    setTimeout(() => {
+      if (label.textContent.startsWith("Nothing there")) label.textContent = previousLabel;
+    }, 3000);
+  } finally {
+    button.disabled = false;
   }
-
-  label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
-  await getCurrentWindow().show();
-  await getCurrentWindow().setFocus();
-  button.disabled = false;
 }
 
 document.querySelector("#setup-region-select").addEventListener("click", selectWindow);
@@ -289,6 +436,54 @@ function renderSkillsList() {
 
 let nextSkillId = SKILLS.length + 1;
 
+// Highest numeric suffix among "skill-N" ids currently in SKILLS, so a
+// fresh id never collides with a persisted one after loadPersistedSkills
+// replaces the fixture data below.
+function recomputeNextSkillId() {
+  const max = SKILLS.reduce((m, skill) => {
+    const n = Number(String(skill.id).replace(/^skill-/, ""));
+    return Number.isFinite(n) ? Math.max(m, n) : m;
+  }, 0);
+  nextSkillId = max + 1;
+}
+
+// Whole-tree persistence: every skill, its research steps, and any
+// AI-planned/user-asked substeps already reached, as one JSON file under
+// this app's OS-managed data directory (see skills_file_path in lib.rs —
+// on this Linux build that's `~/.local/share/com.charlie.tauri-overlay/
+// skills.json`; open it directly to inspect what got saved). Called after
+// every mutation below rather than batched/debounced: the file is small
+// and a hackathon build losing the last few seconds of edits on a crash is
+// a worse failure mode than one extra disk write per click.
+async function persistSkills() {
+  try {
+    await invoke("save_skills_json", { json: JSON.stringify(SKILLS, null, 2) });
+  } catch (err) {
+    console.error("failed to save skills to disk", err);
+  }
+}
+
+// Loads whatever was persisted last session, replacing the fixture demo
+// data in place (SKILLS is an imported binding — can't be reassigned, only
+// mutated) so every existing `SKILLS.push`/`for (const skill of SKILLS)`
+// call site keeps working unchanged. Leaves the fixture in place if
+// nothing has been saved yet (fresh install) or the save is empty, so the
+// demo still has something to show.
+async function loadPersistedSkills() {
+  try {
+    const json = await invoke("load_skills_json");
+    if (!json) return;
+    const persisted = JSON.parse(json);
+    if (!Array.isArray(persisted) || persisted.length === 0) return;
+    SKILLS.length = 0;
+    SKILLS.push(...persisted);
+    recomputeNextSkillId();
+    renderSkillsList();
+  } catch (err) {
+    console.error("failed to load persisted skills, keeping fixture demo data", err);
+  }
+}
+
 // Research is one-shot per chat, text-only (no screenshot) — see
 // docs/features/skills.md. It returns coarse top-level steps (title +
 // brief + watch_for — goal-scoped facts only, nothing screen-specific);
@@ -304,20 +499,36 @@ async function submitNewGoal() {
   input.disabled = true;
   button.disabled = true;
   errorEl.textContent = "";
-  const previousPlaceholder = input.placeholder;
   input.value = "";
 
-  // The real call is a Claude web-search round trip and routinely takes
-  // 30-60s — a static "Researching…" placeholder looks identical to a
-  // hang for that whole time, so tick a visible elapsed counter instead.
-  const startedAt = Date.now();
-  input.placeholder = "Researching… (0s)";
-  const tick = setInterval(() => {
-    input.placeholder = `Researching… (${Math.round((Date.now() - startedAt) / 1000)}s)`;
-  }, 1000);
-
   try {
-    const researchSteps = await invoke("research_goal", { goal, appName: selectedAppName() });
+    // Research runs while the user picks a window — Ask first, then the
+    // dimmed click-catcher so the wait isn't a blank spinner. A window
+    // already chosen in setup is left alone.
+    const needsPick = !selectedWindow && !portalPick;
+    const pickPromise = needsPick
+      ? selectWindow().catch((err) => {
+          console.warn("window pick during research failed", err);
+        })
+      : Promise.resolve();
+
+    // Real Claude web-search round trip, routinely 30-60s — see the
+    // global status bar (#status-bar) for what tells the user this is
+    // still in flight rather than hung. stallAfter is well past the
+    // typical range before it starts suggesting something's actually
+    // wrong, so a normal slow call never gets flagged.
+    const researchSteps = (await Promise.all([
+      withStatus(
+        `Researching "${goal}"`,
+        () => invoke("research_goal", { goal, appName: selectedAppName() }),
+        {
+          slowAfter: 8,
+          stallAfter: 90,
+          stalledHint: "Research calls are normally done within a minute. If your Anthropic API key is out of credit, this call fails fast instead of hanging — so this most likely means it's still genuinely working.",
+        },
+      ),
+      pickPromise,
+    ]))[0];
     const skill = {
       id: `skill-${nextSkillId++}`,
       title: goal,
@@ -333,14 +544,13 @@ async function submitNewGoal() {
       })),
     };
     SKILLS.push(skill);
+    await persistSkills();
     openSkill(skill);
   } catch (err) {
     errorEl.textContent = `Couldn't research that: ${err}`;
   } finally {
-    clearInterval(tick);
     input.disabled = false;
     button.disabled = false;
-    input.placeholder = previousPlaceholder;
     renderSkillsList();
   }
 }
@@ -369,12 +579,17 @@ async function generateStepSubsteps(step) {
   renderPath();
 
   try {
-    const planned = await invoke("plan_step", {
-      goal: currentSkill.goal,
-      stepTitle: step.title,
-      stepBrief: step.brief ?? "",
-      stepWatchFor: step.watch_for ?? "",
-    });
+    const planned = await withStatus(
+      `Planning "${step.title}"`,
+      () =>
+        invoke("plan_step", {
+          goal: currentSkill.goal,
+          stepTitle: step.title,
+          stepBrief: step.brief ?? "",
+          stepWatchFor: step.watch_for ?? "",
+        }),
+      { slowAfter: 6, stallAfter: 60 },
+    );
     step.substeps = planned.map((sub, i) => ({
       id: `${step.id}-${i + 1}`,
       origin: "ai",
@@ -385,6 +600,7 @@ async function generateStepSubsteps(step) {
     }));
     step.generated = true;
     expandedSteps.add(step.id);
+    await persistSkills();
   } catch (err) {
     step.planError = String(err);
   } finally {
@@ -439,9 +655,10 @@ function renderPath() {
     if (!step.generated) {
       // step.brief/watch_for come from Research (goal-scoped facts, no
       // screenshot involved) and exist even before the AI-planned
-      // substeps below do — show them instead of a bare placeholder when
-      // present. Fixture steps (fake-skill.js) predate this field and
-      // fall back to the placeholder.
+      // substeps below do, so they're shown alongside the substep
+      // placeholder rather than instead of it — a real research step
+      // always has a brief, and used to skip the placeholder entirely as
+      // a result. Fixture steps (fake-skill.js) predate `brief`.
       if (step.brief) {
         const brief = document.createElement("div");
         brief.className = "step-caption";
@@ -454,11 +671,16 @@ function renderPath() {
         watch.textContent = `⚠ ${step.watch_for}`;
         main.appendChild(watch);
       }
-      if (!step.brief) {
-        const caption = document.createElement("div");
-        caption.className = "step-caption";
-        caption.textContent = "Not generated yet — reach this step to see it.";
-        main.appendChild(caption);
+      // Substep placeholder — the actual per-substep bubbles only exist
+      // once plan_step has run (see generateStepSubsteps), which is a
+      // separate, deferred concern from having something to show here in
+      // the meantime. Suppressed while a plan is in flight or failed,
+      // since those states render their own message right below.
+      if (!step.planning && !step.planError) {
+        const placeholder = document.createElement("div");
+        placeholder.className = "step-caption step-substep-placeholder";
+        placeholder.textContent = "Substeps not generated yet — click to generate.";
+        main.appendChild(placeholder);
       }
       if (step.planning) {
         const status = document.createElement("div");
@@ -480,13 +702,20 @@ function renderPath() {
 
       for (const sub of step.substeps) {
         const subRow = document.createElement("div");
-        subRow.innerHTML = overlayPlaceholderHtml(sub, { compact: true });
-        const card = subRow.firstElementChild;
-        card.addEventListener("click", (e) => {
+        subRow.className = `substep-row origin-${sub.origin}`;
+        const preview = sub.origin === "user" ? sub.question : sub.target_description;
+        subRow.innerHTML = `
+          <span class="substep-dot"></span>
+          <span class="substep-text">
+            <span class="label">${sub.origin === "user" ? "You asked" : "AI step"}</span>
+            ${preview}
+          </span>
+        `;
+        subRow.addEventListener("click", (e) => {
           e.stopPropagation();
           openStep(step, sub.id);
         });
-        substepList.appendChild(card);
+        substepList.appendChild(subRow);
       }
       main.appendChild(substepList);
 
@@ -538,13 +767,22 @@ function schematicHtml(bbox) {
   `;
 }
 
-// "🎯 Locate" runs a real, live locate_element call scoped to the setup
-// window (or full screen) — this is what actually fixes overlay items
-// going stale after the target app resizes/moves: last_known_bbox isn't
-// trusted forever, the user re-runs this any time and gets a bbox
-// computed against the window's *current* size (see the CaptureScope
-// re-resolve in lib.rs's locate_element). "📍 Show" only ever displays
-// whatever bbox is already cached, real or fixture.
+// Three actions per substep, all icon-only (icons.js — the shared pool):
+//
+// - eye (EyeIcon/EyeOffIcon): draws the real on-screen overlay for this
+//   substep — a highlight box plus the instruction as a text callout,
+//   positioned over the actual target app (see overlay.js). Toggles, and
+//   only one substep can be shown at a time, so pressing a second one
+//   moves the overlay rather than stacking two boxes.
+// - target (TargetIcon): runs a live locate_element to recompute the bbox
+//   against the window's *current* size, so a stale box after a resize is
+//   one press away from correct (see the CaptureScope re-resolve in
+//   lib.rs).
+// - note (NoteIcon): the in-panel schematic — kept as the fallback for
+//   when the real overlay can't draw (no live window rect on this
+//   platform, e.g. a Wayland session on GNOME/KDE), and as a quick
+//   "roughly where" that doesn't take over the screen.
+//
 // User-asked substeps (sendChatMessage) carry `question`, not
 // `target_description` — that's what locate_element needs as its plain-
 // text target either way, so fall back to it.
@@ -552,78 +790,80 @@ function locateTarget(sub) {
   return sub.target_description || sub.question || "";
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// Which substep's overlay is currently on screen, if any.
+let overlaidSubstepId = null;
 
-function overlayHitStyle(bbox) {
-  if (!bbox) return "left:28%;top:36%;width:34%;height:16%";
-  const w = bbox.image_width || 1920;
-  const h = bbox.image_height || 1080;
-  const left = (bbox.x0 / w) * 100;
-  const top = (bbox.y0 / h) * 100;
-  const width = ((bbox.x1 - bbox.x0) / w) * 100;
-  const height = ((bbox.y1 - bbox.y0) / h) * 100;
-  return `left:${left}%;top:${top}%;width:${width}%;height:${height}%`;
-}
-
-function overlayCalloutPlacement(bbox) {
-  if (!bbox) return "callout-bottom";
-  const midY = (bbox.y0 + bbox.y1) / 2 / (bbox.image_height || 1080);
-  return midY > 0.45 ? "callout-top" : "callout-bottom";
-}
-
-function overlayPlaceholderHtml(sub, { compact = false, nested = false } = {}) {
-  const kicker = sub.origin === "user" ? "You asked" : sub.target_description || "Step";
-  const text = sub.instruction_text || sub.question || "";
-  const app = currentSkill?.appName || "Excel";
-  const idAttr = nested ? "" : ` data-substep-id="${sub.id}"`;
-  return `
-    <div class="overlay-ph origin-${sub.origin}${compact ? " compact" : ""}"${idAttr}>
-      <div class="overlay-stage">
-        <div class="overlay-chrome">
-          <i></i><i></i><i></i>
-          <em>${escapeHtml(app)}</em>
-        </div>
-        <div class="overlay-hit" style="${overlayHitStyle(sub.last_known_bbox)}"></div>
-        <div class="overlay-callout ${overlayCalloutPlacement(sub.last_known_bbox)}">
-          <div class="overlay-callout-kicker">${escapeHtml(kicker)}</div>
-          <div class="overlay-callout-text">${escapeHtml(text)}</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function locateButtonHtml(sub) {
-  if (!locateTarget(sub)) return "";
-  return `<button class="bubble-locate" data-locate="${sub.id}" type="button">Locate</button>`;
+function actionsHtml(sub) {
+  const eye = sub.last_known_bbox
+    ? `<button class="bubble-icon-btn" data-overlay="${sub.id}" type="button" title="Show on my real screen">${
+        overlaidSubstepId === sub.id ? EyeOffIcon({ size: 15 }) : EyeIcon({ size: 15 })
+      }</button>`
+    : "";
+  const locate = locateTarget(sub)
+    ? `<button class="bubble-icon-btn" data-locate="${sub.id}" type="button" title="Find this on screen now">${TargetIcon({ size: 15 })}</button>`
+    : "";
+  const schematic = sub.last_known_bbox
+    ? `<button class="bubble-icon-btn" data-show="${sub.id}" type="button" title="Show a rough diagram instead">${NoteIcon({ size: 15 })}</button>`
+    : "";
+  if (!eye && !locate && !schematic) return "";
+  return `<div class="bubble-actions">${eye}${locate}${schematic}</div>`;
 }
 
 function substepBubbleHtml(sub) {
-  const question = sub.origin === "user" && sub.question
-    ? `<div class="bubble-question">${escapeHtml(sub.question)}</div>`
-    : "";
-  return `
-    <div class="overlay-card" data-substep-id="${sub.id}">
-      ${question}
-      ${overlayPlaceholderHtml(sub, { nested: true })}
-      <div class="overlay-actions">
-        ${sub.last_known_bbox ? `<button class="bubble-show" data-show="${sub.id}" type="button">Show schematic</button>` : ""}
-        ${locateButtonHtml(sub)}
+  if (sub.origin === "ai") {
+    return `
+      <div class="bubble-ai" data-substep-id="${sub.id}">
+        <div class="bubble-target">${sub.target_description}</div>
+        <div class="bubble-instruction">${sub.instruction_text}</div>
+        ${actionsHtml(sub)}
+        <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
-      <div class="schematic-slot" data-slot="${sub.id}"></div>
+    `;
+  }
+  return `
+    <div class="bubble-user-block" data-substep-id="${sub.id}">
+      <div class="bubble-question">${sub.question}</div>
+      <div class="bubble-answer">
+        <div class="bubble-instruction">${sub.instruction_text}</div>
+        ${actionsHtml(sub)}
+        <div class="schematic-slot" data-slot="${sub.id}"></div>
+      </div>
     </div>
   `;
+}
+
+// Sends this substep's bbox + copy to the overlay window, which owns all
+// the coordinate math and the re-poll that keeps the box glued to the
+// target window as it moves (see overlay.js's file header).
+async function showOverlayFor(sub) {
+  overlaidSubstepId = sub.id;
+  await emit("tutoria:show-overlay", {
+    bbox: sub.last_known_bbox,
+    targetDescription: sub.target_description ?? "",
+    instructionText: sub.instruction_text ?? "",
+  });
+  renderChat();
+}
+
+async function hideOverlay() {
+  if (overlaidSubstepId === null) return;
+  overlaidSubstepId = null;
+  await emit("tutoria:hide-overlay");
+  renderChat();
 }
 
 function renderChat() {
   const body = document.querySelector("#chat-body");
   body.innerHTML = currentStep.substeps.map(substepBubbleHtml).join("");
+
+  body.querySelectorAll("[data-overlay]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.overlay);
+      if (!sub || !sub.last_known_bbox) return;
+      if (overlaidSubstepId === sub.id) hideOverlay();
+      else showOverlayFor(sub);
+    });
+  });
 
   body.querySelectorAll("[data-show]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -638,21 +878,25 @@ function renderChat() {
     btn.addEventListener("click", async () => {
       const sub = currentStep.substeps.find((s) => s.id === btn.dataset.locate);
       if (!sub) return;
-      const previousLabel = btn.textContent;
       btn.disabled = true;
-      btn.textContent = "Locating…";
+      btn.classList.add("busy");
       try {
         sub.last_known_bbox = await invoke("locate_element", {
           target: locateTarget(sub),
           scope: currentCaptureScope(),
         });
-        renderChat();
+        // Already-visible overlay for this substep should jump to the new
+        // box rather than keep showing the old one.
+        if (overlaidSubstepId === sub.id) await showOverlayFor(sub);
+        else renderChat();
       } catch (err) {
-        btn.textContent = "Couldn't locate";
+        btn.classList.remove("busy");
+        btn.classList.add("failed");
+        btn.title = `Couldn't locate: ${err}`;
         setTimeout(() => {
-          btn.textContent = previousLabel;
+          btn.classList.remove("failed");
           btn.disabled = false;
-        }, 2000);
+        }, 2500);
       }
     });
   });
@@ -680,6 +924,7 @@ function sendChatMessage() {
   };
   currentStep.substeps.push(substep);
   renderChat();
+  persistSkills();
 }
 
 document.querySelector("#chat-send").addEventListener("click", sendChatMessage);
@@ -693,4 +938,9 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") emit("tutoria:quit");
 });
 listen("tutoria:quit", () => getCurrentWindow().close());
+
+// Which pick gesture is possible depends on the session, so the setup view
+// can't be rendered correctly until this resolves.
+initCaptureBackend();
+loadPersistedSkills();
 fitWindow("login");

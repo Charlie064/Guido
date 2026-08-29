@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "demo": "GUIDO_EXCEL_DEMO=1 tauri dev"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

@@ -1,7 +1,7 @@
 **Contract**
 - Scope for the hackathon submission website. Owner: Pauline (secondary:
   Quentin — see [reference/team.md](../reference/team.md)).
-- A plan, not a source of truth — graduates/archives per
+- A plan, not a source of truth — graduates then gets deleted, per
   [meta/style-guide.md](../meta/style-guide.md). Check
   [STATUS.md](../../STATUS.md) for current status.
 - Timing/dependencies on the technical track are in
