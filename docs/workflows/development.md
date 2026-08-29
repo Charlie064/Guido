@@ -148,6 +148,35 @@ The app runs as three windows: the `sidebar` panel you interact with, a
 Captures hide the sidebar automatically so it never appears in the frame
 sent to the vision model.
 
+### Writing a new Tauri command
+
+**Any command that shells out to Python, hits the filesystem, or talks to
+X11/the portal must be `async fn`, with the actual blocking work inside
+`tauri::async_runtime::spawn_blocking`** — not a plain synchronous
+`#[tauri::command] fn`. A synchronous command runs inline on the same
+thread that pumps the window's event loop, so anything slower than
+instant (a `research.py` call is routinely 30-60s; a portal pick can block
+up to 5 minutes on the user) freezes the whole window — the compositor
+reports it as "Not Responding," which is a real hang, not a rendering
+glitch. See `locate_element`/`research_goal`/`pick_portal_source` etc. in
+`lib.rs` for the pattern:
+
+```rust
+#[tauri::command]
+async fn my_command(arg: String) -> Result<Out, String> {
+    tauri::async_runtime::spawn_blocking(move || my_command_blocking(&arg))
+        .await
+        .map_err(|e| format!("my_command task panicked: {e}"))?
+}
+```
+
+On the JS side, wrap the `invoke()` call in `withStatus` (`sidebar.js`) so
+the persistent status bar shows something is genuinely in flight rather
+than the app looking stuck — see the calls in `submitNewGoal`,
+`generateStepSubsteps`, and `selectPortalSource` for the pattern,
+including per-call `slowAfter`/`stallAfter` thresholds tuned to how long
+that specific call normally takes.
+
 ### Troubleshooting capture on Wayland
 
 - **"Choose source" errors with `Unknown method CreateSession or interface

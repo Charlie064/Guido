@@ -396,6 +396,29 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     Add credits, then confirm a fresh goal survives an app restart by
     checking `~/.local/share/com.charlie.tauri-overlay/skills.json`.
 
+- **Fixed: every Tauri command that shelled out or hit disk was blocking
+  the main event loop.** They were plain synchronous `fn`s, which Tauri
+  runs inline on the invoke-handler thread — the same thread pumping the
+  window's event loop — so a `research.py` call (30-60s) or a portal pick
+  (up to 5 minutes, waiting on the user) froze the whole window; GNOME
+  reported it as "Not Responding," a genuine hang, not a glitch. All of
+  them (`locate_element`, `research_goal`, `plan_step`,
+  `pick_portal_source`, `list_windows`, `refresh_window_rect`,
+  `window_at_point`, `load_skills_json`, `save_skills_json`) are now
+  `async fn` wrapping their blocking body in
+  `tauri::async_runtime::spawn_blocking`. See
+  `docs/workflows/development.md`'s new "Writing a new Tauri command"
+  section — this pattern is required for any future command that isn't
+  instant.
+- **Added a persistent status bar** (`#status-bar` in `sidebar.html`,
+  `withStatus`/`beginStatus` in `sidebar.js`) for the three calls that can
+  genuinely run long: researching a goal, planning a step's substeps, and
+  the portal source pick. Shows an elapsed counter and, past a
+  per-call threshold, an explicit "still going, here's why that's
+  probably OK" message — replacing the old approach of ticking one
+  input field's placeholder text, which was invisible the moment that
+  input lost focus or was replaced by another view.
+
 ## What's next
 
 - **Add credits to the project's Anthropic API key** — `research.py`

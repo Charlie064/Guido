@@ -112,8 +112,21 @@ fn vision_detect_dir() -> std::path::PathBuf {
 // of this command correct automatically. show() runs even if capture/
 // locate fails, so a crashed call can't leave the sidebar permanently
 // hidden.
+// `async fn` + spawn_blocking, not a plain synchronous fn: a plain
+// #[tauri::command] runs inline on the IPC-invoke thread, which on this
+// platform is the same thread pumping the window's event loop — so a
+// subprocess call taking tens of seconds (a capture + vision round trip)
+// froze the whole window and the compositor reported it as "not
+// responding". Every command below that shells out or touches the
+// filesystem gets the same treatment for the same reason.
 #[tauri::command]
-fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureScope>) -> Result<Box2D, String> {
+async fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureScope>) -> Result<Box2D, String> {
+    tauri::async_runtime::spawn_blocking(move || locate_element_blocking(&app, &target, scope))
+        .await
+        .map_err(|e| format!("locate_element task panicked: {e}"))?
+}
+
+fn locate_element_blocking(app: &tauri::AppHandle, target: &str, scope: Option<CaptureScope>) -> Result<Box2D, String> {
     use tauri::Manager;
 
     let sidebar = app
@@ -155,7 +168,7 @@ fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureSc
         }
     };
 
-    let result = run_locate(&target, &region, portal_scope.as_deref()).map(|mut b| {
+    let result = run_locate(target, &region, portal_scope.as_deref()).map(|mut b| {
         b.anchor = anchor;
         b
     });
@@ -167,14 +180,21 @@ fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureSc
 
 // Window enumeration/re-query never needs the sidebar hidden — no
 // screenshot involved, just OS window-list queries (see window_provider.rs).
+// Async even though these are normally fast: an X11 connection that's
+// stalled (compositor busy, socket wedged) blocks exactly the same way a
+// slow subprocess does, and there is no cheap way to bound it in advance.
 #[tauri::command]
-fn list_windows() -> Result<Vec<window_provider::WindowInfo>, String> {
-    window_provider::list_windows()
+async fn list_windows() -> Result<Vec<window_provider::WindowInfo>, String> {
+    tauri::async_runtime::spawn_blocking(window_provider::list_windows)
+        .await
+        .map_err(|e| format!("list_windows task panicked: {e}"))?
 }
 
 #[tauri::command]
-fn refresh_window_rect(id: String) -> Result<window_provider::WindowInfo, String> {
-    window_provider::get_window_rect(&id)
+async fn refresh_window_rect(id: String) -> Result<window_provider::WindowInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || window_provider::get_window_rect(&id))
+        .await
+        .map_err(|e| format!("refresh_window_rect task panicked: {e}"))?
 }
 
 // Backs the "click the window you want" flow in sidebar.js: x/y are
@@ -182,13 +202,16 @@ fn refresh_window_rect(id: String) -> Result<window_provider::WindowInfo, String
 // to exactly cover the monitor, so its click coordinates already are
 // screen coordinates — see region-select.js's resizeToMonitor).
 #[tauri::command]
-fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, String> {
-    window_provider::window_at_point(x, y)
+async fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || window_provider::window_at_point(x, y))
+        .await
+        .map_err(|e| format!("window_at_point task panicked: {e}"))?
 }
 
 // Lets the setup view ask which pick gesture is even possible here before
 // offering one: click-to-pick on macOS/Windows/X11, the compositor's own
-// picker on Wayland. See window_provider::backend.
+// picker on Wayland. See window_provider::backend. Cheap (an env var read)
+// — left synchronous.
 #[tauri::command]
 fn capture_backend() -> window_provider::Backend {
     window_provider::backend()
@@ -214,20 +237,29 @@ struct PortalPick {
 // stores a restore token so later captures are silent. The sidebar is
 // hidden for the duration so the user is picking from their real desktop,
 // and so this app's own window isn't the obvious thing to click.
+// Can block up to five minutes (see PortalSession's timeout in
+// portal_capture.py) waiting on the user to click the compositor's own
+// share dialog — the single most important command to get off the main
+// thread, since a synchronous version here would report the app as hung
+// for as long as the user takes to decide.
 #[tauri::command]
-fn pick_portal_source(app: tauri::AppHandle, scope: Option<String>) -> Result<PortalPick, String> {
-    use tauri::Manager;
+async fn pick_portal_source(app: tauri::AppHandle, scope: Option<String>) -> Result<PortalPick, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri::Manager;
 
-    let scope = scope.unwrap_or_else(|| "any".to_string());
-    let sidebar = app
-        .get_webview_window("sidebar")
-        .expect("\"sidebar\" window declared in tauri.conf.json must exist");
-    sidebar.hide().map_err(|e| format!("failed to hide sidebar before pick: {e}"))?;
+        let scope = scope.unwrap_or_else(|| "any".to_string());
+        let sidebar = app
+            .get_webview_window("sidebar")
+            .expect("\"sidebar\" window declared in tauri.conf.json must exist");
+        sidebar.hide().map_err(|e| format!("failed to hide sidebar before pick: {e}"))?;
 
-    let result = run_portal_pick(&scope);
+        let result = run_portal_pick(&scope);
 
-    sidebar.show().map_err(|e| format!("failed to re-show sidebar after pick: {e}"))?;
-    result
+        sidebar.show().map_err(|e| format!("failed to re-show sidebar after pick: {e}"))?;
+        result
+    })
+    .await
+    .map_err(|e| format!("pick_portal_source task panicked: {e}"))?
 }
 
 fn run_portal_pick(scope: &str) -> Result<PortalPick, String> {
@@ -262,8 +294,10 @@ fn run_portal_pick(scope: &str) -> Result<PortalPick, String> {
 // setup still allows staying on full-screen/region capture, where there's
 // no window to name.
 #[tauri::command]
-fn research_goal(goal: String, app_name: Option<String>) -> Result<Vec<ResearchStep>, String> {
-    run_research(&goal, app_name.as_deref())
+async fn research_goal(goal: String, app_name: Option<String>) -> Result<Vec<ResearchStep>, String> {
+    tauri::async_runtime::spawn_blocking(move || run_research(&goal, app_name.as_deref()))
+        .await
+        .map_err(|e| format!("research_goal task panicked: {e}"))?
 }
 
 // Skill persistence: the whole skills/steps/substeps tree, as JS already
@@ -288,13 +322,17 @@ fn skills_file_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String
 // from an error, so the caller can fall back to the fixture demo data
 // without treating "nothing saved yet" as a failure.
 #[tauri::command]
-fn load_skills_json(app: tauri::AppHandle) -> Result<Option<String>, String> {
-    let path = skills_file_path(&app)?;
-    match std::fs::read_to_string(&path) {
-        Ok(contents) => Ok(Some(contents)),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("couldn't read {}: {e}", path.display())),
-    }
+async fn load_skills_json(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = skills_file_path(&app)?;
+        match std::fs::read_to_string(&path) {
+            Ok(contents) => Ok(Some(contents)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(format!("couldn't read {}: {e}", path.display())),
+        }
+    })
+    .await
+    .map_err(|e| format!("load_skills_json task panicked: {e}"))?
 }
 
 // Called after every skill/step/substep mutation (new goal researched,
@@ -303,9 +341,13 @@ fn load_skills_json(app: tauri::AppHandle) -> Result<Option<String>, String> {
 // small (a session's worth of skills) and this way there's exactly one
 // code path to get right, with no partial-write states to reason about.
 #[tauri::command]
-fn save_skills_json(app: tauri::AppHandle, json: String) -> Result<(), String> {
-    let path = skills_file_path(&app)?;
-    std::fs::write(&path, json).map_err(|e| format!("couldn't write {}: {e}", path.display()))
+async fn save_skills_json(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = skills_file_path(&app)?;
+        std::fs::write(&path, json).map_err(|e| format!("couldn't write {}: {e}", path.display()))
+    })
+    .await
+    .map_err(|e| format!("save_skills_json task panicked: {e}"))?
 }
 
 fn run_research(goal: &str, app_name: Option<&str>) -> Result<Vec<ResearchStep>, String> {
@@ -353,13 +395,17 @@ struct PlannedSubstep {
 // it — not up front for the whole skill. No screenshot, no sidebar to
 // hide, same as research_goal above.
 #[tauri::command]
-fn plan_step(
+async fn plan_step(
     goal: String,
     step_title: String,
     step_brief: String,
     step_watch_for: String,
 ) -> Result<Vec<PlannedSubstep>, String> {
-    run_plan_step(&goal, &step_title, &step_brief, &step_watch_for)
+    tauri::async_runtime::spawn_blocking(move || {
+        run_plan_step(&goal, &step_title, &step_brief, &step_watch_for)
+    })
+    .await
+    .map_err(|e| format!("plan_step task panicked: {e}"))?
 }
 
 fn run_plan_step(

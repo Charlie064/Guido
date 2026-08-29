@@ -94,7 +94,57 @@ const els = {
   barBack: document.querySelector("#bar-back"),
   barTitle: document.querySelector("#bar-title"),
   barSubtitle: document.querySelector("#bar-subtitle"),
+  statusBar: document.querySelector("#status-bar"),
+  statusText: document.querySelector("#status-text"),
 };
+
+// Persistent status strip (outside every view — see sidebar.html's
+// #status-bar) for any call that shells out to Python and can genuinely
+// take a while: research, per-step planning, the portal pick dialog.
+// Replaces the old approach of repurposing one input's placeholder text,
+// which was invisible unless the user happened to still be looking at
+// that exact input. `token` lets an overlapping/superseded call's `end()`
+// no-op instead of clobbering a newer status that started after it.
+let statusToken = 0;
+
+function beginStatus(label, { slowAfter = 5, stallAfter = 30, stalledHint } = {}) {
+  const token = ++statusToken;
+  const startedAt = Date.now();
+  els.statusBar.classList.add("active");
+  els.statusBar.classList.remove("stalled");
+
+  const tick = () => {
+    if (token !== statusToken) return;
+    const elapsed = Math.round((Date.now() - startedAt) / 1000);
+    if (elapsed >= stallAfter) {
+      els.statusBar.classList.add("stalled");
+      const hint = stalledHint ?? "The app itself is still responding, but this call is taking unusually long.";
+      els.statusText.textContent = `${label} — still going after ${elapsed}s. ${hint}`;
+    } else if (elapsed >= slowAfter) {
+      els.statusText.textContent = `${label} (${elapsed}s)…`;
+    } else {
+      els.statusText.textContent = label;
+    }
+  };
+  tick();
+  const interval = setInterval(tick, 1000);
+
+  return function endStatus() {
+    if (token !== statusToken) return;
+    clearInterval(interval);
+    els.statusBar.classList.remove("active", "stalled");
+    els.statusText.textContent = "";
+  };
+}
+
+async function withStatus(label, fn, opts) {
+  const end = beginStatus(label, opts);
+  try {
+    return await fn();
+  } finally {
+    end();
+  }
+}
 
 const views = {
   login: document.querySelector("#view-login"),
@@ -225,7 +275,18 @@ async function selectPortalSource() {
     // can draw (screen: yes, window: schematic only — see FrameAnchor::
     // Portal in lib.rs and ADR 0006), which is surfaced in the label below
     // rather than taken away as a choice.
-    portalPick = await invoke("pick_portal_source", { scope: "any" });
+    portalPick = await withStatus(
+      "Waiting for you to choose in the system prompt",
+      () => invoke("pick_portal_source", { scope: "any" }),
+      {
+        slowAfter: 3,
+        // This one waits on a human, not a computation — a long elapsed
+        // time here is normal, not a bug, so the "stalled" wording says
+        // so instead of implying something's broken.
+        stallAfter: 45,
+        stalledHint: "This is just waiting on you — look for a share dialog on another screen or workspace if you don't see one.",
+      },
+    );
     selectedWindow = null;
     label.textContent = formatWindowLabel();
     if (!portalPick.persisted) {
@@ -385,20 +446,23 @@ async function submitNewGoal() {
   input.disabled = true;
   button.disabled = true;
   errorEl.textContent = "";
-  const previousPlaceholder = input.placeholder;
   input.value = "";
 
-  // The real call is a Claude web-search round trip and routinely takes
-  // 30-60s — a static "Researching…" placeholder looks identical to a
-  // hang for that whole time, so tick a visible elapsed counter instead.
-  const startedAt = Date.now();
-  input.placeholder = "Researching… (0s)";
-  const tick = setInterval(() => {
-    input.placeholder = `Researching… (${Math.round((Date.now() - startedAt) / 1000)}s)`;
-  }, 1000);
-
   try {
-    const researchSteps = await invoke("research_goal", { goal, appName: selectedAppName() });
+    // Real Claude web-search round trip, routinely 30-60s — see the
+    // global status bar (#status-bar) for what tells the user this is
+    // still in flight rather than hung. stallAfter is well past the
+    // typical range before it starts suggesting something's actually
+    // wrong, so a normal slow call never gets flagged.
+    const researchSteps = await withStatus(
+      `Researching "${goal}"`,
+      () => invoke("research_goal", { goal, appName: selectedAppName() }),
+      {
+        slowAfter: 8,
+        stallAfter: 90,
+        stalledHint: "Research calls are normally done within a minute. If your Anthropic API key is out of credit, this call fails fast instead of hanging — so this most likely means it's still genuinely working.",
+      },
+    );
     const skill = {
       id: `skill-${nextSkillId++}`,
       title: goal,
@@ -419,10 +483,8 @@ async function submitNewGoal() {
   } catch (err) {
     errorEl.textContent = `Couldn't research that: ${err}`;
   } finally {
-    clearInterval(tick);
     input.disabled = false;
     button.disabled = false;
-    input.placeholder = previousPlaceholder;
     renderSkillsList();
   }
 }
@@ -449,12 +511,17 @@ async function generateStepSubsteps(step) {
   renderPath();
 
   try {
-    const planned = await invoke("plan_step", {
-      goal: currentSkill.goal,
-      stepTitle: step.title,
-      stepBrief: step.brief ?? "",
-      stepWatchFor: step.watch_for ?? "",
-    });
+    const planned = await withStatus(
+      `Planning "${step.title}"`,
+      () =>
+        invoke("plan_step", {
+          goal: currentSkill.goal,
+          stepTitle: step.title,
+          stepBrief: step.brief ?? "",
+          stepWatchFor: step.watch_for ?? "",
+        }),
+      { slowAfter: 6, stallAfter: 60 },
+    );
     step.substeps = planned.map((sub, i) => ({
       id: `${step.id}-${i + 1}`,
       origin: "ai",
