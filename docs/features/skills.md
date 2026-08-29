@@ -126,34 +126,48 @@ When the user reaches a top-level step:
   question becomes a **reactive substep**, created only because the user
   asked — the AI never generates these speculatively. These render in
   **pink**.
-  - **Scoped, resolved 2026-08-29** (not yet built — `sendChatMessage` in
-    `sidebar.js` still answers with `nextCannedReply()`'s fixture, see
-    "Not built yet" below): a reactive substep is **tied to the specific
-    AI substep it's asked from**, not appended free-floating at the end
-    of the step's substep list the way it renders today. Carries a
-    `respondingTo: subId` field and renders directly under that substep —
-    matches the "Ask for help" button on a failed Verify (above), which
-    is already about one specific substep and should read that way.
+  - **Built** (2026-08-29): `sendChatMessage` in `sidebar.js` now calls a
+    real `answer_question` command (`answer.py`/`answer_step.py`,
+    `lib.rs`) instead of `nextCannedReply()`'s fixture. No web search —
+    unlike Research, a question is answered from context already
+    gathered, not something to look up fresh, which keeps every
+    question's latency/cost predictable.
+  - **Tied to the specific AI substep it's asked from**, not appended
+    free-floating at the end of the step's substep list the way it used
+    to render. Carries a `respondingTo: subId` field
+    (`resolveRespondingTo`/`renderChatParts` in `sidebar.js`) and renders
+    nested directly under that substep (`.bubble-reply`), matching the
+    "Ask for help" button on a failed Verify, which explicitly sets it.
+    Which substep is targeted when a question is just typed (not via Ask
+    for help): whichever bubble was last clicked (`focusedSubstepId`,
+    highlighted with a blue ring), falling back to the last AI substep in
+    the step if none was ever clicked. A reply with no resolvable target
+    (a legacy substep predating this, or one whose target substep is
+    gone) falls back to rendering at the end, same as the old behavior.
   - **No cap on how many can be asked per step**, deliberately — a
     genuinely stuck user may need several in a row, and a hard wall on
     the *Guide* half of the product reads as punitive. This is a
     deliberate no-decision, not an oversight: there is currently no
-    quota/cost model at all for reactive Q&A once it's answering for
-    real (`business/pricing.md` only budgets *locates*, 5/step — a real
-    answer call is a new, unbudgeted cost line). Revisit once real usage
-    data exists on how many questions people actually ask.
-  - **Text-only by default; screenshot only on a separate, explicit
-    button** ("take a screenshot" or similar, not decided which label) —
-    not automatic just because a message was sent. Keeps the rule
-    established for Verify/plan_step (a screenshot only ever happens on
-    a manual, named button press, never as a side effect of typing)
-    intact for this path too, while still letting a confused user hand
-    the AI a look at their actual screen when text alone isn't enough.
+    quota/cost model at all for reactive Q&A now that it's answering for
+    real (`business/pricing.md` only budgets *locates*, 5/step — each
+    real answer call is a new, unbudgeted cost line). Revisit once real
+    usage data exists on how many questions people actually ask.
+  - **Text-only by default; a screenshot only via a separate toggle
+    button** (`#chat-screenshot-toggle`, a camera icon next to Send) —
+    not automatic just because a message was sent. The toggle resets
+    after every send, so including a screenshot is a deliberate choice
+    for *that* question, never a lingering mode left on and forgotten.
+    Keeps the rule established for Verify/plan_step (a screenshot only
+    ever happens on a manual, named action) intact for this path too.
   - **Never reshapes the plan.** A follow-up's answer has no side effect
     on the substeps still ahead in the step — `plan_step`'s output for
     that step is never revised or added to in response to a Q&A. Keeps
     per-step planning one clean, deterministic call rather than an
     open-ended loop that reconsiders its own plan mid-step.
+  - Not yet click-tested in a running app — no way to drive the GUI from
+    this environment; verified by real CLI calls to `answer_step.py`
+    (text-only and with-screenshot, both live) and by re-reading the
+    wiring, not an actual click-through.
 - A screenshot is **manually triggered** by the user pressing a button
   when they want the AI to look at the current screen — not fired
   automatically per substep.
@@ -174,10 +188,10 @@ When the user reaches a top-level step:
   observed — so a wrong-but-specific answer is more useful for fixing the
   problem than a bare pass/fail. On a mismatch, an **"Ask for help"**
   button prefills the chat input with the observed state as a starting
-  question, turning a failed check into a normal reactive (pink) substep
-  rather than a dead end — the fixture-answer limitation on that path is
-  the same one already noted for reactive substeps generally, above.
-  This replaces trusting a "Done" click with the actual Guide → Do →
+  question, ties it to the failed substep (`respondingTo`, see above),
+  and — as of the same pass that made reactive substeps real — gets a
+  genuine AI answer, not a fixture. This replaces trusting a "Done"
+  click with the actual Guide → Do →
   Verify step named in
   [philosophy/vision.md](../philosophy/vision.md), and was deliberately
   prioritized over on-screen highlight/callout polish per Charlie's

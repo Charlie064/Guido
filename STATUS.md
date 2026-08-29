@@ -438,6 +438,25 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   no way to drive the GUI from this environment; verified by build/
   syntax checks and re-reading the wiring only.
 
+- **Reactive follow-up questions now get real AI answers** (2026-08-29,
+  later than the entries above): `sendChatMessage` in `sidebar.js` no
+  longer calls `nextCannedReply()`'s fixture — it calls a new
+  `answer_question` command (`answer.py`/`answer_step.py`, `lib.rs`).
+  No web search (predictable latency/cost per question, unlike
+  Research). Text-only by default; a screenshot only via a separate
+  toggle button next to Send that resets after every send, keeping the
+  "screenshot only on a deliberate, named action" rule intact. Each
+  question is tied to the specific AI substep it's about
+  (`respondingTo`) and renders nested under it instead of appended at
+  the step's end — resolved via whichever substep bubble was last
+  clicked, or the "Ask for help" button on a failed Verify, falling back
+  to the step's last AI substep if neither happened. No cap on questions
+  per step, deliberately, with the cost-model gap flagged (same
+  unbudgeted-cost note as before, now doubly true since this path is
+  real). Verified live via direct `answer_step.py` calls (text-only and
+  with-screenshot, both real API calls) — **not yet click-tested in the
+  running app itself**, same limitation as the Verify UI above.
+
 ## What's next
 
 - **Guide → Do → Verify — backend built and tested, no UI yet.**

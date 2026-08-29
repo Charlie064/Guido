@@ -314,6 +314,114 @@ fn run_verify(
         .map_err(|e| format!("failed to parse verify_step.py output ({stdout}): {e}"))
 }
 
+// A follow-up question's answer — see docs/features/skills.md's Per-step
+// loop (the reactive-substep section) and answer.py.
+#[derive(Serialize, Deserialize, Debug)]
+struct AnswerResult {
+    answer: String,
+}
+
+// Same locate_element/verify_substep shape, with one real difference:
+// `with_screenshot` decides whether any capture happens at all, not just
+// which scope to use. A plain question is a pure text call — no sidebar
+// hide, no capture, fastest possible path — since the product rule
+// (established alongside Verify) is that a screenshot only ever happens
+// on a deliberate, named action, never as a side effect of sending a
+// chat message. `scope` is only consulted when `with_screenshot` is true.
+#[tauri::command]
+async fn answer_question(
+    app: tauri::AppHandle,
+    question: String,
+    with_screenshot: bool,
+    scope: Option<CaptureScope>,
+    context: Option<String>,
+) -> Result<AnswerResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if !with_screenshot {
+            return run_answer(&question, None, None, context.as_deref());
+        }
+        answer_question_with_screenshot_blocking(&app, &question, scope, context.as_deref())
+    })
+    .await
+    .map_err(|e| format!("answer_question task panicked: {e}"))?
+}
+
+fn answer_question_with_screenshot_blocking(
+    app: &tauri::AppHandle,
+    question: &str,
+    scope: Option<CaptureScope>,
+    context: Option<&str>,
+) -> Result<AnswerResult, String> {
+    use tauri::Manager;
+
+    let sidebar = app
+        .get_webview_window("sidebar")
+        .expect("\"sidebar\" window declared in tauri.conf.json must exist");
+    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+
+    let mut portal_scope: Option<String> = None;
+    let region = match scope {
+        None => None,
+        Some(CaptureScope::Region(r)) => Some(r),
+        Some(CaptureScope::Portal { scope, .. }) => {
+            portal_scope = Some(scope);
+            None
+        }
+        Some(CaptureScope::Window { id }) => match window_provider::get_window_rect(&id) {
+            Ok(w) => Some(Region { x: w.x, y: w.y, width: w.width, height: w.height }),
+            Err(e) => {
+                let _ = sidebar.show();
+                return Err(format!("selected window is no longer available: {e}"));
+            }
+        },
+    };
+
+    let result = run_answer(question, region.as_ref(), portal_scope.as_deref(), context);
+
+    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+
+    result
+}
+
+fn run_answer(
+    question: &str,
+    region: Option<&Region>,
+    portal_scope: Option<&str>,
+    context: Option<&str>,
+) -> Result<AnswerResult, String> {
+    let dir = vision_detect_dir();
+    let python = dir.join(".venv").join("bin").join("python3");
+    let script = dir.join("answer_step.py");
+
+    let mut cmd = Command::new(&python);
+    cmd.arg(&script).arg(question);
+    if let Some(scope) = portal_scope {
+        cmd.arg("--portal").arg(scope);
+    } else if let Some(r) = region {
+        cmd.arg(format!("{},{},{},{}", r.x, r.y, r.width, r.height));
+    }
+    if let Some(ctx) = context {
+        cmd.arg("--context").arg(ctx);
+    }
+
+    let output = cmd
+        .current_dir(&dir)
+        .output()
+        .map_err(|e| format!("failed to run answer_step.py: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "answer_step.py exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("failed to parse answer_step.py output ({stdout}): {e}"))
+}
+
 // What the vision model read off the picked frame — see identify_app.py.
 // Both fields are optional: "I can't tell" is a real answer here and is
 // preferable to a confident wrong one, which would silently scope every
@@ -886,6 +994,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             locate_element,
             verify_substep,
+            answer_question,
             research_goal,
             plan_step,
             list_windows,

@@ -1429,6 +1429,51 @@
         padding: 10px 16px;
       }
 
+      /* Per-question opt-in, not a sticky mode — resets after every send
+         (see sidebar.js) so a screenshot is always a deliberate choice
+         for *this* question, never something left on and forgotten. */
+      #chat-screenshot-toggle {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 0;
+      }
+
+      #chat-screenshot-toggle:hover {
+        color: var(--text);
+        border-color: var(--blue-border);
+      }
+
+      #chat-screenshot-toggle.active {
+        background: var(--blue-soft);
+        border-color: var(--blue-border);
+        color: var(--blue);
+      }
+
+      /* The substep a follow-up will attach to (see focusedSubstepId in
+         sidebar.js) — a click on any AI substep bubble sets this, and
+         "Ask for help" sets it explicitly. Subtle, since it's picked
+         automatically far more often than a user will deliberately look
+         for it. */
+      .bubble-ai.focused {
+        box-shadow: 0 0 0 2px var(--blue-border);
+      }
+
+      /* A reactive substep nested under the AI substep it's responding
+         to, rather than a separate top-level bubble in the list. */
+      .bubble-reply {
+        margin-top: 8px;
+        margin-left: 10px;
+        padding-left: 10px;
+        border-left: 2px solid var(--pink-border);
+      }
+
       /* Persistent status strip — outside every view, so an in-flight AI
          call (research/plan/locate/portal pick) stays visible no matter
          which screen the user is on, instead of the old approach of
@@ -1637,6 +1682,7 @@
         </div>
         <div class="chat-footer">
           <input id="chat-input" type="text" placeholder="Ask a question…" />
+          <button id="chat-screenshot-toggle" type="button" title="Include a screenshot with this question" aria-pressed="false"></button>
           <button id="chat-send" type="button">Send</button>
         </div>
       </section>

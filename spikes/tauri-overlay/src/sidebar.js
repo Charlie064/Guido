@@ -14,8 +14,8 @@
 // - the note: the in-panel schematic diagram, which stays as the fallback
 //   for platforms with no live window rect (a Wayland portal capture never
 //   discloses screen position) and as a non-intrusive "roughly where".
-import { SKILLS, nextCannedReply } from "./fake-skill.js";
-import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon, CheckIcon } from "./icons.js";
+import { SKILLS } from "./fake-skill.js";
+import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon } from "./icons.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -1350,6 +1350,19 @@ function locateContext(sub) {
 // Which substep's overlay is currently on screen, if any.
 let overlaidSubstepId = null;
 
+// Which AI substep a typed-in-the-box follow-up question will attach to
+// (see docs/features/skills.md's reactive-substep scoping, resolved
+// 2026-08-29). Set by clicking a substep bubble, or implicitly by "Ask
+// for help" on a failed verify. Falls back to the last AI substep in the
+// step if nothing's been explicitly picked — the most likely thing a
+// question right after opening a step's chat is actually about.
+let focusedSubstepId = null;
+
+// Per-question opt-in, not a sticky mode: reset after every send so a
+// screenshot is always a deliberate choice for *that* question, not
+// something left on and forgotten for the next one.
+let includeScreenshotForNextQuestion = false;
+
 function actionsHtml(sub) {
   const eye = sub.last_known_bbox
     ? `<button class="bubble-icon-btn" data-overlay="${sub.id}" type="button" title="Show on my real screen">${
@@ -1448,9 +1461,53 @@ async function hideOverlay() {
   renderChat();
 }
 
+// Groups each reactive (pink) substep under the AI substep it's tied to
+// (`respondingTo`, see docs/features/skills.md), instead of the flat
+// append-at-the-end order this rendered in before. A reply with no
+// `respondingTo` — a legacy substep from before this existed, or one
+// whose target substep is somehow gone — falls back to rendering at the
+// end, same as the old behavior, rather than silently vanishing.
+function renderChatParts() {
+  const subs = currentStep.substeps;
+  const repliesByTarget = new Map();
+  const orphanReplies = [];
+  for (const sub of subs) {
+    if (sub.origin !== "user") continue;
+    const target = sub.respondingTo && subs.some((s) => s.id === sub.respondingTo) ? sub.respondingTo : null;
+    if (target) {
+      if (!repliesByTarget.has(target)) repliesByTarget.set(target, []);
+      repliesByTarget.get(target).push(sub);
+    } else {
+      orphanReplies.push(sub);
+    }
+  }
+
+  const parts = [];
+  for (const sub of subs) {
+    if (sub.origin !== "ai") continue;
+    parts.push(substepBubbleHtml(sub));
+    for (const reply of repliesByTarget.get(sub.id) ?? []) {
+      parts.push(`<div class="bubble-reply">${substepBubbleHtml(reply)}</div>`);
+    }
+  }
+  for (const reply of orphanReplies) parts.push(substepBubbleHtml(reply));
+  return parts.join("");
+}
+
 function renderChat() {
   const body = document.querySelector("#chat-body");
-  body.innerHTML = currentStep.substeps.map(substepBubbleHtml).join("");
+  body.innerHTML = renderChatParts();
+
+  body.querySelectorAll(".bubble-ai").forEach((el) => {
+    el.classList.toggle("focused", el.dataset.substepId === focusedSubstepId);
+    el.addEventListener("click", (e) => {
+      // Don't steal focus from a click that was actually on one of the
+      // bubble's own action buttons (eye/target/note/verify).
+      if (e.target.closest("button")) return;
+      focusedSubstepId = el.dataset.substepId;
+      renderChat();
+    });
+  });
 
   body.querySelectorAll("[data-overlay]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -1524,14 +1581,16 @@ function renderChat() {
     btn.addEventListener("click", () => {
       const sub = currentStep.substeps.find((s) => s.id === btn.dataset.askHelp);
       if (!sub) return;
-      // Prefills rather than auto-sends: the observed text is a useful
-      // starting point, not necessarily exactly what the user wants to
-      // ask, and sendChatMessage's canned-reply fixture (see its own
-      // comment) means nothing is lost by giving them a chance to edit
-      // first.
+      // Explicitly ties the follow-up to the substep whose check failed —
+      // this is exactly the case respondingTo exists for (see
+      // renderChatParts) — and prefills rather than auto-sends: the
+      // observed text is a useful starting point, not necessarily
+      // exactly what the user wants to ask.
+      focusedSubstepId = sub.id;
       const input = document.querySelector("#chat-input");
       input.value = `I did this but it still shows: ${sub.verifyResult?.observed ?? "something unexpected"}. What should I do?`;
       input.focus();
+      renderChat();
     });
   });
 
@@ -1566,27 +1625,90 @@ async function advanceToNextStep() {
 
 document.querySelector("#step-advance").addEventListener("click", advanceToNextStep);
 
-function sendChatMessage() {
+// Which AI substep a question actually attaches to: whatever's focused
+// (a click on a bubble, or "Ask for help"), falling back to the last AI
+// substep in the step — the most likely thing a question is about if the
+// user never explicitly picked one.
+function resolveRespondingTo() {
+  if (focusedSubstepId && currentStep.substeps.some((s) => s.id === focusedSubstepId && s.origin === "ai")) {
+    return focusedSubstepId;
+  }
+  const lastAi = [...currentStep.substeps].reverse().find((s) => s.origin === "ai");
+  return lastAi ? lastAi.id : null;
+}
+
+// Reuses locateContext's goal/step/covered-substeps boilerplate (same
+// context bundle locate_element/verify_substep already build — see
+// docs/features/skills.md), with one line prepended naming exactly which
+// substep the question is tied to, since locateContext alone doesn't say
+// that explicitly.
+function answerContext(respondingToSub) {
+  const base = locateContext(respondingToSub);
+  if (!respondingToSub) return base;
+  const focusLine = `The user is asking specifically about this instruction: "${respondingToSub.instruction_text}" (target: ${respondingToSub.target_description}).`;
+  return base ? `${focusLine}\n${base}` : focusLine;
+}
+
+function updateScreenshotToggleUi() {
+  document.querySelector("#chat-screenshot-toggle").classList.toggle("active", includeScreenshotForNextQuestion);
+  document.querySelector("#chat-screenshot-toggle").setAttribute("aria-pressed", String(includeScreenshotForNextQuestion));
+}
+
+document.querySelector("#chat-screenshot-toggle").innerHTML = ImageIcon({ size: 16 });
+document.querySelector("#chat-screenshot-toggle").addEventListener("click", () => {
+  includeScreenshotForNextQuestion = !includeScreenshotForNextQuestion;
+  updateScreenshotToggleUi();
+});
+
+async function sendChatMessage() {
   const input = document.querySelector("#chat-input");
+  const sendBtn = document.querySelector("#chat-send");
   const question = input.value.trim();
   if (!question) return;
   input.value = "";
+  input.disabled = true;
+  sendBtn.disabled = true;
 
-  // Placeholder reply — a real build would send `question` plus this
-  // step's context to the agent controller instead. Falls back to the
-  // nearest AI substep's box so there's still something to preview.
-  const fallback = [...currentStep.substeps].reverse().find((s) => s.origin === "ai" && s.last_known_bbox);
+  const withScreenshot = includeScreenshotForNextQuestion;
+  includeScreenshotForNextQuestion = false;
+  updateScreenshotToggleUi();
+
+  const respondingTo = resolveRespondingTo();
+  const respondingToSub = currentStep.substeps.find((s) => s.id === respondingTo) ?? null;
+
+  // Appended optimistically, before the answer comes back — the question
+  // itself is real the instant it's sent; only instruction_text (the
+  // answer) is still pending, shown as a placeholder until it resolves.
   const substep = {
     id: `${currentStep.id}-live-${currentStep.substeps.length + 1}`,
     origin: "user",
     question,
-    instruction_text: nextCannedReply(),
+    respondingTo,
+    instruction_text: "Thinking…",
     action: "none",
-    last_known_bbox: fallback ? fallback.last_known_bbox : null,
+    last_known_bbox: respondingToSub?.last_known_bbox ?? null,
   };
   currentStep.substeps.push(substep);
   renderChat();
-  persistSkills();
+
+  try {
+    const result = await withStatus("Answering your question", () =>
+      invoke("answer_question", {
+        question,
+        withScreenshot,
+        scope: withScreenshot ? currentCaptureScope() : null,
+        context: answerContext(respondingToSub),
+      }),
+    { slowAfter: 4, stallAfter: 30 });
+    substep.instruction_text = result.answer;
+  } catch (err) {
+    substep.instruction_text = `Couldn't get an answer: ${err}`;
+  } finally {
+    input.disabled = false;
+    sendBtn.disabled = false;
+    renderChat();
+    await persistSkills();
+  }
 }
 
 document.querySelector("#chat-send").addEventListener("click", sendChatMessage);
