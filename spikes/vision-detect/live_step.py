@@ -6,22 +6,30 @@ nothing else — this is meant to be shelled out to and parsed by the
 Tauri/Rust overlay backend).
 
 Usage:
-    python live_step.py "<target description>" ["<x>,<y>,<width>,<height>"]
+    python live_step.py "<target description>" ["<x>,<y>,<width>,<height>"] [--context "<text>"]
 
-    python live_step.py "<target description>" --portal <any|window|monitor>
+    python live_step.py "<target description>" --portal <any|window|monitor> [--context "<text>"]
 
-The optional second argument scopes the capture to a screen region (see
-docs/decisions/0003-capture-region-not-window-detection.md) — a user-drawn
-box from the overlay, in absolute screen pixels. Omit it to capture the
-full primary monitor. Returned coordinates are relative to whatever was
-captured (the region, if given), matching image_width/image_height — the
-caller is responsible for offsetting back into screen space.
+The optional second positional argument scopes the capture to a screen
+region (see docs/decisions/0003-capture-region-not-window-detection.md) —
+a user-drawn box from the overlay, in absolute screen pixels. Omit it to
+capture the full primary monitor. Returned coordinates are relative to
+whatever was captured (the region, if given), matching image_width/
+image_height — the caller is responsible for offsetting back into screen
+space.
 
 `--portal` instead captures a source the user already picked through the
 desktop portal (see portal_capture.py) — the only working path on Wayland
 sessions that are not wlroots-based, where there is no way to enumerate a
 window or crop to its rect. There, the frame *is* the scope, so there is
 no region to offset by: coordinates are relative to the picked source.
+
+`--context "<text>"` is optional free-text background on what this
+target's step is trying to accomplish (goal, step brief/watch_for,
+substeps already covered) — passed straight through to the vision prompt
+alongside the screenshot, see locate.py. Assembled entirely on the
+caller's side (sidebar.js's locateContext); this script neither builds
+nor interprets it.
 
 Output (stdout, one line):
     {"x0": int, "y0": int, "x1": int, "y1": int,
@@ -107,21 +115,33 @@ def capture_screen(
 
 def main() -> None:
     args = sys.argv[1:]
-    if len(args) not in (1, 2, 3):
+    if not args:
         print(
             f"Usage: python {sys.argv[0]} \"<target description>\" "
-            f"[\"<x>,<y>,<width>,<height>\" | --portal <any|window|monitor>]",
+            f"[\"<x>,<y>,<width>,<height>\" | --portal <any|window|monitor>] "
+            f"[--context \"<text>\"]",
             file=sys.stderr,
         )
         sys.exit(1)
 
     target = args[0]
+    rest = args[1:]
+
+    context = None
+    if "--context" in rest:
+        i = rest.index("--context")
+        if i + 1 >= len(rest):
+            print("--context needs a value", file=sys.stderr)
+            sys.exit(1)
+        context = rest[i + 1]
+        rest = rest[:i] + rest[i + 2:]
+
     region = None
     portal_scope = None
-    if len(args) > 1 and args[1] == "--portal":
-        portal_scope = args[2] if len(args) > 2 else "any"
-    elif len(args) == 2:
-        region = tuple(int(v) for v in args[1].split(","))
+    if rest and rest[0] == "--portal":
+        portal_scope = rest[1] if len(rest) > 1 else "any"
+    elif rest:
+        region = tuple(int(v) for v in rest[0].split(","))
         if len(region) != 4:
             print("Region must be \"x,y,width,height\"", file=sys.stderr)
             sys.exit(1)
@@ -138,7 +158,7 @@ def main() -> None:
 
     try:
         capture_screen(screenshot_path, region, portal_scope)
-        box = locate_element(client, screenshot_path, target)
+        box = locate_element(client, screenshot_path, target, context)
         print(json.dumps(box))
     except Exception as exc:  # noqa: BLE001 — CLI boundary, report and exit non-zero
         print(f"live_step failed: {exc}", file=sys.stderr)

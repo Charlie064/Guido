@@ -187,6 +187,50 @@ subscription from. Short-demo call counts (not 25/skill):
 Quote **200–1,000 locates, well under $2** for the demo month at
 half-res. Research for those sessions is extra.
 
+## Guide->Do->Verify calls (added after this doc's original pricing pass)
+
+The Guide->Do->Verify UI (`af979f0`) added three call types this doc
+never priced. All still `claude-sonnet-5`, no server-side metering
+beyond the initial `research_goal` quota check (`website/worker/`'s
+`handleSkillStart` only gates starting a new skill — `plan_step`,
+`locate_element`, `verify_substep`, and `answer_question` all fire
+freely once a skill run has started).
+
+- **`plan_step`** (`vision-detect/plan_step.py`) — text-only, ~200-word
+  prompt, `max_tokens=2048`. Fires once per top-level step, lazily on
+  first expand: **5/skill**. ~$0.007/call -> **+$0.035/skill**, a ~25%
+  bump on the old $0.14/skill baseline. Unlike locate/verify below,
+  this one isn't optional — every expanded step costs one.
+- **`verify_substep`** (`vision-detect/verify.py`) — screenshot (700
+  visual tokens half-res) + short prompt + `max_tokens=400`. Manually
+  triggered per substep via "Check my work." ~$0.0027/call.
+- **`answer_question`** (`vision-detect/answer.py`) — text, optional
+  screenshot, `max_tokens=1024`. Ad hoc, one per user follow-up.
+  ~$0.0036/call (~$0.005 with a screenshot attached). **Not counted
+  against any quota** — a starter/plus user within their monthly skill
+  allowance can ask unlimited follow-ups on one skill at zero
+  additional cost control. This is the one open-ended line item; flag
+  for a cap (e.g. folded into the same skill-run quota, or its own
+  monthly N) before shipping past MVP.
+
+**This also changes what "25 locates/skill" means.** That figure
+assumed automatic per-step vision calls. `locate_element` and
+`verify_substep` are now both manual, per-substep clicks — actual
+usage is bounded by how many substeps exist and how often a user
+clicks "check"/"locate," not a fixed count. Treat 25 as an upper
+bound, not the expected case.
+
+**Adjusted typical-skill estimate:** old $0.14 -> **~$0.18-0.22/skill**
+(research + 5x plan_step + a realistic ~10-15 locate/verify clicks,
+down from 25 automatic ones). Monthly COGS at 1 skill/day stays close
+to the $4.05/user/month above — plan_step adds ~$1.05/month
+(30 x $0.035), the main mover — plus the uncapped `answer_question`
+tail this doc has no ceiling for yet.
+
+No sticker-price change recommended yet: the delta is small (~$1-2/
+user/month) against the $8-12 margin already reasoned about above. The
+action item is capping `answer_question`, not repricing.
+
 ## Not in these numbers
 
 - ElevenLabs STT/TTS ([ADR 0002](../decisions/0002-agency-hybrid-vision-platform-business.md))

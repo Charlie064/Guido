@@ -18,12 +18,25 @@ via sidebar.js's setup step) — the actual target app's name/WM_CLASS
 than staying on full-screen capture. Scopes the research prompt to that
 app instead of leaving it to guess the app from goal text alone.
 
-Output (stdout, one line): a JSON array of step objects —
-    [{"title": str, "brief": str, "watch_for": str}, ...]
-- title: short step name, shown in the step list
-- brief: one sentence on what this step accomplishes and why
-- watch_for: a version/UI caveat or pitfall worth flagging up front
-  (e.g. "the ribbon may be collapsed"), or "" if research found none
+Output (stdout, one line): a JSON object —
+    {"title": str, "steps": [{"title": str, "brief": str, "watch_for": str}, ...]}
+- title (top-level): a short, human-written-sounding description of the
+  goal — the same idea as ChatGPT auto-titling a conversation, e.g. "Add
+  a Bulleted List in Google Docs" for the goal "how do i make a bulleted
+  list in google docs". Shown everywhere the chat/skill is listed (the
+  home screen, the path view's title bar) instead of the user's raw
+  prompt verbatim, since a goal is often typed as a question or a run-on
+  sentence and doesn't read well as a label.
+- steps: the ordered list of top-level steps, each with:
+  - title: short step name, shown in the step list
+  - brief: one sentence on what this step accomplishes and why
+  - watch_for: a version/UI caveat or pitfall worth flagging up front
+    (e.g. "the ribbon may be collapsed"), or "" if research found none
+
+Generated in this same call rather than a separate one — the model
+already has the goal and is about to describe it in `steps` anyway, so a
+second dedicated "summarize this" call would just be paying for a
+network round trip to re-derive a fact this call already has in context.
 
 Errors go to stderr with a non-zero exit code.
 """
@@ -38,10 +51,10 @@ from dotenv import load_dotenv
 
 MODEL = "claude-sonnet-5"
 
-REQUIRED_FIELDS = {"title", "brief", "watch_for"}
+STEP_REQUIRED_FIELDS = {"title", "brief", "watch_for"}
 
 
-def research_goal(client: anthropic.Anthropic, goal: str, app_name: str | None = None) -> list[dict]:
+def research_goal(client: anthropic.Anthropic, goal: str, app_name: str | None = None) -> dict:
     app_clause = f'in "{app_name}"' if app_name else "in some application"
     prompt = (
         f'A user wants to do this {app_clause}: "{goal}". '
@@ -54,12 +67,17 @@ def research_goal(client: anthropic.Anthropic, goal: str, app_name: str | None =
         "caveat, a common pitfall, an easy-to-miss detail. Don't guess at "
         "exact on-screen positions or wording; that depends on the "
         "user's actual screen and isn't something this research pass can "
-        "know. Respond with ONLY a JSON array (no other text), one object "
-        "per step, in this exact shape: "
-        '[{"title": "short step name", '
+        "know. Also write a short, specific title for this whole chat — "
+        "the same idea as how ChatGPT titles a conversation: a few words "
+        "describing the goal, not a restatement of the user's literal "
+        "question. Respond with ONLY a JSON object (no other text), in "
+        "this exact shape: "
+        '{"title": "short description of the goal, e.g. Add a Bulleted '
+        'List in Google Docs", '
+        '"steps": [{"title": "short step name", '
         '"brief": "one sentence on what this step accomplishes and why", '
         '"watch_for": "a caveat or pitfall worth flagging up front, or '
-        '\\"\\" if none"}, ...]'
+        '\\"\\" if none"}, ...]}'
     )
 
     response = client.messages.create(
@@ -88,9 +106,9 @@ def research_goal(client: anthropic.Anthropic, goal: str, app_name: str | None =
     # Web search responses commonly come back as several text blocks (the
     # model's answer gets split at citation boundaries), sometimes with a
     # blank one thrown in — joining all of them (not just the last) is
-    # required, or the JSON array gets truncated mid-object (observed
+    # required, or the JSON object gets truncated mid-value (observed
     # live: extraction failed because the last block alone started
-    # mid-string, well after the array's opening "[").
+    # mid-string, well after the object's opening "{").
     text_blocks = [block.text.strip() for block in response.content if block.type == "text"]
     text_blocks = [t for t in text_blocks if t]
     if not text_blocks:
@@ -108,20 +126,30 @@ def research_goal(client: anthropic.Anthropic, goal: str, app_name: str | None =
     text = re.sub(r"</?cite[^>]*>", "", text)
 
     # models sometimes wrap JSON in a markdown code fence, or prepend a
-    # stray sentence of commentary, despite "ONLY a JSON array" — both
-    # observed live. Extract the array substring rather than trusting the
+    # stray sentence of commentary, despite "ONLY a JSON object" — both
+    # observed live (against the old bare-array shape; same failure mode
+    # applies here). Extract the object substring rather than trusting the
     # whole trimmed block to be valid JSON on its own.
-    start, end = text.find("["), text.rfind("]")
+    start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1 or end < start:
-        raise RuntimeError(f"no JSON array found in response: {text}")
+        raise RuntimeError(f"no JSON object found in response: {text}")
     text = text[start : end + 1]
 
-    steps = json.loads(text)
-    if not isinstance(steps, list) or not all(
-        isinstance(s, dict) and REQUIRED_FIELDS.issubset(s) for s in steps
+    result = json.loads(text)
+    steps = result.get("steps") if isinstance(result, dict) else None
+    title = result.get("title") if isinstance(result, dict) else None
+    if (
+        not isinstance(result, dict)
+        or not isinstance(title, str)
+        or not title.strip()
+        or not isinstance(steps, list)
+        or not all(isinstance(s, dict) and STEP_REQUIRED_FIELDS.issubset(s) for s in steps)
     ):
-        raise RuntimeError(f"expected a JSON array of {REQUIRED_FIELDS} objects, got: {text}")
-    return steps
+        raise RuntimeError(
+            f'expected {{"title": non-empty str, "steps": [{STEP_REQUIRED_FIELDS} '
+            f"objects]}}, got: {text}"
+        )
+    return result
 
 
 def main() -> None:

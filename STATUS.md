@@ -420,13 +420,90 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   input field's placeholder text, which was invisible the moment that
   input lost focus or was replaced by another view.
 
+- **Guide → Do → Verify UI wired** (2026-08-29, later than the backend
+  entry above): a "Check my work" button per AI substep
+  (`verifyHtml`/`data-verify` in `sidebar.js`) calls `verify_substep`,
+  shows expected-vs-observed inline, and offers "Ask for help" on a
+  mismatch (prefills the chat input, hands off to the existing reactive-
+  substep mechanism). A separate "Next step" button (`#step-advance`) is
+  the plain self-confirm advance, deliberately not gated on any verify
+  having run. Fixed in passing: `generateStepSubsteps` never copied
+  `expected_outcome` from `plan_step`'s response onto the stored substep,
+  so the button would have had nothing to check — caught before shipping.
+  Relative/before-after checks ("exposure increased from before") are
+  deliberately out of this pass — Charlie caught that they need a
+  before-state screenshot, which conflicts with Verify's premise that a
+  screenshot only happens on a manual press; split out as
+  [BL-011](docs/BACKLOG.md). **Not yet click-tested in a running app** —
+  no way to drive the GUI from this environment; verified by build/
+  syntax checks and re-reading the wiring only.
+
+- **Reactive follow-up questions now get real AI answers** (2026-08-29,
+  later than the entries above): `sendChatMessage` in `sidebar.js` no
+  longer calls `nextCannedReply()`'s fixture — it calls a new
+  `answer_question` command (`answer.py`/`answer_step.py`, `lib.rs`).
+  No web search (predictable latency/cost per question, unlike
+  Research). Text-only by default; a screenshot only via a separate
+  toggle button next to Send that resets after every send, keeping the
+  "screenshot only on a deliberate, named action" rule intact. Each
+  question is tied to the specific AI substep it's about
+  (`respondingTo`) and renders nested under it instead of appended at
+  the step's end — resolved via whichever substep bubble was last
+  clicked, or the "Ask for help" button on a failed Verify, falling back
+  to the step's last AI substep if neither happened. No cap on questions
+  per step, deliberately, with the cost-model gap flagged (same
+  unbudgeted-cost note as before, now doubly true since this path is
+  real). Verified live via direct `answer_step.py` calls (text-only and
+  with-screenshot, both real API calls) — **not yet click-tested in the
+  running app itself**, same limitation as the Verify UI above.
+
 ## What's next
 
+- **Guide → Do → Verify — backend built and tested, no UI yet.**
+  Deliberately prioritized over on-screen highlight/callout work per
+  Charlie's direction: checking the user's work is more central to the
+  product than where a box is drawn, and turned out to be the cheaper
+  build too. `plan_step` now generates an `expected_outcome` per substep;
+  a new `verify_substep` call (`verify.py`/`verify_step.py`, `lib.rs`)
+  checks a screenshot against it and returns `{matches, observed}`.
+  Verified live with real API calls, including a value-reading test (did
+  the model correctly read an exact clock time off a screenshot and
+  match/reject against two different expected values — yes, both times).
+  Design: manual confirm per substep, AI verify optional at that point
+  (not automatic/polling — same trigger model as today's locate button);
+  a mismatch shows expected-vs-observed and offers "ask for help," which
+  becomes a normal reactive (pink) substep rather than a dead end;
+  advancing to the next top-level step is gated on the current one being
+  confirmed, and the *next* step's `plan_step` call reuses the last
+  verify's screenshot as vision input instead of capturing separately.
+  Full design: `docs/planning/vision-driven-substep-loop.md`. Not wired
+  to the UI yet — see the collision note below.
+- **Note: a second Claude Code session (`tutoria-b4`) is concurrently
+  editing `sidebar.js`/`sidebar.html`/`icons.js` tonight** — a two-step
+  home gate (goal + window pick, either order), a research-progress
+  ticker, app icons for picked windows, deletable chats (landed in
+  `7bb1555`, with more uncommitted on top as of this entry). This session
+  deliberately avoided those three files after catching a live collision
+  mid-edit (briefly saw an undefined `refreshHomeSteps()` call). The
+  `currentCaptureScope()`/`deriveScopeFromGlobals()` split from the
+  per-skill-capture-scope work below did land in `sidebar.js` and appears
+  compatible with what `tutoria-b4` independently converged on, but
+  wasn't coordinated — worth a deliberate re-read of `sidebar.js` before
+  either session's next edit there, not just another silent merge.
+- **Per-skill capture scope — paused mid-build**, superseded in priority
+  by Verify per the collision above. `currentCaptureScope()` now prefers
+  `currentSkill?.captureScope` over the global pick if a skill has its
+  own (falls back to the global for older skills/pre-goal-creation);
+  nothing yet sets `captureScope` on a skill, and the picker hasn't moved
+  into goal creation. See the planning doc's "Suggested build order."
 - **Add credits to the project's Anthropic API key** — `research.py`
   (goal→steps) and `plan_step.py` (per-step substep generation) both fail
   with "Your credit balance is too low to access the Anthropic API."
   Blocks live end-to-end testing of both the chat-to-steps flow and the
   new disk persistence (below) until resolved.
+  **Resolved** (2026-08-29, later the same night) — both now succeed
+  live; verified with multiple real goals and a real substep-planning
+  call.
 - **Verify skill persistence end-to-end** once credits are restored: ask a
   real goal, confirm `~/.local/share/com.charlie.tauri-overlay/skills.json`
   is written, restart the app, confirm the skill reloads instead of
@@ -505,3 +582,78 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   client + `wrangler secret put GOOGLE_CLIENT_SECRET`, remote migrate,
   and Charlie pairing on the Tauri keyring/loopback half. See
   `docs/planning/login-membership-plan.md`.
+- **App icons for picked windows — built, unverifiable on this machine.**
+  `window_icon` (`src-tauri/src/lib.rs`) extracts the picked window's own
+  `_NET_WM_ICON` on Linux X11, encodes it to PNG once, and caches it per
+  *app* under `<app_data>/app-icons/<slug>.png` — keyed by app name, not
+  window, so a saved chat still shows its icon after the window is gone
+  (the cache is read with no window id at all). Shown on the setup label
+  and on every chat row. The decode has unit tests but has never run on
+  real pixels: this is a GNOME Wayland machine, Mutter publishes no
+  `_NET_CLIENT_LIST`, and a walk of the entire X11 tree finds zero
+  windows carrying an icon even with `GDK_BACKEND=x11`. Needs an X11
+  session to confirm; macOS/Windows backends are still unwritten and
+  return "no icon". See `BL-004`.
+- **App identity is entirely missing on Wayland — new `BL-009`.** Not a
+  regression, just now measured: on the portal backend a chat saves
+  `appName: null`, so Research gets no app to scope to and no icon can be
+  looked up. The portal only ever reports `"window (1920x1080)"`. BL-004
+  assumed manual entry as the fallback here; it was never built.
+- **Chats can be deleted.** Trash button per row in the chat list
+  (`renderAppsList`/`deleteSkill` in `sidebar.js`); deleting the chat
+  currently open returns to home rather than leaving a view onto a
+  deleted skill. With zero chats the whole section, heading included, is
+  hidden. Not yet exercised in the running app.
+- **Home view reworked into a fixed 40/60 split.** Top pane: the ask box
+  and the window picker — the same control as the setup view's, now
+  mounted in both places and driven by one set of handlers. Each carries
+  its own tick *inside* the control, behind a hairline separator, rather
+  than on a separate checklist: the control is the label. The two panes
+  are two surfaces rather than two sections — the top is raised (white,
+  brand grid) and is where a new chat is made, the bottom is recessed
+  (grey, flat, inset shadow) and holds `Previous chats` (was `Apps`),
+  whose list scrolls under a pinned heading with its own scrollbar. The
+  panel is wider (420px) to fit the inline ticks. Research runs the moment a goal is
+  submitted rather than waiting on a window pick, and shows an animated
+  loader with rotating copy in place of a static line; the step list
+  opens once both ticks land, fading in. Whichever of the two happens
+  last decides the timing: if the window is picked after research
+  finished, the open is held 1s so the tick it just earned is visible.
+  A new chat is persisted and listed under `Previous chats` before the
+  step list opens, so it survives never being opened.
+- **Chats are grouped by app, one page per group.** Home lists one button
+  per app — icon, "<App> chats", the newest chat's title, a count — and
+  opening one goes to that app's own page (the new `group` view), which
+  lists its chats under the group's shared icon with a back arrow to home.
+  Every group expanded on one page was fine at two apps and stops being
+  fine at ten. Ranked by recency twice over — chats newest-first inside a
+  group, groups by their own newest chat — off a new `createdAt` on each
+  skill (chats saved before it existed fall back to save order). Group
+  keys normalise case, punctuation and the vendor word, so `Excel` and
+  `Microsoft Excel` are one group rather than two; the fixtures
+  deliberately use both names to exercise that. Where no icon can be
+  extracted or resolved, a shipped logo stands in (`assets/excel.png`, via
+  `APP_MARK_IMAGES` in `sidebar.js`), then the app's initial.
+- **The window picker shows the app, not a sentence.** Once identified it
+  reads as an icon plus the app's name alone; `Capturing: …` / `Window: …`
+  are gone, and with them the "on-screen box vs diagram only" note that
+  used to trail the portal label. Verified by rendering `sidebar.html` in
+  WebKitGTK (the same engine Tauri uses) with a stubbed `__TAURI__`
+  bridge, across the idle / researching / waiting-on-pick states; the
+  running app boots clean but couldn't be screenshotted (grim needs
+  wlr-screencopy, this is Mutter).
+- **App identity now works on Wayland — `BL-009` largely closed.** One
+  vision call reads the app's name off the captured frame right after a
+  pick (`spikes/vision-detect/identify_app.py`, the `identify_app`
+  command in `lib.rs`), which is the only source of identity the portal
+  leaves available. That name scopes Research, labels the picker, and is
+  backfilled onto a chat created before the pick landed. The icon then
+  comes from a freedesktop desktop-entry + icon-theme lookup keyed on the
+  name alone (`window_provider::icon_for_app_name`), so it needs no live
+  window — which is what makes it work both on Wayland and for a chat
+  whose window is long gone; `window_icon` falls back to it whenever
+  extraction from a window isn't possible. Verified in pieces, not end to
+  end: the prompt against `samples/vscode-welcome.png` (answered "Visual
+  Studio Code" / "Welcome"), the icon lookup by unit test against this
+  machine's real icon themes (Firefox, VS Code, Nautilus, GNOME Settings
+  all resolve). **Not yet run through a real portal pick.**

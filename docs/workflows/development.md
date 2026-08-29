@@ -134,6 +134,13 @@ Rust changes need the app restarted (`tauri dev` rebuilds, but
 `tauri.conf.json` changes need a full restart). Python changes need
 nothing — those scripts are shelled out per call.
 
+**Linux dev builds show a generic cog icon** in the dock/switcher until
+you run `scripts/install-linux-icon.sh` once. On Wayland the compositor
+ignores the icon the window sets on itself and matches the surface
+`app_id` (`tauri-overlay`) to an installed `.desktop` file; the script
+writes one plus the hicolor icons that packaged builds would ship.
+Restart the app afterwards.
+
 The skills/steps/chat content is **fixture data** (`src/fake-skill.js`),
 not real AI output — it exercises the real UI and the real substep shape
 from [features/skills.md](../features/skills.md) without making API

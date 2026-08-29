@@ -316,47 +316,114 @@ function WorksWithMarquee() {
   );
 }
 
+const PERSONAS = [
+  { value: "uni_student", label: "University student" },
+  { value: "young_professional", label: "Young professional" },
+  { value: "high_school_student", label: "High school student" },
+  { value: "entrepreneur", label: "Entrepreneur / Founder" },
+  { value: "other", label: "Other" },
+];
+
 function WaitlistForm() {
-  const [status, setStatus] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [persona, setPersona] = useState(null);
+  const [status, setStatus] = useState("idle"); // idle | submitting | done | error
 
   async function onSubmit(e) {
     e.preventDefault();
-    const form = e.currentTarget;
-    const email = new FormData(form).get("email");
-    setStatus("Saving…");
+    if (!name.trim() || !email.trim() || status === "submitting") return;
+    setStatus("submitting");
     try {
       const res = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          phone: phone.trim() || null,
+          persona,
+        }),
       });
-      if (res.ok) {
-        form.reset();
-        setStatus("You're on the list.");
-      } else {
-        setStatus("Something went wrong.");
-      }
+      setStatus(res.ok ? "done" : "error");
     } catch {
-      setStatus("Something went wrong.");
+      setStatus("error");
     }
   }
 
+  if (status === "done") {
+    return <p className="text-sm font-semibold text-[#0A0A0A]">You're on the list.</p>;
+  }
+
   return (
-    <form onSubmit={onSubmit} className="flex flex-col sm:flex-row items-center gap-2">
+    <form onSubmit={onSubmit} className="w-full max-w-md flex flex-col gap-3">
+      <div className="flex flex-col sm:flex-row gap-2">
+        <input
+          type="text"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          className="flex-1 rounded-full border border-black/15 bg-white px-4 py-2 text-sm outline-none focus:border-black/30"
+        />
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="flex-1 rounded-full border border-black/15 bg-white px-4 py-2 text-sm outline-none focus:border-black/30"
+        />
+      </div>
+
       <input
-        type="email"
-        name="email"
-        required
-        placeholder="you@example.com"
-        className="rounded-full border border-black/15 bg-white px-4 py-2 text-sm w-56 outline-none focus:border-black/30"
+        type="tel"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="Phone (optional)"
+        className="rounded-full border border-black/15 bg-white px-4 py-2 text-sm outline-none focus:border-black/30"
       />
-      <button
-        type="submit"
-        className="rounded-full px-4 py-2 text-sm font-semibold border border-black/15 bg-white text-[#0A0A0A] hover:border-black/30 transition-colors"
-      >
-        Join waitlist
-      </button>
-      {status ? <p className="text-xs text-neutral-500">{status}</p> : null}
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-neutral-500">
+          How would you best describe yourself? (optional)
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {PERSONAS.map((p) => {
+            const active = persona === p.value;
+            return (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setPersona(active ? null : p.value)}
+                aria-pressed={active}
+                className="rounded-full px-3 py-1.5 text-xs font-semibold border transition-colors"
+                style={{
+                  background: active ? "#0A0A0A" : "#ffffff",
+                  borderColor: active ? "#0A0A0A" : "rgba(0,0,0,0.15)",
+                  color: active ? "#ffffff" : "#6b6b6b",
+                }}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={status === "submitting"}
+          className="rounded-full px-4 py-2 text-sm font-semibold border border-black/15 bg-white text-[#0A0A0A] hover:border-black/30 transition-colors disabled:opacity-60"
+        >
+          {status === "submitting" ? "Joining…" : "Join waitlist"}
+        </button>
+        {status === "error" && (
+          <p className="text-xs text-neutral-500">Something went wrong.</p>
+        )}
+      </div>
     </form>
   );
 }
@@ -685,7 +752,7 @@ export default function Landing() {
       {/* Footer */}
       <footer className="border-t border-black/[0.06]">
         <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col gap-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
             <Logo />
             <WaitlistForm />
           </div>

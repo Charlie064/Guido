@@ -15,10 +15,19 @@ Usage:
     python plan_step.py "<goal>" "<step_title>" "<step_brief>" "<step_watch_for>"
 
 Output (stdout, one line): a JSON array of substep objects —
-    [{"target_description": str, "instruction_text": str, "action": str}, ...]
+    [{"target_description": str, "instruction_text": str, "action": str,
+      "expected_outcome": str}, ...]
 - target_description: plain-text description of the UI element
 - instruction_text: the bubble copy shown near the element
 - action: one of none / click / type / move-cursor / keyboard-shortcut
+- expected_outcome: plain-text description of what the screen should show
+  once this substep is actually done — e.g. "the Exposure field reads
+  approximately +0.5", "column A has a header 'Month' and six month names
+  below it". This is what the verify step (see verify.py) checks a later
+  screenshot against instead of asking the user to click "Done" and be
+  trusted; generated here, not at verify-time, since plan_step already
+  knows what each substep is supposed to accomplish and a separate call
+  would just be re-deriving the same fact from less context.
 
 Errors go to stderr with a non-zero exit code.
 """
@@ -32,7 +41,7 @@ from dotenv import load_dotenv
 
 MODEL = "claude-sonnet-5"
 
-REQUIRED_FIELDS = {"target_description", "instruction_text", "action"}
+REQUIRED_FIELDS = {"target_description", "instruction_text", "action", "expected_outcome"}
 VALID_ACTIONS = {"none", "click", "type", "move-cursor", "keyboard-shortcut"}
 
 
@@ -47,16 +56,23 @@ def plan_step(
         "substeps — individual clicks, selections, or things to type, the "
         "level of detail someone would need to actually do it. For each "
         "substep, describe the UI element in plain text (not a coordinate "
-        "— you can't see the user's actual screen) and give a short "
-        "instruction. Don't cover other steps in the overall plan, only "
-        "this one. Respond with ONLY a JSON array (no other text), one "
-        "object per substep, in this exact shape: "
+        "— you can't see the user's actual screen), give a short "
+        "instruction, and describe what the screen should show once this "
+        "one substep is actually done — specific enough that someone "
+        "looking at a screenshot could check it without asking the user, "
+        "e.g. a field's approximate value, or specific text/data that "
+        "should now be present. Don't cover other steps in the overall "
+        "plan, only this one. Respond with ONLY a JSON array (no other "
+        "text), one object per substep, in this exact shape: "
         '[{"target_description": "plain-text description of the UI '
         'element, e.g. \'the Insert tab in the ribbon\'", '
         '"instruction_text": "short instruction shown next to the '
         'element", '
         '"action": "one of: none, click, type, move-cursor, '
-        'keyboard-shortcut"}, ...]'
+        'keyboard-shortcut", '
+        '"expected_outcome": "what the screen should show once this '
+        'substep is done, e.g. \'the Exposure field reads approximately '
+        '+0.5\'"}, ...]'
     )
 
     response = client.messages.create(
