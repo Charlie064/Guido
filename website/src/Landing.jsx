@@ -203,7 +203,7 @@ function DesktopDownloadWindow({ onClose }) {
             className="text-2xl font-semibold text-white tracking-tight"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
           >
-            Ready when you are.
+            On your desktop.
           </h3>
         </div>
 
@@ -244,10 +244,6 @@ function DesktopDownloadWindow({ onClose }) {
           <Icon size={15} />
           {clicked ? "Coming soon" : `Download for ${current.label}`}
         </button>
-
-        <p className="text-xs" style={{ color: "rgba(255,255,255,0.35)" }}>
-          Free to try. Builds ship soon.
-        </p>
       </div>
     </div>
   );
@@ -634,6 +630,45 @@ export default function Landing() {
               {audioOn ? "Audio on" : "Tap to hear it"}
             </button>
             <EqBars active={audioOn} color={color.accent} />
+          </div>
+        </div>
+      </section>
+
+      {/* How it works, in more detail */}
+      <section className="max-w-5xl mx-auto px-6 py-20">
+        <h2
+          className="text-3xl font-semibold tracking-tight text-center mb-14"
+          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+        >
+          A closer look at how it works
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          <div>
+            <h3 className="font-semibold text-lg mb-3">It reads your screen</h3>
+            <p className="text-neutral-600 text-[15px] leading-relaxed">
+              Guido looks at what is actually open on your computer right now, not a
+              generic recording made for someone else's setup. It identifies the app
+              you are in, the panel you are looking at and the specific buttons and
+              menus in front of you before it says anything.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg mb-3">It builds a real plan</h3>
+            <p className="text-neutral-600 text-[15px] leading-relaxed">
+              When you ask for something, Guido researches the task first. It works
+              out the steps needed for your version of the software and puts
+              together a short plan, instead of replaying a fixed script that was
+              written for a different screen months ago.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-semibold text-lg mb-3">It checks as you go</h3>
+            <p className="text-neutral-600 text-[15px] leading-relaxed">
+              After every step, Guido looks at your screen again to see if it
+              actually worked. If you clicked the wrong thing or something looks
+              different than expected, it notices and adjusts the next step instead
+              of pushing you forward blindly.
+            </p>
           </div>
         </div>
       </section>
