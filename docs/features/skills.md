@@ -126,6 +126,34 @@ When the user reaches a top-level step:
   question becomes a **reactive substep**, created only because the user
   asked — the AI never generates these speculatively. These render in
   **pink**.
+  - **Scoped, resolved 2026-08-29** (not yet built — `sendChatMessage` in
+    `sidebar.js` still answers with `nextCannedReply()`'s fixture, see
+    "Not built yet" below): a reactive substep is **tied to the specific
+    AI substep it's asked from**, not appended free-floating at the end
+    of the step's substep list the way it renders today. Carries a
+    `respondingTo: subId` field and renders directly under that substep —
+    matches the "Ask for help" button on a failed Verify (above), which
+    is already about one specific substep and should read that way.
+  - **No cap on how many can be asked per step**, deliberately — a
+    genuinely stuck user may need several in a row, and a hard wall on
+    the *Guide* half of the product reads as punitive. This is a
+    deliberate no-decision, not an oversight: there is currently no
+    quota/cost model at all for reactive Q&A once it's answering for
+    real (`business/pricing.md` only budgets *locates*, 5/step — a real
+    answer call is a new, unbudgeted cost line). Revisit once real usage
+    data exists on how many questions people actually ask.
+  - **Text-only by default; screenshot only on a separate, explicit
+    button** ("take a screenshot" or similar, not decided which label) —
+    not automatic just because a message was sent. Keeps the rule
+    established for Verify/plan_step (a screenshot only ever happens on
+    a manual, named button press, never as a side effect of typing)
+    intact for this path too, while still letting a confused user hand
+    the AI a look at their actual screen when text alone isn't enough.
+  - **Never reshapes the plan.** A follow-up's answer has no side effect
+    on the substeps still ahead in the step — `plan_step`'s output for
+    that step is never revised or added to in response to a Q&A. Keeps
+    per-step planning one clean, deterministic call rather than an
+    open-ended loop that reconsiders its own plan mid-step.
 - A screenshot is **manually triggered** by the user pressing a button
   when they want the AI to look at the current screen — not fired
   automatically per substep.
