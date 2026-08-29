@@ -172,6 +172,38 @@ point — this file should never pose as a source of truth for what's done.
     retention question, and `verify_substep` already takes a `context`
     string this could ride in on with no new plumbing) — not decided,
     scope this properly before building.
+- **BL-012 — "Show me": a dark spotlight overlay for Show mode.** A
+  dedicated, one-press way to do **Show** (`docs/philosophy/vision.md`'s
+  Teach/Show/Do split) — press "Show me" on a substep and the real
+  on-screen overlay darkens the whole target window/screen except a
+  cut-out hole around the located element (e.g. a menu item), rather than
+  today's box-plus-bubble drawn on top of an otherwise-untouched screen.
+  The dimming is what should carry "look here": everything *except* the
+  target recedes, instead of the target being one more bright rectangle
+  among many on a normal-brightness screen.
+  - **Where it fits today**: substeps already render two ways per
+    "Visual overlay" in `docs/architecture/overview.md` — the eye icon
+    (real on-screen box + text callout, `overlay.js`/`overlay.html`) and
+    the note icon (in-panel schematic, the required fallback wherever no
+    live window rect exists). This would be a third rendering behind the
+    eye icon, or a distinct mode of it, using the same `last_known_bbox`
+    data `locate_element` already returns — no new detection work, this
+    is presentation only.
+  - **Mechanism sketch, not decided**: an SVG mask (or a canvas
+    `globalCompositeOperation: "destination-out"` punch) over a
+    semi-opaque dark fill on the existing click-through `overlay` window,
+    with the hole sized/positioned from the same box the current
+    highlight rect uses. Needs a decision on hole shape (a rounded rect
+    around the bbox vs. a soft-edged radial cutout) and on how it composes
+    with `FrameAnchor` — a `Window`-anchored capture has a live rect to
+    darken exactly; a `Portal` window-scoped capture (no on-screen
+    position, per ADR 0006) can't draw a real overlay at all today and
+    would need the schematic to grow its own dimmed-hole treatment
+    instead, which is a separate design question from the on-screen case.
+  - **Product-naming note**: "Show me" as a button label reads well
+    against the Teach/Show/Do vocabulary already in vision.md — worth
+    keeping that label rather than inventing a new verb, so the UI matches
+    the mode names used elsewhere in the docs.
   - **Only reachable at all after at least one AI-verify has actually
     run** in the current substep sequence — self-confirmed-only substeps
     leave no baseline, so `plan_step` needs to know not to generate a
