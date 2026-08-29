@@ -40,10 +40,11 @@
 
 ## Session flow
 
-1. **Home** — after Continue, a compact chats list grouped by app. Today
-   that is a fixture “Excel chats” row (temporary Excel icon). Profile
-   (top right) can sign in or attach a live Excel window for locate
-   scope. Real OS app detection is still BL-004.
+1. **Home** — after Continue, the Research Ask field sits above a
+   compact chats list grouped by app. Today that is a fixture “Excel
+   chats” row (temporary Excel icon). Profile (top right) can sign in
+   or attach a live Excel window for locate scope. Real OS app
+   detection is still BL-004.
 2. **Goal** — the user states what they want to accomplish, in chat
    ("how do I make a chart"). The demo skill is “Make a chart in Excel”.
 3. **Research** — one-shot, online, AI-assisted. Runs exactly once per
