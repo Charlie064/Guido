@@ -298,6 +298,58 @@
         font-size: 11px;
       }
 
+      .new-goal-row {
+        display: flex;
+        gap: 6px;
+        padding: 12px 12px 0;
+        flex-shrink: 0;
+      }
+
+      #new-goal-input {
+        flex: 1;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 7px 9px;
+        font: inherit;
+        min-width: 0;
+      }
+
+      #new-goal-input:disabled {
+        opacity: 0.6;
+      }
+
+      #new-goal-send {
+        background: var(--blue);
+        color: var(--text);
+        border: none;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+
+      #new-goal-send:hover {
+        background: var(--blue-hover);
+      }
+
+      #new-goal-send:disabled {
+        background: var(--panel-raised);
+        color: var(--muted);
+      }
+
+      .new-goal-error {
+        padding: 0 12px;
+        color: var(--pink);
+        font-size: 10px;
+        flex-shrink: 0;
+      }
+
+      .new-goal-error:empty {
+        display: none;
+      }
+
       /* ---------- Path view ---------- */
 
       .path-body {
@@ -384,6 +436,10 @@
         color: var(--muted);
         font-size: 10px;
         margin-top: 2px;
+      }
+
+      .step-watch-for {
+        color: var(--pink);
       }
 
       .substep-list {
@@ -660,6 +716,11 @@
       </section>
 
       <section id="view-skills" class="view">
+        <div class="new-goal-row">
+          <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
+          <button id="new-goal-send" type="button">Ask</button>
+        </div>
+        <div class="new-goal-error" id="new-goal-error"></div>
         <div class="skills-body" id="skills-list"></div>
       </section>
 

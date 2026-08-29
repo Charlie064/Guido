@@ -7,9 +7,12 @@
   flagged undecided in [STATUS.md](../../STATUS.md).
 - **What's built**: the UI shape (steps/substeps, blue-vs-pink origin,
   expandable path, per-step chat) in `spikes/tauri-overlay/src/sidebar.js`,
-  driven by fixture data in `src/fake-skill.js`. **What isn't**: the
-  Research call, substep generation, real replies, and any persistence —
-  every substep below is currently hand-written fixture content.
+  driven by fixture data in `src/fake-skill.js`; and the Research call
+  itself (`spikes/vision-detect/research.py`, invoked via the
+  `research_goal` Tauri command in `lib.rs`). **What isn't**: substep
+  generation, real replies, and any persistence — every substep is still
+  hand-written fixture content, and a Research-generated step currently
+  has no way to be reached/expanded (see "Per-step loop" below).
 - Implements the per-step mechanics of the
   Goal → Research → See → Guide → Do → Verify → Learn loop from
   [philosophy/vision.md](../philosophy/vision.md), inside the four-layer
@@ -36,14 +39,40 @@
    chat, against the stated goal (not re-run per step). This is the
    expensive, highest-leverage call in the whole system: everything
    downstream is generated from its output, so its quality gates the
-   quality of the resulting skill. Produces an ordered list of coarse
-   top-level steps — not yet the fine-grained clicks.
+   quality of the resulting skill. Never sees a screenshot — it only
+   knows the goal — so its output is deliberately limited to goal-scoped
+   facts (true regardless of what the user's screen looks like when they
+   get there), not screen-specific detail like exact click targets.
+   Produces an ordered list of coarse top-level steps, each with:
+   - `title` — short step name
+   - `brief` — one sentence on what the step accomplishes and why
+   - `watch_for` — a UI-version caveat or pitfall worth flagging up
+     front (e.g. "the ribbon may be collapsed"), or `""` if none
+
+   Uses Claude's own `web_search_20260209` server tool rather than a
+   separate search provider — this is what fills the "Web research"
+   provider slot in
+   [architecture/overview.md](../architecture/overview.md). That tool's
+   dynamic filtering runs searches inside a code-execution wrapper under
+   the hood, which is markedly more token-hungry than plain search;
+   `research.py` caps it at `max_tokens=4096` and `max_uses=3` after a
+   smaller budget was observed live to truncate before ever producing an
+   answer.
 4. **One goal per chat.** Wanting to do something unrelated (e.g. a pivot
    table, after asking about a chart) means starting a new chat, which
    runs its own Research pass and produces its own skill. No mid-chat goal
    switching.
 
 ## Per-step loop
+
+**Not built yet — this is the gap left after Research.** A step produced
+by Research renders with `generated: false` and stays that way forever;
+`sidebar.js`'s `renderPath()` only makes a step clickable/expandable once
+`generated` is `true`, and nothing currently flips that or populates
+`substeps`. So today a real goal produces a browsable-but-inert list of
+steps (title + brief + watch_for, no dead end message anymore — see
+`renderPath`), not an interactive skill. The design below is the intended
+behavior once this call exists.
 
 When the user reaches a top-level step:
 

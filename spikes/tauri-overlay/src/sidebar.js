@@ -236,11 +236,66 @@ function renderSkillsList() {
     list.appendChild(card);
   }
 
-  const empty = document.createElement("div");
-  empty.className = "skill-card skill-card-empty";
-  empty.textContent = "Ask a new question to start another skill (not wired up in this preview)";
-  list.appendChild(empty);
+  if (SKILLS.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "skill-card skill-card-empty";
+    empty.textContent = "Ask a question above to generate your first skill.";
+    list.appendChild(empty);
+  }
 }
+
+let nextSkillId = SKILLS.length + 1;
+
+// Research is one-shot per chat, text-only (no screenshot) — see
+// docs/features/skills.md. It returns coarse top-level steps (title +
+// brief + watch_for — goal-scoped facts only, nothing screen-specific);
+// substeps are generated later, lazily, once the user actually reaches
+// each step (see openStep/the per-step chat view below).
+async function submitNewGoal() {
+  const input = document.querySelector("#new-goal-input");
+  const button = document.querySelector("#new-goal-send");
+  const errorEl = document.querySelector("#new-goal-error");
+  const goal = input.value.trim();
+  if (!goal) return;
+
+  input.disabled = true;
+  button.disabled = true;
+  errorEl.textContent = "";
+  const previousPlaceholder = input.placeholder;
+  input.placeholder = "Researching…";
+  input.value = "";
+
+  try {
+    const researchSteps = await invoke("research_goal", { goal });
+    const skill = {
+      id: `skill-${nextSkillId++}`,
+      title: goal,
+      goal,
+      steps: researchSteps.map((step, i) => ({
+        id: `s${i + 1}`,
+        title: step.title,
+        brief: step.brief,
+        watch_for: step.watch_for,
+        generated: false,
+        substeps: [],
+      })),
+    };
+    SKILLS.push(skill);
+    openSkill(skill);
+  } catch (err) {
+    errorEl.textContent = `Couldn't research that: ${err}`;
+  } finally {
+    input.disabled = false;
+    button.disabled = false;
+    input.placeholder = previousPlaceholder;
+    renderSkillsList();
+  }
+}
+
+document.querySelector("#new-goal-send").addEventListener("click", submitNewGoal);
+document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") submitNewGoal();
+});
 
 function openSkill(skill) {
   currentSkill = skill;
@@ -288,10 +343,29 @@ function renderPath() {
     main.appendChild(head);
 
     if (!step.generated) {
-      const caption = document.createElement("div");
-      caption.className = "step-caption";
-      caption.textContent = "Not generated yet — reach this step to see it.";
-      main.appendChild(caption);
+      // step.brief/watch_for come from Research (goal-scoped facts, no
+      // screenshot involved) and exist even before the AI-planned
+      // substeps below do — show them instead of a bare placeholder when
+      // present. Fixture steps (fake-skill.js) predate this field and
+      // fall back to the placeholder.
+      if (step.brief) {
+        const brief = document.createElement("div");
+        brief.className = "step-caption";
+        brief.textContent = step.brief;
+        main.appendChild(brief);
+      }
+      if (step.watch_for) {
+        const watch = document.createElement("div");
+        watch.className = "step-caption step-watch-for";
+        watch.textContent = `⚠ ${step.watch_for}`;
+        main.appendChild(watch);
+      }
+      if (!step.brief) {
+        const caption = document.createElement("div");
+        caption.className = "step-caption";
+        caption.textContent = "Not generated yet — reach this step to see it.";
+        main.appendChild(caption);
+      }
     }
 
     if (step.generated && expanded) {

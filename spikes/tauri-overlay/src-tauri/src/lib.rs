@@ -43,6 +43,16 @@ struct Region {
     height: i64,
 }
 
+// One coarse top-level step from the Research call — goal-scoped facts
+// only (title/brief/watch_for), never anything screen-specific, since
+// Research never sees a screenshot. See research.py's module docstring.
+#[derive(Serialize, Deserialize, Debug)]
+struct ResearchStep {
+    title: String,
+    brief: String,
+    watch_for: String,
+}
+
 // vision-detect lives at spikes/vision-detect, a sibling of this crate's
 // grandparent dir (spikes/tauri-overlay/src-tauri) — resolved from
 // CARGO_MANIFEST_DIR so it doesn't depend on the process's cwd.
@@ -74,6 +84,39 @@ fn locate_element(app: tauri::AppHandle, target: String, region: Option<Region>)
     sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
 
     result
+}
+
+// Research runs once per chat, on just the goal text — no screenshot, no
+// sidebar to hide (see locate_element above for why that one needs it).
+// See docs/features/skills.md's "Research" step.
+#[tauri::command]
+fn research_goal(goal: String) -> Result<Vec<ResearchStep>, String> {
+    run_research(&goal)
+}
+
+fn run_research(goal: &str) -> Result<Vec<ResearchStep>, String> {
+    let dir = vision_detect_dir();
+    let python = dir.join(".venv").join("bin").join("python3");
+    let script = dir.join("research.py");
+
+    let output = Command::new(&python)
+        .arg(&script)
+        .arg(goal)
+        .current_dir(&dir)
+        .output()
+        .map_err(|e| format!("failed to run research.py: {e}"))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "research.py exited with {}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str(stdout.trim())
+        .map_err(|e| format!("failed to parse research.py output ({stdout}): {e}"))
 }
 
 // Tauri's own setSize doesn't take effect on this window: once promoted
@@ -326,6 +369,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             locate_element,
+            research_goal,
             resize_sidebar,
             move_sidebar
         ])

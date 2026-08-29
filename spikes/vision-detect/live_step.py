@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 
 from locate import locate_element
 
-load_dotenv()
+load_dotenv(override=True)  # see research.py's load_dotenv comment
 
 
 def capture_screen(output_path: str, region: tuple[int, int, int, int] | None = None) -> None:
