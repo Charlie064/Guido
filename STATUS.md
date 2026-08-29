@@ -117,20 +117,144 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   flash on load) — verified via `hyprctl layers` holding steady at exactly
   80×80 across repeated checks, where the unfixed build drifted to 200×200
   within seconds every time.
-  - Real "move" is a new `move_sidebar` Rust command (`src-tauri/src/lib.rs`)
-    that rewrites the layer-shell top/left margins live, since a layer-shell
-    surface can't use Tauri's native window drag (no interactive
-    `xdg_toplevel`-style move on Wayland) — see its doc comment for why.
-  - `sidebar.js`/`sidebar.html`: pointer-drag on the icon (with a small
-    movement threshold to still distinguish a plain click-to-expand),
-    plus `wheel`/`keydown` interception so ctrl+scroll and ctrl+-/+/0
-    (WebKitGTK's page-zoom gesture) can't resize the page content either.
   - Position isn't persisted across restarts yet — tracked as a follow-up,
     not done here.
   - Branch: `claudev/charlie/draggable-icon`, not yet merged.
 
+- **GNOME tested — icon couldn't be moved (Hyprland-only mechanism), fixed
+  by dropping sidebar's layer-shell promotion entirely.** Confirmed
+  empirically, not assumed: capturing this app's own real
+  `WAYLAND_DEBUG=1` Wayland registry dump on a GNOME/Mutter session showed
+  zero `zwlr_*` globals — Mutter never advertises `wlr-layer-shell` at all
+  (a deliberate GNOME position, not a version gap), so the `move_sidebar`
+  command described above (margin-rewriting on a layer-shell surface) had
+  nothing to act on there.
+  - First fix tried: drop `sidebar`'s layer-shell promotion, keep it
+    always-on-top+undecorated, and drag via Tauri's native
+    `startDragging()` (an interactive `xdg_toplevel` move) instead of the
+    deleted `move_sidebar` IPC command. **Still didn't move on a live
+    GNOME test** — `startDragging()` on this always-on-top+undecorated
+    combination did not behave reliably here, despite being the
+    documented/supported mechanism in principle.
+  - **Second, working fix: make `sidebar` a plain decorated window,
+    `alwaysOnTop: false`.** No more custom drag code anywhere — the
+    window manager's own titlebar drag handles it, same as any other
+    app window, on every platform. `sidebar.js`'s entire pointer-drag
+    block is gone; the icon is now a plain `click` → expand. Trade-off,
+    accepted: `sidebar` is no longer forced above other windows, and on
+    tiling compositors (Hyprland/Sway) it can now be auto-tiled into the
+    workspace layout instead of floating.
+  - Icon start position pinned to the literal top-left corner (`(0, 0)`
+    in `tauri.conf.json`).
+  - **Separate, bigger finding: `grim` (the live-capture backend) is
+    completely broken on GNOME**, independent of any windowing choice —
+    tested directly (`grim test.png`) and got `compositor doesn't support
+    the screen capture protocol`. `grim` needs `wlr-screencopy`, the same
+    wlroots-only protocol family as `wlr-layer-shell`; GNOME's Mutter
+    implements neither. This means `locate_element`'s vision pipeline
+    cannot capture anything at all on GNOME today — a real gap, not yet
+    fixed. The correct fix is GNOME's own capture path,
+    `xdg-desktop-portal`'s Screenshot/ScreenCast API (D-Bus + PipeWire) —
+    real new work, not a config change. Also relevant to
+    `docs/decisions/0003-capture-region-not-window-detection.md` /
+    `BL-005`: window-*targeted* capture wouldn't sidestep this either,
+    since GNOME blocks cross-app window enumeration entirely (the portal
+    picker is the only sanctioned way to target a specific window there
+    too). **Decided: parked for now** — continuing to treat GNOME as
+    unsupported for the vision pipeline, same as the drag gap, rather
+    than starting the portal work.
+  - User reported the decorated-titlebar version above **still broken**
+    on a live GNOME test. Rather than debug the decorated+alwaysOnTop
+    combination further, went one step simpler per direction: **dropped
+    the collapsed-icon/expand mode entirely for now.**
+  - **Third, current state: one plain fixed-size (480×720) decorated
+    window, always showing the full panel.** No collapse/expand, no
+    `resize_sidebar` command (deleted — nothing calls it anymore), no
+    `#collapsed`/icon markup (deleted from `sidebar.html`). The
+    login/setup/skills/path/chat views all render inside this one window
+    at its full size from launch. `resizable: true` now, since there's no
+    fixed-size icon state to protect.
+  - Verified: `cargo check` clean, app launches on this GNOME session
+    with no panics (only the expected, harmless "compositor does not
+    support Layer Shell" warning from `region-select`'s init).
+  - **Not yet verified by a human**: that the window actually renders and
+    behaves correctly end-to-end on GNOME (open, move by titlebar, resize,
+    click through the view flow) — needs a real display/pointer, which
+    this environment can't synthesize or screenshot.
+  - Follow-up, not done here: bring back a collapsed/minimized mode once
+    the full-size window is confirmed solid — tracked as future work, not
+    an oversight.
+  - Branch: `claudev/charlie/pin-icon-top-left`, not yet merged.
+
+- **Window-pick capture — replaces region-draw as the primary capture
+  scope (ADR 0005), macOS/Windows/Linux X11 only (Wayland out of scope
+  by decision).** `spikes/tauri-overlay/src-tauri/src/window_provider.rs`
+  is new: one `WindowInfo` shape, three platform backends
+  (`CGWindowListCopyWindowInfo` on macOS, `EnumWindows`+
+  `DwmGetWindowAttribute` on Windows, `x11rb` against `_NET_CLIENT_LIST`
+  on Linux — the last also covers XWayland sessions).
+  - Setup view (`sidebar.html`/`sidebar.js`) now shows a "Select window"
+    button opening an in-panel list picker (`#window-picker`), not the
+    old full-screen region-drag — `region-select.html`/`.js` and the
+    `region-select` Tauri window are left in place as the
+    `CaptureScope::Region` fallback's implementation, just no longer
+    wired to any setup-UI button.
+  - `locate_element` (`lib.rs`) takes a `CaptureScope` (`Region` or
+    `Window{id}`) instead of a bare `Option<Region>`; for `Window`, it
+    calls `window_provider::get_window_rect(id)` and re-derives the
+    capture region from the window's *current* rect immediately before
+    every capture — this is what fixes substep overlays going stale
+    after the target app is resized/moved, since nothing is ever
+    captured against a cached rect. `live_step.py`'s existing region-crop
+    (grim `-g`/mss monitor dict) already scopes the actual screenshot
+    pixels to that rect, so no vision-side change was needed.
+  - A new "🎯 Locate" button on AI/user substep bubbles (`sidebar.js`)
+    calls the real `locate_element` (previously never invoked from the
+    UI — only fixture data in `fake-skill.js` populated `last_known_bbox`
+    before this) and replaces `last_known_bbox` with a live result, scoped
+    to the picked window if one's set. This is the practical fix for "the
+    overlay goes out of position when the window resizes" — re-run it and
+    it's fresh.
+  - `research_goal`/`research.py` take an optional `app_name` (the picked
+    window's `app_name`), so Research scopes its search to the actual
+    target app instead of guessing it from goal text. Skill cards
+    (`sidebar.js`) show the app as a small tag — display only for now;
+    grouping by app is still BL-004, not built here.
+  - **Verified**: `cargo check` clean; the Linux/X11 backend was smoke-
+    tested live against XWayland on this GNOME/Wayland dev session
+    (connects and queries correctly — this sandbox just has zero real app
+    windows open to enumerate, so 0 results is the correct answer here,
+    not a failure).
+  - **Not verified**: the macOS and Windows backends — written against
+    each OS's public API per ADR 0005's research, but this environment
+    can't compile or run either target, so they're unverified until built
+    on that OS. Also not verified end-to-end with a live display: the
+    window-picker UI flow and a real `locate_element` round trip (needs a
+    real pointer/display, same limitation as the pin-icon work above).
+  - Branch: `claudev/charlie/window-select-capture`, not yet merged.
+
+- **Lazy per-step substep generation — first real piece of the designed
+  per-step algorithm (`docs/features/skills.md`) actually built.** Research
+  still only produces coarse top-level steps (title/brief/watch_for, no
+  screenshot). The AI-planned substeps under each step are no longer
+  fixture data or generated up front — a new `plan_step` command
+  (`lib.rs` → `spikes/vision-detect/plan_step.py`) runs once per step, the
+  first time the user opens it (`sidebar.js`'s `generateStepSubsteps`),
+  scoped to just that step's own title/brief/watch_for plus the goal (not
+  the whole transcript, kept small deliberately). Steps render locked
+  (dashed dot, unclickable body) until generated, then flip to the normal
+  expandable blue/pink substep list.
+  - Not yet built from `docs/features/skills.md`'s full design: reactive
+    user-question substeps feeding back into planning, user-editable path,
+    no-screenshot skill storage, opt-in refresh on replay.
+  - Branch: `claudev/charlie/step-substep-generation`, not yet merged.
+
 ## What's next
 
+- **Verify window-pick capture on a real macOS and Windows machine** —
+  `window_provider.rs`'s backends for both are unverified (this dev
+  environment can't build either target). Also needs a real display to
+  exercise the picker UI and a live `locate_element` round trip end-to-end.
 - **Morning: rehearse the actual demo script** (`docs/planning/demo-v0.md`)
   — fresh VS Code Welcome window, `npx tauri dev` in
   `spikes/tauri-overlay`, walk N through all 3 steps, fix whatever breaks
@@ -142,11 +266,12 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
 - Decide non-negotiables (screen-data handling was explicitly deferred, not
   decided) and fill them into `CLAUDE.md`.
 - Start on remaining P0 items in `docs/planning/mvp-roadmap.md`.
-- **Designed, not yet built:** the per-step algorithm (manual screenshot
-  trigger, lazy AI-generated substeps vs. reactive user-question substeps,
-  user-editable path, no-screenshot skill storage, opt-in refresh on
-  replay) — see `docs/features/skills.md`. Also closes what a saved
-  "skill" stores.
+- **Partially built** (see the "Lazy per-step substep generation" entry
+  above): lazy AI-generated substeps per step. Still not built from the
+  full per-step algorithm — manual screenshot trigger, reactive
+  user-question substeps, user-editable path, no-screenshot skill storage,
+  opt-in refresh on replay — see `docs/features/skills.md`. Also closes
+  what a saved "skill" stores.
 - **ADR 0004 (Cloudflare) accepted, and live.** Dedicated "Tutoria"
   Cloudflare account created and administered by Charlie (Account ID
   `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain

@@ -1,11 +1,8 @@
-// The whole app now lives in this one window — see the comment at the
-// top of sidebar.html for why main/icon/app were collapsed into it.
-// Collapsed = just the icon (small, 80x80, see tauri.conf.json); expanded
-// = a resized panel showing one of login/setup/skills/path/chat. Growing
-// the window is a real resize (via the resize_sidebar command — see its
-// doc comment in lib.rs for why that goes through GTK directly instead
-// of Tauri's setSize), not a CSS reveal, since the window itself is small
-// when collapsed.
+// The whole app lives in this one, plain, fixed-size decorated window —
+// see the comment at the top of sidebar.html. No collapsed-icon mode for
+// now (simplicity over the earlier collapse/expand resize dance, which
+// depended on always-on-top+undecorated quirks that didn't hold up on
+// GNOME anyway); `#panel` is always shown at the window's full size.
 //
 // Highlighting no longer draws a box on the real screen at all: that was
 // a full-screen always-on-top window ("main"), and even permanently
@@ -20,32 +17,36 @@ const { getCurrentWindow } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
 const { invoke } = window.__TAURI__.core;
 
-const COLLAPSED_SIZE = { width: 80, height: 80 };
-const EXPANDED_SIZE = { width: 380, height: 560 };
+// Capture scope: null means full screen (the default). Otherwise a live
+// OS window picked in setup — {id, app_name, title, x, y, width, height},
+// the shape window_provider.rs's list_windows/refresh_window_rect return.
+// Only `id` is trusted for capture: locate_element re-resolves the
+// window's *current* rect from `id` right before every vision call (see
+// lib.rs), so this cached x/y/width/height is display-only — it can go
+// stale the instant the window moves/resizes and that's fine, it's never
+// read for anything but the setup-screen label. See
+// docs/decisions/0005-window-anchored-overlay-coordinates.md.
+let selectedWindow = null;
 
-// Top-left screen position of the collapsed icon, in absolute px. Starts
-// at tauri.conf.json's configured x/y (the same value init_layer_shell
-// reads at startup via outer_position()) and is updated locally as the
-// user drags — see the pointer handlers below and move_sidebar in lib.rs.
-// Not persisted across restarts: an out-of-scope follow-up, not an
-// oversight (see docs/planning/mvp-build-plan.md for what's tracked).
-let COLLAPSED_POSITION = { x: 24, y: 24 };
+// Sent as the second research_goal arg (see lib.rs) so Research scopes
+// its search to the actual target app instead of guessing it from goal
+// text alone — this is the "OS info in the research query" piece.
+function selectedAppName() {
+  return selectedWindow ? selectedWindow.app_name : null;
+}
 
-// Capture region: null means full screen (the default). Otherwise
-// {x0,y0,x1,y1} in screen px, set once during setup. See
-// docs/decisions/0003-capture-region-not-window-detection.md — this is a
-// user-drawn box, never inferred from window focus. Threading this into
-// the live locate_element call (rather than only display) is tracked
-// separately; this file focuses on the UI shape.
-let region = null;
+// { kind: "window", id } | { kind: "region", ... } | null (full screen) —
+// what locate_element's `scope` param expects (CaptureScope in lib.rs).
+function currentCaptureScope() {
+  if (!selectedWindow) return null;
+  return { kind: "window", id: selectedWindow.id };
+}
 
 let currentSkill = null;
 let currentStep = null;
 const expandedSteps = new Set();
 
 const els = {
-  collapsed: document.querySelector("#collapsed"),
-  panel: document.querySelector("#panel"),
   barBack: document.querySelector("#bar-back"),
   barTitle: document.querySelector("#bar-title"),
   barSubtitle: document.querySelector("#bar-subtitle"),
@@ -91,26 +92,7 @@ function showView(name) {
   els.barBack.onclick = backTarget ? () => showView(backTarget) : null;
 }
 
-// ---------- Collapse / expand ----------
-
-async function setShellSize(size) {
-  await invoke("resize_sidebar", { width: size.width, height: size.height });
-}
-
-async function expand() {
-  await setShellSize(EXPANDED_SIZE);
-  els.collapsed.classList.add("hidden");
-  els.panel.classList.add("active");
-  await getCurrentWindow().setFocus();
-}
-
-async function collapse() {
-  els.panel.classList.remove("active");
-  els.collapsed.classList.remove("hidden");
-  await setShellSize(COLLAPSED_SIZE);
-}
-
-// ---------- Collapsed icon: fixed size, drag-to-move ----------
+// ---------- Window-level quirks ----------
 //
 // Ctrl+wheel / ctrl+-/+/0 / pinch is WebKitGTK's page-zoom gesture, not a
 // CSS-addressable behavior — it has to be intercepted here. Without this,
@@ -131,85 +113,96 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// Real repositioning (the only way to "move" the icon now) is a drag
-// gesture on the icon itself, backed by the move_sidebar command — see
-// its doc comment in lib.rs for why a layer-shell surface can't use
-// Tauri's native window drag. A short movement threshold distinguishes a
-// drag from a plain click-to-expand.
-const panelIcon = document.querySelector("#panel-icon");
-const DRAG_THRESHOLD_PX = 4;
-let dragState = null;
+// Repositioning is a real OS window move: sidebar is a normal, decorated,
+// non-always-on-top toplevel (tauri.conf.json), so the window manager's
+// own titlebar drag just works, on every platform including GNOME — no
+// in-app drag code, no IPC command needed. Two custom drag mechanisms
+// (layer-shell margin-rewrite, then Tauri's startDragging() on an
+// always-on-top+undecorated toplevel) were tried first and neither held
+// up in practice; a plain decorated window sidesteps the question
+// entirely by handing dragging back to the WM.
 
-panelIcon.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0) return;
-  dragState = {
-    pointerId: e.pointerId,
-    startScreenX: e.screenX,
-    startScreenY: e.screenY,
-    originX: COLLAPSED_POSITION.x,
-    originY: COLLAPSED_POSITION.y,
-    moved: false,
-  };
-  panelIcon.setPointerCapture(e.pointerId);
-});
+// ---------- Window setup ----------
+//
+// Window-pick, not region-draw: per
+// docs/decisions/0005-window-anchored-overlay-coordinates.md, macOS/
+// Windows/Linux X11 can enumerate live windows with real geometry, so
+// picking one from a list beats drawing a box by hand — and unlike a
+// fixed region, a window pick survives that window being resized or
+// moved (locate_element re-resolves its rect live every capture, see
+// lib.rs). No full-screen drag surface is needed for this — it's a
+// plain list, rendered as an in-panel modal (#window-picker).
 
-panelIcon.addEventListener("pointermove", (e) => {
-  if (!dragState || e.pointerId !== dragState.pointerId) return;
-  const dx = e.screenX - dragState.startScreenX;
-  const dy = e.screenY - dragState.startScreenY;
-  if (!dragState.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-  dragState.moved = true;
-  panelIcon.classList.add("dragging");
-  COLLAPSED_POSITION = { x: dragState.originX + dx, y: dragState.originY + dy };
-  invoke("move_sidebar", { x: Math.round(COLLAPSED_POSITION.x), y: Math.round(COLLAPSED_POSITION.y) });
-});
-
-function endDrag(e) {
-  if (!dragState || e.pointerId !== dragState.pointerId) return;
-  panelIcon.releasePointerCapture(e.pointerId);
-  panelIcon.classList.remove("dragging");
-  const wasDrag = dragState.moved;
-  dragState = null;
-  if (!wasDrag) expand();
+function formatWindowLabel() {
+  if (!selectedWindow) return "Window: full screen";
+  return `Window: ${selectedWindow.app_name || "(unnamed)"} — ${selectedWindow.title || "untitled"}`;
 }
 
-panelIcon.addEventListener("pointerup", endDrag);
-panelIcon.addEventListener("pointercancel", endDrag);
-
-document.querySelector("#bar-collapse").addEventListener("click", collapse);
-
-// ---------- Region setup ----------
-
-function formatRegionLabel() {
-  if (!region) return "Region: full screen";
-  const w = Math.round(region.x1 - region.x0);
-  const h = Math.round(region.y1 - region.y0);
-  return `Region: ${w}×${h} at (${Math.round(region.x0)}, ${Math.round(region.y0)})`;
+function closeWindowPicker() {
+  document.querySelector("#window-picker").classList.remove("active");
 }
 
-// Delegates the actual drag gesture to the region-select window (see its
-// own comment for why that isn't done by making this window interactive
-// over the whole screen instead). This window hides itself for the
-// duration — nothing else needs to coordinate that anymore, since main
-// (which used to own this dance) no longer exists.
-async function selectRegion() {
-  await getCurrentWindow().hide();
+// Resolves to the picked WindowInfo, or null if cancelled. Filters out
+// this app's own windows (sidebar/region-select) so the list never shows
+// itself — list_windows() has no reason to know which window is "us".
+function pickWindowFromList(windows) {
+  const picker = document.querySelector("#window-picker");
+  const list = document.querySelector("#picker-list");
+  const cancelBtn = document.querySelector("#picker-cancel");
+  list.innerHTML = "";
 
-  const newRegion = await new Promise(async (resolve) => {
-    const unlisten = await listen("tutoria:region-selected", (event) => {
-      unlisten();
-      resolve(event.payload);
-    });
-    emit("tutoria:begin-region-select");
+  const candidates = windows.filter((w) => !/tutoria/i.test(w.app_name) && !/tutoria/i.test(w.title));
+
+  if (candidates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "picker-empty";
+    empty.textContent = "No other windows found.";
+    list.appendChild(empty);
+  }
+
+  return new Promise((resolve) => {
+    for (const w of candidates) {
+      const row = document.createElement("div");
+      row.className = "picker-row";
+      row.innerHTML = `<span class="app">${w.app_name || "(unnamed)"}</span><span class="title">${w.title || "untitled"}</span>`;
+      row.addEventListener("click", () => {
+        closeWindowPicker();
+        resolve(w);
+      });
+      list.appendChild(row);
+    }
+
+    cancelBtn.onclick = () => {
+      closeWindowPicker();
+      resolve(null);
+    };
+
+    picker.classList.add("active");
   });
-
-  region = newRegion;
-  document.querySelector("#setup-region-label").textContent = formatRegionLabel();
-  await getCurrentWindow().show();
-  await getCurrentWindow().setFocus();
 }
 
-document.querySelector("#setup-region-select").addEventListener("click", selectRegion);
+async function selectWindow() {
+  const label = document.querySelector("#setup-region-label");
+  const button = document.querySelector("#setup-region-select");
+  button.disabled = true;
+  const previousLabel = label.textContent;
+  label.textContent = "Loading windows…";
+
+  try {
+    const windows = await invoke("list_windows");
+    const picked = await pickWindowFromList(windows);
+    selectedWindow = picked ?? selectedWindow;
+  } catch (err) {
+    label.textContent = `Couldn't list windows: ${err}`;
+    button.disabled = false;
+    return;
+  }
+
+  label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
+  button.disabled = false;
+}
+
+document.querySelector("#setup-region-select").addEventListener("click", selectWindow);
 document.querySelector("#setup-continue").addEventListener("click", () => {
   renderSkillsList();
   showView("skills");
@@ -231,7 +224,8 @@ function renderSkillsList() {
     const generated = skill.steps.filter((s) => s.generated).length;
     const card = document.createElement("div");
     card.className = "skill-card";
-    card.innerHTML = `<h3>${skill.title}</h3><p>${generated}/${skill.steps.length} steps ready · “${skill.goal}”</p>`;
+    const appTag = skill.appName ? `<span class="skill-app-tag">${skill.appName}</span> ` : "";
+    card.innerHTML = `<h3>${appTag}${skill.title}</h3><p>${generated}/${skill.steps.length} steps ready · “${skill.goal}”</p>`;
     card.addEventListener("click", () => openSkill(skill));
     list.appendChild(card);
   }
@@ -262,15 +256,24 @@ async function submitNewGoal() {
   button.disabled = true;
   errorEl.textContent = "";
   const previousPlaceholder = input.placeholder;
-  input.placeholder = "Researching…";
   input.value = "";
 
+  // The real call is a Claude web-search round trip and routinely takes
+  // 30-60s — a static "Researching…" placeholder looks identical to a
+  // hang for that whole time, so tick a visible elapsed counter instead.
+  const startedAt = Date.now();
+  input.placeholder = "Researching… (0s)";
+  const tick = setInterval(() => {
+    input.placeholder = `Researching… (${Math.round((Date.now() - startedAt) / 1000)}s)`;
+  }, 1000);
+
   try {
-    const researchSteps = await invoke("research_goal", { goal });
+    const researchSteps = await invoke("research_goal", { goal, appName: selectedAppName() });
     const skill = {
       id: `skill-${nextSkillId++}`,
       title: goal,
       goal,
+      appName: selectedAppName(),
       steps: researchSteps.map((step, i) => ({
         id: `s${i + 1}`,
         title: step.title,
@@ -285,6 +288,7 @@ async function submitNewGoal() {
   } catch (err) {
     errorEl.textContent = `Couldn't research that: ${err}`;
   } finally {
+    clearInterval(tick);
     input.disabled = false;
     button.disabled = false;
     input.placeholder = previousPlaceholder;
@@ -302,6 +306,40 @@ function openSkill(skill) {
   expandedSteps.clear();
   renderPath();
   showView("path");
+}
+
+// Generates this step's AI-planned substeps via plan_step (see
+// docs/features/skills.md's "Per-step loop") and flips it from locked to
+// expandable. Only the goal plus this one step's own title/brief/
+// watch_for go in — not the full transcript, kept small deliberately.
+async function generateStepSubsteps(step) {
+  step.planning = true;
+  step.planError = null;
+  renderPath();
+
+  try {
+    const planned = await invoke("plan_step", {
+      goal: currentSkill.goal,
+      stepTitle: step.title,
+      stepBrief: step.brief ?? "",
+      stepWatchFor: step.watch_for ?? "",
+    });
+    step.substeps = planned.map((sub, i) => ({
+      id: `${step.id}-${i + 1}`,
+      origin: "ai",
+      target_description: sub.target_description,
+      instruction_text: sub.instruction_text,
+      action: sub.action,
+      last_known_bbox: null,
+    }));
+    step.generated = true;
+    expandedSteps.add(step.id);
+  } catch (err) {
+    step.planError = String(err);
+  } finally {
+    step.planning = false;
+    renderPath();
+  }
 }
 
 // ---------- Path view ----------
@@ -339,6 +377,11 @@ function renderPath() {
         else expandedSteps.add(step.id);
         renderPath();
       });
+    } else if (!step.planning) {
+      // First reach: plan_step generates this step's AI substeps lazily,
+      // per docs/features/skills.md's "Per-step loop" — never speculatively
+      // for the whole skill up front.
+      head.addEventListener("click", () => generateStepSubsteps(step));
     }
     main.appendChild(head);
 
@@ -365,6 +408,18 @@ function renderPath() {
         caption.className = "step-caption";
         caption.textContent = "Not generated yet — reach this step to see it.";
         main.appendChild(caption);
+      }
+      if (step.planning) {
+        const status = document.createElement("div");
+        status.className = "step-caption";
+        status.textContent = "Planning this step…";
+        main.appendChild(status);
+      }
+      if (step.planError) {
+        const error = document.createElement("div");
+        error.className = "step-caption step-watch-for";
+        error.textContent = `Couldn't plan this step: ${step.planError}`;
+        main.appendChild(error);
       }
     }
 
@@ -439,6 +494,25 @@ function schematicHtml(bbox) {
   `;
 }
 
+// "🎯 Locate" runs a real, live locate_element call scoped to the setup
+// window (or full screen) — this is what actually fixes overlay items
+// going stale after the target app resizes/moves: last_known_bbox isn't
+// trusted forever, the user re-runs this any time and gets a bbox
+// computed against the window's *current* size (see the CaptureScope
+// re-resolve in lib.rs's locate_element). "📍 Show" only ever displays
+// whatever bbox is already cached, real or fixture.
+// User-asked substeps (sendChatMessage) carry `question`, not
+// `target_description` — that's what locate_element needs as its plain-
+// text target either way, so fall back to it.
+function locateTarget(sub) {
+  return sub.target_description || sub.question || "";
+}
+
+function locateButtonHtml(sub) {
+  if (!locateTarget(sub)) return "";
+  return `<button class="bubble-locate" data-locate="${sub.id}" type="button">🎯 Locate</button>`;
+}
+
 function substepBubbleHtml(sub) {
   if (sub.origin === "ai") {
     return `
@@ -446,6 +520,7 @@ function substepBubbleHtml(sub) {
         <div class="bubble-target">${sub.target_description}</div>
         <div class="bubble-instruction">${sub.instruction_text}</div>
         ${sub.last_known_bbox ? `<button class="bubble-show" data-show="${sub.id}" type="button">📍 Show</button>` : ""}
+        ${locateButtonHtml(sub)}
         <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     `;
@@ -456,6 +531,7 @@ function substepBubbleHtml(sub) {
       <div class="bubble-answer">
         <div class="bubble-instruction">${sub.instruction_text}</div>
         ${sub.last_known_bbox ? `<button class="bubble-show" data-show="${sub.id}" type="button">📍 Show</button>` : ""}
+        ${locateButtonHtml(sub)}
         <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     </div>
@@ -472,6 +548,29 @@ function renderChat() {
       if (!sub || !sub.last_known_bbox) return;
       const slot = body.querySelector(`[data-slot="${sub.id}"]`);
       slot.innerHTML = slot.innerHTML ? "" : schematicHtml(sub.last_known_bbox);
+    });
+  });
+
+  body.querySelectorAll("[data-locate]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.locate);
+      if (!sub) return;
+      const previousLabel = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Locating…";
+      try {
+        sub.last_known_bbox = await invoke("locate_element", {
+          target: locateTarget(sub),
+          scope: currentCaptureScope(),
+        });
+        renderChat();
+      } catch (err) {
+        btn.textContent = "Couldn't locate";
+        setTimeout(() => {
+          btn.textContent = previousLabel;
+          btn.disabled = false;
+        }, 2000);
+      }
     });
   });
 
@@ -511,9 +610,3 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") emit("tutoria:quit");
 });
 listen("tutoria:quit", () => getCurrentWindow().close());
-
-// Layer-shell surfaces don't reliably pick up tauri.conf.json's configured
-// width/height on first map either (same root cause as resize_sidebar's
-// doc comment) — pin the collapsed size explicitly once at startup rather
-// than trusting it.
-setShellSize(COLLAPSED_SIZE);

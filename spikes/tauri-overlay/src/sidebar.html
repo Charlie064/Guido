@@ -48,80 +48,20 @@
         cursor: pointer;
       }
 
-      /* ---------- Collapsed: just the icon ---------- */
+      /* ---------- Panel ---------- */
       /* This is the ONLY window in the app now (besides the transient
          region-select drag surface) — see docs/architecture/overview.md's
-         "Windows" note. It used to be three separate windows (main, icon,
-         sidebar): main existed purely because it had to be click-through
-         everywhere except this button, and a single window can't be
-         click-through in one spot and not another. Now that there's no
-         full-screen highlight window at all, that reason is gone, so the
-         button and the panel can safely share one always-interactive
-         window that just resizes itself (see setShellSize in sidebar.js). */
-      #collapsed {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      #collapsed.hidden {
-        display: none;
-      }
-
-      #panel-icon {
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: transparent;
-        border: none;
-        padding: 0;
-        margin: 0;
-        cursor: grab;
-        -webkit-user-select: none;
-        user-select: none;
-      }
-
-      #panel-icon.dragging {
-        cursor: grabbing;
-      }
-
-      #panel-icon svg {
-        width: 62px;
-        height: 62px;
-        filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
-        -webkit-user-drag: none;
-        pointer-events: none;
-      }
-
-      #panel-icon .logo-bubble {
-        fill: #0577fc;
-      }
-
-      #panel-icon .logo-cursor {
-        fill: #ffffff;
-      }
-
-      /* ---------- Expanded panel ---------- */
-
+         "Windows" note. No more collapsed-icon mode for now (simplicity
+         over a fixed-size decorated window, per current direction) —
+         `#panel` is always shown, full window size. See sidebar.js for
+         what collapse()/expand()/resize_sidebar used to do. */
       #panel {
-        display: none;
+        display: flex;
         flex-direction: column;
         height: 100%;
         width: 100%;
         box-sizing: border-box;
         background: var(--bg);
-        border: 1px solid var(--border);
-        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
-        border-radius: 12px;
-        overflow: hidden;
-      }
-
-      #panel.active {
-        display: flex;
       }
 
       .bar {
@@ -256,6 +196,97 @@
         background: #343e4f;
       }
 
+      /* ---------- Window picker ---------- */
+      /* A simple in-panel modal list, not a native window: unlike the old
+         region-drag flow, picking a window needs no mouse interaction with
+         the real screen — just a list to choose from — so there's no
+         reason to pay for a full-screen overlay window here (contrast
+         region-select.html, kept only as the Region-capture fallback
+         inside locate_element's CaptureScope::Region path). */
+      #window-picker {
+        display: none;
+        position: absolute;
+        inset: 0;
+        background: rgba(10, 13, 18, 0.72);
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+      }
+
+      #window-picker.active {
+        display: flex;
+      }
+
+      .picker-card {
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        width: min(90%, 400px);
+        max-height: 80%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .picker-header {
+        padding: 10px 12px;
+        font-weight: 600;
+        font-size: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .picker-list {
+        overflow-y: auto;
+        padding: 6px;
+      }
+
+      .picker-row {
+        padding: 8px 9px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 11px;
+      }
+
+      .picker-row:hover {
+        background: #2a3241;
+      }
+
+      .picker-row .app {
+        font-weight: 600;
+      }
+
+      .picker-row .title {
+        color: var(--muted);
+        display: block;
+        margin-top: 1px;
+      }
+
+      .picker-empty {
+        padding: 10px 9px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .picker-footer {
+        padding: 8px 12px;
+        border-top: 1px solid var(--border);
+        text-align: right;
+      }
+
+      .picker-cancel {
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 11px;
+      }
+
+      .picker-cancel:hover {
+        color: var(--text);
+        border-color: var(--blue-border);
+      }
+
       /* ---------- Skills list ---------- */
 
       .skills-body {
@@ -282,6 +313,23 @@
       .skill-card h3 {
         margin: 0 0 3px;
         font-size: 12px;
+      }
+
+      /* app_name from the OS window pick (window_provider.rs) — lets
+         skills eventually group by app (BL-004's "Excel skills" style
+         page); today it's just a display tag. */
+      .skill-app-tag {
+        display: inline-block;
+        background: var(--blue-soft);
+        border: 1px solid var(--blue-border);
+        border-radius: 4px;
+        padding: 1px 5px;
+        font-size: 9px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        vertical-align: middle;
+        margin-right: 2px;
       }
 
       .skill-card p {
@@ -593,6 +641,27 @@
         color: var(--text);
       }
 
+      .bubble-locate {
+        margin-top: 6px;
+        margin-left: 4px;
+        background: none;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 5px;
+        padding: 3px 7px;
+        font-size: 10px;
+      }
+
+      .bubble-locate:hover {
+        border-color: var(--blue-border);
+        color: var(--text);
+      }
+
+      .bubble-locate:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+
       /* Schematic preview: NOT a real window drawn over the target app —
          a small proportional diagram, rendered entirely inside this
          panel, of roughly where the element sits. See sidebar.js's
@@ -663,25 +732,6 @@
     </style>
   </head>
   <body>
-    <div id="collapsed">
-      <!-- assets/brand/message-cursor-logo.svg, inlined so .logo-bubble /
-           .logo-cursor can be recolored per interactive state. -->
-      <button id="panel-icon" type="button" aria-label="Open Tutoria">
-        <svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-          <g transform="translate(0,1024) scale(0.1,-0.1)" stroke="none">
-            <path
-              class="logo-bubble"
-              d="M7014 8434 c251 -40 513 -165 701 -335 224 -203 362 -436 433 -732 l27 -112 0 -1650 c0 -1805 3 -1689 -56 -1889 -77 -257 -266 -523 -496 -698 -147 -112 -357 -211 -525 -248 -140 -30 -211 -32 -1263 -39 l-1080 -6 -66 -31 c-102 -48 -175 -102 -321 -236 -254 -235 -714 -632 -756 -654 -60 -31 -134 -10 -171 49 -20 33 -21 46 -21 445 0 336 -3 413 -14 424 -8 8 -66 22 -133 31 -171 24 -278 57 -438 137 -378 187 -641 521 -748 950 -21 85 -21 93 -25 1695 -2 1178 0 1636 8 1705 55 447 337 848 748 1063 91 48 288 113 392 130 71 12 388 15 1894 16 1613 1 1820 -1 1910 -15z"
-            />
-            <path
-              class="logo-cursor"
-              d="M4342 7146 c32 -17 793 -695 1633 -1456 498 -451 525 -477 525 -512 0 -15 -9 -37 -20 -48 -25 -25 -69 -25 -574 -5 -203 8 -371 14 -373 12 -3 -4 102 -239 319 -717 168 -369 172 -378 159 -419 -6 -21 -21 -47 -33 -58 -13 -11 -118 -62 -235 -112 -279 -120 -303 -120 -364 1 -35 70 -397 859 -442 965 -17 40 -34 70 -39 67 -10 -6 -147 -170 -357 -429 -90 -110 -175 -212 -189 -227 -31 -34 -73 -37 -102 -8 -20 20 -20 33 -20 1463 0 1527 -2 1460 45 1485 26 15 35 15 67 -2z"
-            />
-          </g>
-        </svg>
-      </button>
-    </div>
-
     <div id="panel">
       <div class="bar">
         <button class="bar-icon-btn" id="bar-back" type="button" hidden>← Back</button>
@@ -689,7 +739,6 @@
           <div class="bar-title" id="bar-title">Tutoria</div>
           <div class="bar-subtitle" id="bar-subtitle"></div>
         </div>
-        <button class="bar-icon-btn" id="bar-collapse" type="button" title="Minimize">–</button>
       </div>
 
       <!-- Placeholder auth — no validation, just a gate to the rest of
@@ -704,16 +753,30 @@
 
       <section id="view-setup" class="view">
         <p>
-          Optional: scope which part of the screen gets captured for
-          vision calls. Otherwise the full screen is used. This is a
-          one-time setup step, not per-question.
+          Optional: pick the application window this skill is about.
+          Vision calls only capture that window, and it re-checks the
+          window's current size each time — so the overlay never goes
+          stale if you resize or move it. Otherwise the full screen is
+          used. This is a one-time setup step, not per-question.
         </p>
         <div id="setup-region">
-          <span id="setup-region-label">Region: full screen</span>
-          <button id="setup-region-select" type="button">Select region</button>
+          <span id="setup-region-label">Window: full screen</span>
+          <button id="setup-region-select" type="button">Select window</button>
         </div>
         <button class="btn-primary" id="setup-continue" type="button">Continue</button>
       </section>
+
+      <!-- In-panel modal, not a native window — see the #window-picker
+           style comment. Toggled via the .active class in sidebar.js. -->
+      <div id="window-picker">
+        <div class="picker-card">
+          <div class="picker-header">Select a window</div>
+          <div class="picker-list" id="picker-list"></div>
+          <div class="picker-footer">
+            <button class="picker-cancel" id="picker-cancel" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
 
       <section id="view-skills" class="view">
         <div class="new-goal-row">
