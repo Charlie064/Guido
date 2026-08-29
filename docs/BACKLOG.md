@@ -58,22 +58,17 @@ point — this file should never pose as a source of truth for what's done.
     extension reporting active tab title/URL), not more OS-level work.
     Degrade to "Chrome" + let the user rename the chat until that's built.
 - **BL-006 — Integrate Pauline's website build into the codebase.**
-  Owner: Pauline. She's built the site separately on her own localhost;
-  needs to bring it into `website/public/` (or point `wrangler.jsonc`'s
-  `assets.directory` at her build output if it's bundled), keep the
-  waitlist form (`/api/waitlist` → D1) working, and deploy — see the
-  Website section in
-  [workflows/development.md](workflows/development.md) for the exact
-  steps. Also still open: real design pass on the landing page. Cloudflare
-  Member invites are sent ([reference/team.md](reference/team.md)), so
-  `wrangler deploy` is no longer blocked on that.
-- **BL-007 — Enforce membership quotas.** Tiers (`free` / `starter` /
-  `plus` / `owner`) are defined in
-  [business/pricing.md](business/pricing.md). Remaining work: count new
-  skills, hard-cap free at 5, return the `/api/me` quota fields from
-  [planning/login-membership-plan.md](planning/login-membership-plan.md),
-  and gate skill save on `plus`/`owner`. Stripe + Starter overage
-  charges are a later slice.
+  Landing (Guido Vite app from `claudev/pauline/landing-page`) is in
+  `website/` on `claudev/quentin/google-login`, with waitlist + privacy
+  wired to the Worker. Remaining: `npm run deploy` once Cloudflare
+  membership is accepted, and any further design pass she still wants.
+- **BL-007 — Enforce membership quotas.** Tiers and Worker endpoints
+  (`GET /api/me`, `POST /api/skills/start`) are on
+  `claudev/quentin/google-login`. Remaining: desktop must call
+  `/api/skills/start` when a new goal starts and hide save unless
+  `can_save_skills` (Charlie pairs on the Tauri half). Stripe + Starter
+  overage charges are a later slice. See
+  [business/pricing.md](business/pricing.md).
 - **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
   currently runs on the free `workers.dev` subdomain
   (`tutoria-website.guidotutor.workers.dev`, see

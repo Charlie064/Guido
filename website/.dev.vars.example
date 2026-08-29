@@ -1,0 +1,5 @@
+# Copy to .dev.vars (gitignored) for `npm run dev`.
+# Create a Google OAuth client (Desktop app) and put the values here.
+# Redirect URI to register: http://localhost:8787/auth/google/callback
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

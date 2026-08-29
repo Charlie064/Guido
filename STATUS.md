@@ -152,7 +152,7 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain
   `guidotutor`) — see `docs/reference/team.md`. Website deployed:
   **https://tutoria-website.guidotutor.workers.dev/**. Scaffold in
-  `website/` (`wrangler.jsonc`, `src/index.ts`,
+  `website/` (`wrangler.jsonc`, `worker/index.ts`,
   `migrations/0001_create_waitlist.sql`) — Worker + static assets + a
   waitlist-only D1 database (`tutoria-waitlist`). Verified end to end in
   production: loaded the live URL in a browser, submitted the waitlist
@@ -160,10 +160,9 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   execute --remote`. Full accounts/auth still deferred, per ADR 0004's
   narrowed scope. **Not yet done:** inviting teammates as Cloudflare
   account members (Manage Account → Members in the dashboard); a real
-  domain (currently on the free `workers.dev` subdomain). Pauline still
-  owns the actual landing-page content — the current
-  `website/public/index.html` is a placeholder proving the wiring, not the
-  real site.
+  domain (currently on the free `workers.dev` subdomain). Pauline’s
+  Guido landing page from `claudev/pauline/landing-page` is now the
+  site in `website/` (Vite app → `dist/` on deploy).
 - **Anthropic API COGS estimated** in `docs/business/pricing.md`
   (planning: 1 skill/day × 5 steps × 5 locates/step, images sent at
   half linear res 960×540 → ~$4.05 typical subscriber/month; heavy
@@ -174,11 +173,21 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
 - **Open, undecided:**
   - Where the Do-mode opt-in toggle lives (global setting vs. per-question).
   - Gamification mechanic (`BL-002`).
-- **Planned, not started: Google login + membership check (Quentin).** See
-  `docs/planning/login-membership-plan.md` — extends the D1 waitlist
-  database with users/memberships/sessions, adds a Google OAuth flow to
-  the website Worker, and wires the desktop app's placeholder login view
-  to it. Formalizes the auth scope ADR 0004 explicitly deferred. Blocked
-  on Charlie providing Cloudflare account access, a Google Cloud project,
-  and a privacy policy page — see that doc's "Before Quentin can start"
-  section.
+- **Guido mascot (Tuto) checked in** at `assets/mascot/` (SVG + React
+  cursor-follow components + app icons). Website landing and `/login`
+  use the cursor buddy; desktop login shows the idle SVG. See
+  `docs/features/mascot.md`.
+- **Landing page (Pauline) brought onto the Worker branch.** Guido Vite
+  app from `claudev/pauline/landing-page` lives in `website/` (`npm run
+  dev`); Worker is `website/worker/` and serves `dist/` on deploy.
+  Waitlist + `/privacy.html` are on the landing footer.
+- **Google login Worker + quotas (Quentin) — Worker half started.**
+  Branch `claudev/quentin/google-login`: D1 migration
+  `website/migrations/0002_create_auth_and_quotas.sql`, privacy page at
+  `/privacy.html`, routes `/auth/google/start`,
+  `/auth/google/callback`, `/api/me` (quota fields),
+  `POST /api/skills/start` (hard-caps `free` at 5 and
+  `starter`/`plus` at 30/month). Still needed: Google Cloud OAuth
+  client + `wrangler secret put GOOGLE_CLIENT_SECRET`, remote migrate,
+  and Charlie pairing on the Tauri keyring/loopback half. See
+  `docs/planning/login-membership-plan.md`.

@@ -63,7 +63,7 @@ const views = {
 function viewMeta(name) {
   switch (name) {
     case "login":
-      return ["Tutoria", "", null];
+      return ["Guido", "", null];
     case "setup":
       return ["Set up", "", null];
     case "skills":
@@ -73,7 +73,7 @@ function viewMeta(name) {
     case "chat":
       return [currentStep.title, "", "path"];
     default:
-      return ["Tutoria", "", null];
+      return ["Guido", "", null];
   }
 }
 
@@ -88,6 +88,7 @@ function showView(name) {
   els.barTitle.textContent = title;
   els.barSubtitle.textContent = subtitle;
   els.barBack.hidden = !backTarget;
+  els.panel.classList.toggle("login-skin", name === "login");
   els.barBack.onclick = backTarget ? () => showView(backTarget) : null;
 }
 
@@ -219,6 +220,14 @@ document.querySelector("#setup-continue").addEventListener("click", () => {
 
 document.querySelector("#login-continue").addEventListener("click", () => {
   showView("setup");
+});
+
+document.querySelector("#login-google").addEventListener("click", async () => {
+  try {
+    await invoke("start_google_login");
+  } catch {
+    window.open("https://tutoria-website.guidotutor.workers.dev/login", "_blank");
+  }
 });
 
 // ---------- Skills list ----------

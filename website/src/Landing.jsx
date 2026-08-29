@@ -13,10 +13,8 @@ import {
   Command,
   Video,
 } from "lucide-react";
-
-const BRAND = "#B6FF3E";
-const FLASH_PINK = "#FF2E9A";
-const FLASH_BLUE = "#3B82F6";
+import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
+import { BRAND, FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
 
 const MODE_COLORS = {
   teach: { accent: "#3B82F6", text: "#ffffff" }, // blue — Notion
@@ -70,32 +68,17 @@ function IntroAnimation() {
   );
 }
 
-function Logo() {
-  return (
-    <div className="flex items-center gap-2.5">
-      <img
-        src="/assets/guido-icon.png"
-        alt="Guido"
-        className="w-11 h-11 rounded-xl"
-        style={{
-          border: "1.5px solid rgba(0,0,0,0.1)",
-          boxShadow: "0 0 0 4px rgba(196,181,253,0.15), 0 4px 10px -2px rgba(0,0,0,0.15)",
-        }}
-      />
-      <span className="font-semibold text-[17px] tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-        Guido
-      </span>
-    </div>
-  );
-}
-
-function DownloadButton({ className = "" }) {
+function DownloadButton({ className = "", onClick }) {
   const [clicked, setClicked] = useState(false);
   const [pressed, setPressed] = useState(false);
   return (
     <button
       type="button"
       onClick={() => {
+        if (onClick) {
+          onClick();
+          return;
+        }
         setClicked(true);
         setTimeout(() => setClicked(false), 1600);
       }}
@@ -333,6 +316,51 @@ function WorksWithMarquee() {
   );
 }
 
+function WaitlistForm() {
+  const [status, setStatus] = useState("");
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const email = new FormData(form).get("email");
+    setStatus("Saving…");
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        form.reset();
+        setStatus("You're on the list.");
+      } else {
+        setStatus("Something went wrong.");
+      }
+    } catch {
+      setStatus("Something went wrong.");
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col sm:flex-row items-center gap-2">
+      <input
+        type="email"
+        name="email"
+        required
+        placeholder="you@example.com"
+        className="rounded-full border border-black/15 bg-white px-4 py-2 text-sm w-56 outline-none focus:border-black/30"
+      />
+      <button
+        type="submit"
+        className="rounded-full px-4 py-2 text-sm font-semibold border border-black/15 bg-white text-[#0A0A0A] hover:border-black/30 transition-colors"
+      >
+        Join waitlist
+      </button>
+      {status ? <p className="text-xs text-neutral-500">{status}</p> : null}
+    </form>
+  );
+}
+
 export default function Landing() {
   const [activeMode, setActiveMode] = useState("teach");
   const [audioOn, setAudioOn] = useState(false);
@@ -340,6 +368,9 @@ export default function Landing() {
   const [shaking, setShaking] = useState(false);
   const [demoExpanded, setDemoExpanded] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [touchPointer] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
+  );
   const demoPanelRef = useRef(null);
   const mode = MODES.find((m) => m.id === activeMode);
   const color = MODE_COLORS[activeMode];
@@ -380,7 +411,8 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
-      {/* <IntroAnimation /> temporarily disabled for testing */}
+      <IntroAnimation />
+      <GlassMascotCursor disabled={touchPointer} size={72} style={{ zIndex: 20 }} />
 
       {/* Nav */}
       <header className="sticky top-0 z-30 backdrop-blur-md bg-white/85 border-b border-black/[0.06]">
@@ -448,6 +480,13 @@ export default function Landing() {
                 </span>
               </span>
             </p>
+
+            <div className="mt-8">
+              <DownloadButton
+                className="px-7 py-3.5 text-[15px]"
+                onClick={() => setDownloadOpen(true)}
+              />
+            </div>
           </div>
         </div>
 
@@ -645,9 +684,22 @@ export default function Landing() {
 
       {/* Footer */}
       <footer className="border-t border-black/[0.06]">
-        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <Logo />
-          <p className="text-xs text-neutral-400">© Guido team</p>
+        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col gap-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <Logo />
+            <WaitlistForm />
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-xs text-neutral-400">© Guido team</p>
+            <div className="flex items-center gap-4">
+              <a href="/login" className="text-xs text-neutral-400 hover:text-neutral-700">
+                Sign in
+              </a>
+              <a href="/privacy.html" className="text-xs text-neutral-400 hover:text-neutral-700">
+                Privacy policy
+              </a>
+            </div>
+          </div>
         </div>
       </footer>
     </div>
