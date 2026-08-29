@@ -4,18 +4,14 @@
 // depended on always-on-top+undecorated quirks that didn't hold up on
 // GNOME anyway); `#panel` is always shown at the window's full size.
 //
-// Substeps offer two ways to be shown (see actionsHtml below):
-// - the eye: a real highlight box + text callout drawn over the target app
-//   by the separate, permanently click-through "overlay" window (see
-//   overlay.js / overlay.html). An earlier attempt at this was cut because
-//   a full-screen always-on-top window blocked clicks into the app being
-//   taught; what makes it viable now is that click-through is set once in
-//   Rust and never toggled, so it can't get stuck interactive.
-// - the note: the in-panel schematic diagram, which stays as the fallback
-//   for platforms with no live window rect (a Wayland portal capture never
-//   discloses screen position) and as a non-intrusive "roughly where".
+// Substeps no longer offer an on-screen overlay or in-panel schematic —
+// cut 2026-08-30 as UI clutter (the eye/target/note icon row and the
+// duplicate target-description line above the instruction text). The
+// "overlay" window, overlay.js/overlay.html, and the Rust locate_element
+// command are unused by this file now but not deleted — a real cleanup
+// pass on those is a separate, larger change. See substepBubbleHtml.
 import { SKILLS } from "./fake-skill.js";
-import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon } from "./icons.js";
+import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon } from "./icons.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -307,12 +303,6 @@ function setProfileOpen(open) {
 // list is a result arriving, and a beat of animation is what marks it as
 // one.
 function showView(name, { fade = false } = {}) {
-  // Leaving the chat view drops the on-screen overlay: it belongs to one
-  // substep in one step, so leaving that context would otherwise strand a
-  // highlight box on screen with nothing in the UI still pointing at it
-  // (and no visible way to dismiss it, since the eye that toggles it is
-  // in the view being left).
-  if (currentView === "chat" && name !== "chat") hideOverlay();
   // Refreshed on every visit, not just after a new goal — this is also
   // how a skill generated earlier (or restored from disk) stays reachable
   // after navigating away from it, see renderAppsList's comment.
@@ -1500,7 +1490,14 @@ function renderPath() {
       for (const sub of step.substeps) {
         const subRow = document.createElement("div");
         subRow.className = `substep-row origin-${sub.origin}`;
-        const preview = sub.origin === "user" ? sub.question : sub.target_description;
+        // instruction_text, not target_description: target_description is
+        // plan_step's plain-text locate target ("the 'Yes, I trust the
+        // authors' button in the Workspace Trust popup dialog (if it
+        // appears)") — accurate for the vision call, but a verbose,
+        // hedge-qualified sentence when used as a row's name. This is
+        // also what the chat view shows once you open the row, so the
+        // preview now says the same thing you see next.
+        const preview = sub.origin === "user" ? sub.question : sub.instruction_text;
         subRow.innerHTML = `
           <span class="substep-dot"></span>
           <span class="substep-text">
@@ -1534,8 +1531,28 @@ function renderPath() {
 
 // ---------- Chat / step view ----------
 
+// Set whenever openStep is given a specific substep id (a row clicked in
+// the step's substep-list preview) — narrows the chat view to just that
+// one substep's own thread (renderChatParts). null when opened via the
+// step's "Open chat →" button instead, which still shows every substep.
+let chatScopeSubstepId = null;
+
 function openStep(step, scrollToSubstepId) {
   currentStep = step;
+
+  if (scrollToSubstepId) {
+    const clicked = step.substeps.find((s) => s.id === scrollToSubstepId);
+    // A "You asked" row scopes to the AI substep it replied to — that's
+    // the thread this question belongs to — rather than to itself, which
+    // no AI substep would ever match and would render an empty view.
+    chatScopeSubstepId = clicked?.origin === "user" ? (clicked.respondingTo ?? null) : scrollToSubstepId;
+    // A typed follow-up should land on the substep you actually opened,
+    // not whatever resolveRespondingTo's "last AI substep" fallback picks.
+    if (chatScopeSubstepId) focusedSubstepId = chatScopeSubstepId;
+  } else {
+    chatScopeSubstepId = null;
+  }
+
   renderChat();
   showView("chat");
 
@@ -1543,48 +1560,6 @@ function openStep(step, scrollToSubstepId) {
     const el = document.querySelector(`[data-substep-id="${scrollToSubstepId}"]`);
     if (el) el.scrollIntoView({ block: "center" });
   }
-}
-
-// A schematic box, not a real overlay: a small diagram (aspect-ratio
-// matched to the reference resolution the coordinates were produced at)
-// with a red rectangle at the proportional position of last_known_bbox.
-// Nothing is drawn on the real screen — see the file-header comment.
-function schematicHtml(bbox) {
-  const w = bbox.image_width;
-  const h = bbox.image_height;
-  const leftPct = (bbox.x0 / w) * 100;
-  const topPct = (bbox.y0 / h) * 100;
-  const widthPct = ((bbox.x1 - bbox.x0) / w) * 100;
-  const heightPct = ((bbox.y1 - bbox.y0) / h) * 100;
-  return `
-    <div class="schematic" style="aspect-ratio: ${w} / ${h}">
-      <div class="schematic-box" style="left:${leftPct}%; top:${topPct}%; width:${widthPct}%; height:${heightPct}%"></div>
-    </div>
-    <div class="schematic-caption">Roughly where this sits on a ${w}×${h} screen — not drawn on your real screen.</div>
-  `;
-}
-
-// Three actions per substep, all icon-only (icons.js — the shared pool):
-//
-// - eye (EyeIcon/EyeOffIcon): draws the real on-screen overlay for this
-//   substep — a highlight box plus the instruction as a text callout,
-//   positioned over the actual target app (see overlay.js). Toggles, and
-//   only one substep can be shown at a time, so pressing a second one
-//   moves the overlay rather than stacking two boxes.
-// - target (TargetIcon): runs a live locate_element to recompute the bbox
-//   against the window's *current* size, so a stale box after a resize is
-//   one press away from correct (see the CaptureScope re-resolve in
-//   lib.rs).
-// - note (NoteIcon): the in-panel schematic — kept as the fallback for
-//   when the real overlay can't draw (no live window rect on this
-//   platform, e.g. a Wayland session on GNOME/KDE), and as a quick
-//   "roughly where" that doesn't take over the screen.
-//
-// User-asked substeps (sendChatMessage) carry `question`, not
-// `target_description` — that's what locate_element needs as its plain-
-// text target either way, so fall back to it.
-function locateTarget(sub) {
-  return sub.target_description || sub.question || "";
 }
 
 // Everything Research/plan_step already knows about this step, folded
@@ -1612,9 +1587,6 @@ function locateContext(sub) {
   return lines.length > 0 ? lines.join("\n") : null;
 }
 
-// Which substep's overlay is currently on screen, if any.
-let overlaidSubstepId = null;
-
 // Which AI substep a typed-in-the-box follow-up question will attach to
 // (see docs/features/skills.md's reactive-substep scoping, resolved
 // 2026-08-29). Set by clicking a substep bubble, or implicitly by "Ask
@@ -1628,31 +1600,12 @@ let focusedSubstepId = null;
 // something left on and forgotten for the next one.
 let includeScreenshotForNextQuestion = false;
 
-function actionsHtml(sub) {
-  const eye = sub.last_known_bbox
-    ? `<button class="bubble-icon-btn" data-overlay="${sub.id}" type="button" title="Show on my real screen">${
-        overlaidSubstepId === sub.id ? EyeOffIcon({ size: 15 }) : EyeIcon({ size: 15 })
-      }</button>`
-    : "";
-  const locate = locateTarget(sub)
-    ? `<button class="bubble-icon-btn" data-locate="${sub.id}" type="button" title="Find this on screen now">${TargetIcon({ size: 15 })}</button>`
-    : "";
-  const schematic = sub.last_known_bbox
-    ? `<button class="bubble-icon-btn" data-show="${sub.id}" type="button" title="Show a rough diagram instead">${NoteIcon({ size: 15 })}</button>`
-    : "";
-  if (!eye && !locate && !schematic) return "";
-  return `<div class="bubble-actions">${eye}${locate}${schematic}</div>`;
-}
-
 // "Check my work" — a manual, per-substep AI verify against
 // expected_outcome (plan_step's own field, see plan_step.py). Absolute
 // checks only for now ("Exposure ≈ +0.5"); a relative/before-after check
 // would need a screenshot at the substep's *start*, which contradicts
 // Verify's whole premise that a screenshot only happens on this button
 // press — deferred to BL-011 in docs/BACKLOG.md rather than solved here.
-// Separate from the eye/target/note icon row above: this one costs an
-// API call and changes what's shown below it, so it's a labeled button,
-// not an icon.
 function verifyHtml(sub) {
   if (!sub.expected_outcome) return "";
   const button = `<button class="bubble-verify-btn" data-verify="${sub.id}" type="button">${CheckIcon({
@@ -1664,32 +1617,30 @@ function verifyHtml(sub) {
   const askHelp = matches
     ? ""
     : `<button class="verify-ask-help" data-ask-help="${sub.id}" type="button">Ask for help</button>`;
+  // Verdict leads, expected/observed follows as the one-line reasoning
+  // behind it — not two labeled rows ahead of the verdict they explain.
   return `
     ${button}
     <div class="verify-result ${matches ? "match" : "mismatch"}">
-      <div class="verify-result-row">
-        <span class="verify-result-label">Expected</span>
-        <span>${sub.expected_outcome}</span>
-      </div>
-      <div class="verify-result-row">
-        <span class="verify-result-label">Observed</span>
-        <span>${observed}</span>
-      </div>
       <div class="verify-result-verdict">${matches ? "✓ Looks right" : "✗ Doesn't match yet"}</div>
+      <div class="verify-result-reasoning">Expected ${sub.expected_outcome} — saw ${observed}</div>
       ${askHelp}
     </div>
   `;
 }
 
+// target_description isn't shown here — it's what plan_step wrote to
+// describe *where* the target is for the vision call (locateContext,
+// answerContext), and instruction_text almost always says the same thing
+// in the form a person reads ("Click 'Yes, I trust the authors'..." vs.
+// "the 'Yes, I trust the authors' button in the ... dialog"). Showing
+// both read as the same sentence twice.
 function substepBubbleHtml(sub) {
   if (sub.origin === "ai") {
     return `
       <div class="bubble-ai" data-substep-id="${sub.id}">
-        <div class="bubble-target">${sub.target_description}</div>
         <div class="bubble-instruction">${sub.instruction_text}</div>
-        ${actionsHtml(sub)}
         ${verifyHtml(sub)}
-        <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     `;
   }
@@ -1698,32 +1649,10 @@ function substepBubbleHtml(sub) {
       <div class="bubble-question">${sub.question}</div>
       <div class="bubble-answer">
         <div class="bubble-instruction">${sub.instruction_text}</div>
-        ${actionsHtml(sub)}
         ${verifyHtml(sub)}
-        <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     </div>
   `;
-}
-
-// Sends this substep's bbox + copy to the overlay window, which owns all
-// the coordinate math and the re-poll that keeps the box glued to the
-// target window as it moves (see overlay.js's file header).
-async function showOverlayFor(sub) {
-  overlaidSubstepId = sub.id;
-  await emit("tutoria:show-overlay", {
-    bbox: sub.last_known_bbox,
-    targetDescription: sub.target_description ?? "",
-    instructionText: sub.instruction_text ?? "",
-  });
-  renderChat();
-}
-
-async function hideOverlay() {
-  if (overlaidSubstepId === null) return;
-  overlaidSubstepId = null;
-  await emit("tutoria:hide-overlay");
-  renderChat();
 }
 
 // Groups each reactive (pink) substep under the AI substep it's tied to
@@ -1732,6 +1661,12 @@ async function hideOverlay() {
 // `respondingTo` — a legacy substep from before this existed, or one
 // whose target substep is somehow gone — falls back to rendering at the
 // end, same as the old behavior, rather than silently vanishing.
+//
+// When chatScopeSubstepId is set (opened from one substep-list row, not
+// the step's "Open chat →" button), only that one AI substep and its own
+// replies render — every other substep in the step is left out entirely,
+// not just scrolled past, per the request that clicking one substep opens
+// a dialog for that substep alone.
 function renderChatParts() {
   const subs = currentStep.substeps;
   const repliesByTarget = new Map();
@@ -1747,15 +1682,22 @@ function renderChatParts() {
     }
   }
 
+  const aiSubs = subs.filter(
+    (s) => s.origin === "ai" && (!chatScopeSubstepId || s.id === chatScopeSubstepId),
+  );
+
   const parts = [];
-  for (const sub of subs) {
-    if (sub.origin !== "ai") continue;
+  for (const sub of aiSubs) {
     parts.push(substepBubbleHtml(sub));
     for (const reply of repliesByTarget.get(sub.id) ?? []) {
       parts.push(`<div class="bubble-reply">${substepBubbleHtml(reply)}</div>`);
     }
   }
-  for (const reply of orphanReplies) parts.push(substepBubbleHtml(reply));
+  // Orphan replies have no substep of their own to scope under, so they
+  // only make sense in the whole-step view.
+  if (!chatScopeSubstepId) {
+    for (const reply of orphanReplies) parts.push(substepBubbleHtml(reply));
+  }
   return parts.join("");
 }
 
@@ -1766,57 +1708,11 @@ function renderChat() {
   body.querySelectorAll(".bubble-ai").forEach((el) => {
     el.classList.toggle("focused", el.dataset.substepId === focusedSubstepId);
     el.addEventListener("click", (e) => {
-      // Don't steal focus from a click that was actually on one of the
-      // bubble's own action buttons (eye/target/note/verify).
+      // Don't steal focus from a click that was actually on the bubble's
+      // own verify button.
       if (e.target.closest("button")) return;
       focusedSubstepId = el.dataset.substepId;
       renderChat();
-    });
-  });
-
-  body.querySelectorAll("[data-overlay]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.overlay);
-      if (!sub || !sub.last_known_bbox) return;
-      if (overlaidSubstepId === sub.id) hideOverlay();
-      else showOverlayFor(sub);
-    });
-  });
-
-  body.querySelectorAll("[data-show]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.show);
-      if (!sub || !sub.last_known_bbox) return;
-      const slot = body.querySelector(`[data-slot="${sub.id}"]`);
-      slot.innerHTML = slot.innerHTML ? "" : schematicHtml(sub.last_known_bbox);
-    });
-  });
-
-  body.querySelectorAll("[data-locate]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.locate);
-      if (!sub) return;
-      btn.disabled = true;
-      btn.classList.add("busy");
-      try {
-        sub.last_known_bbox = await invoke("locate_element", {
-          target: locateTarget(sub),
-          scope: currentCaptureScope(),
-          context: locateContext(sub),
-        });
-        // Already-visible overlay for this substep should jump to the new
-        // box rather than keep showing the old one.
-        if (overlaidSubstepId === sub.id) await showOverlayFor(sub);
-        else renderChat();
-      } catch (err) {
-        btn.classList.remove("busy");
-        btn.classList.add("failed");
-        btn.title = `Couldn't locate: ${err}`;
-        setTimeout(() => {
-          btn.classList.remove("failed");
-          btn.disabled = false;
-        }, 2500);
-      }
     });
   });
 

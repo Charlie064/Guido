@@ -1399,56 +1399,9 @@
         font-size: 12px;
       }
 
-      .bubble-target {
-        color: var(--muted);
-        font-size: 9px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-bottom: 3px;
-      }
-
       .bubble-instruction {
         font-size: 12px;
         line-height: 1.45;
-      }
-
-      /* Per-substep actions: eye (draw the real on-screen overlay),
-         target (re-locate live), note (in-panel schematic) — icon-only,
-         from the shared pool in src/icons.js. Icons inherit `color` via
-         currentColor, so the hover/disabled states below tint the SVG
-         itself without each icon needing a color passed in. */
-      .bubble-actions {
-        display: flex;
-        gap: 4px;
-        margin-top: 7px;
-      }
-
-      .bubble-icon-btn {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: none;
-        border: 1px solid var(--border);
-        color: var(--muted);
-        border-radius: 5px;
-        padding: 3px 5px;
-        line-height: 0;
-      }
-
-      .bubble-icon-btn:hover {
-        border-color: var(--blue-border);
-        color: var(--text);
-      }
-
-      .bubble-icon-btn:disabled {
-        opacity: 0.6;
-        cursor: default;
-      }
-
-      /* Mid-locate: the vision round trip takes seconds, so the button
-         has to visibly be doing something rather than just going dim. */
-      .bubble-icon-btn.busy {
-        animation: bubble-btn-pulse 1s ease-in-out infinite;
       }
 
       @keyframes bubble-btn-pulse {
@@ -1456,15 +1409,8 @@
         50% { opacity: 1; }
       }
 
-      .bubble-icon-btn.failed {
-        border-color: var(--pink-border);
-        color: var(--pink);
-      }
-
-      /* "Check my work" — a labeled button, not icon-only like the
-         eye/target/note row above it: unlike those, this one costs an
-         API call and changes what's shown below it, so it needs to read
-         as a deliberate action rather than blend into the icon row. */
+      /* "Check my work" — costs an API call and changes what's shown
+         below it, so it's a labeled pill rather than a bare icon. */
       .bubble-verify-btn {
         display: inline-flex;
         align-items: center;
@@ -1515,29 +1461,24 @@
         border: 1px solid var(--pink-border);
       }
 
-      .verify-result-row {
-        display: flex;
-        gap: 5px;
-      }
-
-      .verify-result-row + .verify-result-row {
-        margin-top: 3px;
-      }
-
-      .verify-result-label {
-        flex-shrink: 0;
+      .verify-result-verdict {
         font-weight: 600;
-        color: var(--muted);
       }
 
       .verify-result.match .verify-result-verdict {
         color: #1f9e63;
-        font-weight: 600;
       }
 
       .verify-result.mismatch .verify-result-verdict {
         color: var(--pink);
-        font-weight: 600;
+      }
+
+      /* The expected/observed detail behind the verdict — one line of
+         reasoning right underneath it, not two separate labeled rows
+         ahead of it. Muted so the verdict itself still reads first. */
+      .verify-result-reasoning {
+        margin-top: 3px;
+        color: var(--muted);
       }
 
       .verify-ask-help {
@@ -1589,41 +1530,6 @@
         opacity: 0.5;
         cursor: default;
         box-shadow: none;
-      }
-
-      /* Schematic preview: NOT a real window drawn over the target app —
-         a small proportional diagram, rendered entirely inside this
-         panel, of roughly where the element sits. See sidebar.js's
-         renderSchematic — this replaces the old main.js overlay window
-         entirely. */
-      .schematic {
-        position: relative;
-        width: 100%;
-        margin-top: 8px;
-        background: repeating-linear-gradient(
-          45deg,
-          rgba(10, 10, 10, 0.04),
-          rgba(10, 10, 10, 0.04) 6px,
-          transparent 6px,
-          transparent 12px
-        );
-        background-color: #fafafa;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        overflow: hidden;
-      }
-
-      .schematic-box {
-        position: absolute;
-        border: 2px solid var(--pink);
-        background: rgba(255, 46, 154, 0.16);
-        border-radius: 2px;
-      }
-
-      .schematic-caption {
-        margin-top: 4px;
-        font-size: 10px;
-        color: var(--muted);
       }
 
       .chat-footer {
