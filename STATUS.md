@@ -324,8 +324,10 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   - Gamification mechanic (`BL-002`).
 - **Guido mascot (Tuto) checked in** at `assets/mascot/` (SVG + React
   cursor-follow components + app icons). Website landing and `/login`
-  use the cursor buddy; desktop login uses `guido-icon.png` (same mark
-  as the website header). See `docs/features/mascot.md`.
+  use the cursor buddy; desktop login, title bar, and bundle icons use
+  `guido-icon.png`. The overlay shell (login/setup/skills/path/chat)
+  now uses the website design system (light plus-grid, keycap
+  buttons, Space Grotesk). See `docs/features/website-design-system.md`.
 - **Landing page (Pauline) brought onto the Worker branch.** Guido Vite
   app from `claudev/pauline/landing-page` lives in `website/` (`npm run
   dev`); Worker is `website/worker/` and serves `dist/` on deploy.

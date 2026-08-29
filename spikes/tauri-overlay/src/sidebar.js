@@ -47,7 +47,6 @@ let currentStep = null;
 const expandedSteps = new Set();
 
 const els = {
-  panel: document.querySelector("#panel"),
   barBack: document.querySelector("#bar-back"),
   barTitle: document.querySelector("#bar-title"),
   barSubtitle: document.querySelector("#bar-subtitle"),
@@ -90,7 +89,6 @@ function showView(name) {
   els.barTitle.textContent = title;
   els.barSubtitle.textContent = subtitle;
   els.barBack.hidden = !backTarget;
-  els.panel.classList.toggle("login-skin", name === "login");
   els.barBack.onclick = backTarget ? () => showView(backTarget) : null;
 }
 

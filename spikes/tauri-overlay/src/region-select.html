@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tutoria — select region</title>
+    <title>Guido — select window</title>
     <style>
       html, body {
         margin: 0;
@@ -40,23 +40,25 @@
         top: 16px;
         left: 50%;
         transform: translateX(-50%);
-        background: #1a2029;
-        color: #f6f7f5;
-        font: 13px system-ui, sans-serif;
-        padding: 8px 14px;
-        border-radius: 6px;
+        background: rgba(12, 12, 14, 0.75);
+        backdrop-filter: blur(20px);
+        color: #ffffff;
+        font: 600 13px "Space Grotesk", Inter, system-ui, sans-serif;
+        padding: 10px 16px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
         pointer-events: none;
       }
       #hint kbd {
-        background: #2a3241;
-        border-radius: 3px;
-        padding: 1px 5px;
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 6px;
+        padding: 1px 6px;
         font-family: inherit;
       }
       #box {
         position: absolute;
-        border: 2px dashed #4d8cff;
-        background: rgba(77, 140, 255, 0.08);
+        border: 2px dashed #3B82F6;
+        background: rgba(59, 130, 246, 0.10);
         display: none;
         pointer-events: none;
       }
