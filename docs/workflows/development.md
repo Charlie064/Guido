@@ -117,37 +117,46 @@ npm install
 npm run dev
 ```
 
-This runs `wrangler dev`, serving `public/` as static files plus the
-Worker (`src/index.ts`) at a local URL wrangler prints (typically
-`http://localhost:8787`). **No Cloudflare login needed for this** —
-`wrangler dev` runs D1 against a local SQLite emulation by default, not
-the real remote database.
+`npm run dev` is the Vite landing page (Pauline’s Guido site) at
+`http://localhost:5173`. API routes live on the Worker — in another
+terminal run `npm run dev:api` (`wrangler dev` on :8787). Vite proxies
+`/api` and `/auth` to that port so the waitlist form works.
+
+`npm run build` writes the SPA to `website/dist/`. `npm run deploy`
+builds then runs `wrangler deploy`, which serves `dist/` as assets plus
+`worker/index.ts`. Browser navigations to `/api/*` and `/auth/*` run
+the Worker first (`run_worker_first` in `wrangler.jsonc`) so the SPA
+fallback does not swallow Google login. **No Cloudflare login needed for local `dev` /
+`dev:api`** — `wrangler dev` uses local D1.
 
 **If you built your site separately** (your own localhost project, not
 started from this scaffold), bringing it in is a copy, not a rewrite:
 
-- **Plain HTML/CSS/JS:** copy your files into `website/public/`,
-  replacing the placeholder `index.html` there. `npm run dev` serves
-  whatever's in `public/` — nothing else to wire up.
-- **Built with a bundler/framework** (Vite, React, etc.): run your own
-  build, then either copy the build output into `website/public/`, or
-  point `assets.directory` in `website/wrangler.jsonc` at your build
-  output folder directly.
+The live landing page is Pauline’s Guido Vite app in `website/src/`
+(from `claudev/pauline/landing-page`). Static extras (logos, demo clip,
+`privacy.html`) go in `website/public/`. The Worker is
+`website/worker/index.ts`; on deploy it serves `website/dist/`.
 
-**Keep the waitlist working:** the placeholder `public/index.html`'s
-`<form id="waitlist-form">` already POSTs JSON to `/api/waitlist`, which
-the Worker validates and inserts into D1 (`src/index.ts` +
-`migrations/0001_create_waitlist.sql`) — you don't need to touch any
-Worker code to keep this feature. Either keep that same
-id/fetch/`/api/waitlist` shape in your markup, or copy the `<script>`
-block near the bottom of the placeholder `index.html` wholesale into your
-page.
+**Keep the waitlist working:** the footer form in `website/src/Landing.jsx`
+POSTs JSON to `/api/waitlist`. The Worker validates and inserts into D1
+(`worker/index.ts` + `migrations/0001_create_waitlist.sql`).
 
 Local D1 migrations (only needed once, or after a schema change):
 
 ```sh
 npm run db:migrate:local
 ```
+
+Google login (desktop loopback + Worker) lives on the same Worker:
+branded `/login` (Guido fonts/buttons), then `/auth/google/start`,
+`/auth/google/callback`, `/api/me`, `/api/skills/start`. Copy `website/.dev.vars.example` to
+`website/.dev.vars` and fill `GOOGLE_CLIENT_ID` /
+`GOOGLE_CLIENT_SECRET`. Register the exact callback
+`http://localhost:8787/auth/google/callback` (local) or
+`https://tutoria-website.guidotutor.workers.dev/auth/google/callback`
+(production) on the Google OAuth client. The privacy policy Google
+requires is `website/public/privacy.html` (`/privacy.html`). Quota
+rules are in [business/pricing.md](../business/pricing.md).
 
 Deploying live:
 

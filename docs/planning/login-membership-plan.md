@@ -23,7 +23,7 @@
 1. Extend the existing waitlist D1 database with `users` and
    `memberships` tables.
 2. Add a Google OAuth flow to the existing website Worker
-   (`website/src/index.ts`) — it holds the client secret; the desktop app
+   (`website/worker/index.ts`) — it holds the client secret; the desktop app
    never does.
 3. Desktop app opens the system browser for login, gets a session token
    back over a local loopback redirect, stores it in the OS keychain (not
@@ -32,9 +32,9 @@
    given that token.
 5. Replace the disabled placeholder in `sidebar.html`'s `#view-login` with
    the real flow, gated on the membership check.
-6. **Quentin defines what a "membership" actually is** (free/pro? one paid
-   tier or several? trial period?) and writes it into `docs/business/` —
-   this doc deliberately does not decide that; it's part of the task.
+6. Membership **tiers are defined** in
+   [business/pricing.md](../business/pricing.md) — `free` | `starter` |
+   `plus` | `owner`. This plan only implements the check.
 
 ## Why the website Worker, not a new backend
 
@@ -55,7 +55,9 @@ Standard fix, same shape as VS Code, Slack, and most desktop apps use:
 1. Desktop app opens the user's system browser (not an embedded webview —
    embedded webviews can't securely share Google's own login session /
    passkeys, and Google's OAuth policy disallows them for this reason) to
-   the Worker's `/auth/google/start`.
+   the branded `/login?loopback=...` page (same Guido fonts and buttons
+   as the landing page). That page sends the user to
+   `/auth/google/start`.
 2. Worker redirects to Google with a PKCE code challenge (no client
    secret exposed to the browser at any point).
 3. Google redirects back to the Worker's `/auth/google/callback` with an
@@ -112,8 +114,9 @@ CREATE TABLE users (
 
 CREATE TABLE memberships (
   user_id INTEGER NOT NULL REFERENCES users(id),
-  plan TEXT NOT NULL,           -- e.g. 'free', 'pro' — see the tiers task below
-  status TEXT NOT NULL,         -- e.g. 'active', 'trialing', 'expired'
+  plan TEXT NOT NULL,           -- 'free' | 'starter' | 'plus' | 'owner'
+                                -- see docs/business/pricing.md
+  status TEXT NOT NULL,         -- 'active' | 'expired'
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (user_id)
 );
@@ -140,8 +143,12 @@ table (not a signed-JWT-only approach) so a session can be revoked
   GOOGLE_CLIENT_SECRET` — never committed, never shipped in the desktop
   binary.
 
-### 3. Worker routes (Quentin, `website/src/index.ts`)
+### 3. Worker routes (Quentin, `website/worker/index.ts`)
 
+- `GET /login` — Guido-styled sign-in page (`website/src/Login.jsx`).
+  Desktop should open `/login?loopback=http://127.0.0.1:<port>/callback`
+  so the user sees the same fonts/buttons as the landing page before
+  Google. Auth errors redirect here with `?error=`.
 - `GET /auth/google/start` — redirect to Google's auth endpoint with PKCE
   challenge, scope `openid email`, and a `redirect_uri` pointing back at
   this same Worker's `/auth/google/callback`.
@@ -150,8 +157,13 @@ table (not a signed-JWT-only approach) so a session can be revoked
   desktop app's loopback URL (passed through as a `state` param from step
   1, since the port is chosen per-launch by the app).
 - `GET /api/me` — reads `Authorization: Bearer <token>`, joins
-  `sessions` → `users` → `memberships`, returns `{ email, plan, status }`
-  or 401.
+  `sessions` → `users` → `memberships`, returns
+  `{ email, plan, status, skills_remaining, skills_included, can_save_skills }`
+  or 401. Quota math is in [business/pricing.md](../business/pricing.md).
+- `POST /api/skills/start` — same bearer token; inserts a `skill_runs`
+  row or 403 when the plan’s included new-skill count is used up
+  (`free` lifetime 5, `starter`/`plus` 30 this calendar month, `owner`
+  unlimited). Desktop should call this when a new goal starts.
 
 ### 4. Desktop app changes (needs Charlie for the Rust half)
 
@@ -161,30 +173,22 @@ table (not a signed-JWT-only approach) so a session can be revoked
   (already a dependency — see `Cargo.toml`) to the Worker's
   `/auth/google/start`, and resolves once the loopback server receives
   the token.
-- `src/sidebar.js` / `sidebar.html`: replace the disabled placeholder in
-  `#view-login` (currently just two disabled inputs and a `Continue`
-  button that does nothing) with a single "Sign in with Google" button
-  calling `start_google_login()`, then `invoke("get_session_token")` +
-  a fetch to `/api/me` before advancing past login.
+- `src/sidebar.js` / `sidebar.html`: `#view-login` is styled like the
+  Guido website (Inter / Space Grotesk, black pill button). The
+  "Sign in with Google" button should call `start_google_login()`, then
+  `invoke("get_session_token")` + a fetch to `/api/me` before advancing
+  past login. Until the Rust command exists, the button opens `/login`
+  in the browser; "Continue without signing in" keeps the demo path.
 
-### 5. Membership tiers (Quentin — do this before or alongside step 1)
+### 5. Membership tiers
 
-Tracked as [BL-007](../BACKLOG.md) — this is broader product scope than
-just this login task, so it has its own backlog entry rather than living
-only here. Nothing in the docs defines what a "membership" is yet — [ADR
-0002](../decisions/0002-agency-hybrid-vision-platform-business.md) only
-says "monthly subscription," no tiers. This doc deliberately does not
-decide it. **Write the answer into `docs/business/pricing.md`** (create
-it — `docs/business/` currently holds only a `.gitkeep`) — at minimum:
-how many tiers, what each unlocks, whether there's a free tier or a
-trial, and whether the MVP checks a **manually set** `plan` value in D1
-(no payment processor — flip someone's row by hand for now) or wires up
-real billing. This is a required deliverable of BL-007, not an optional
-write-up — the `memberships` table's `plan`/`status` values below stay
-placeholders until `pricing.md` exists. Real billing (Stripe or similar:
-checkout, webhooks, subscription lifecycle) is a materially bigger,
-separate task from the login flow above — scope it as a follow-up unless
-explicitly pulled in now.
+Canonical definition: [business/pricing.md](../business/pricing.md).
+Default a newly created `users` row to `memberships.plan = 'free'`,
+`status = 'active'`. `/api/me` must include `plan`, `status`,
+`skills_remaining`, `skills_included`, `can_save_skills` as specified
+there. Stripe / Starter overage charges are out of this login slice —
+MVP only stores `plan` (hand-set beyond `free`) and can hard-cap
+`free` at 5 new skills.
 
 ## Before Quentin can start: what Charlie needs to provide
 
@@ -193,11 +197,8 @@ Decided 2026-08-29:
 - **Google Cloud project: Quentin creates and owns it** (his own Google
   account, for now — not a shared/team account). Consent-screen support
   email and branding will show as his until this is revisited.
-- **Privacy policy page: Quentin writes and hosts it** — a minimal page in
-  `website/`, since he already owns that Worker. This is a hard blocker on
-  finishing the OAuth consent screen in step 2 below (Google requires a
-  privacy policy URL even for basic `openid email` scopes) — do this
-  before creating the OAuth client, not after.
+- **Privacy policy page: done** — `website/public/privacy.html`, live
+  path `/privacy.html`. Use that URL on the Google OAuth consent screen.
 - **Rust/Tauri half (step 4): Charlie pairs with Quentin on it.** The
   keyring storage and loopback-listener commands go in
   `src-tauri/src/lib.rs` — outside Quentin's stated role, so this isn't

@@ -50,35 +50,69 @@ const els = {
   barBack: document.querySelector("#bar-back"),
   barTitle: document.querySelector("#bar-title"),
   barSubtitle: document.querySelector("#bar-subtitle"),
+  profileWrap: document.querySelector("#bar-profile-wrap"),
+  profileBtn: document.querySelector("#bar-profile"),
+  profileMenu: document.querySelector("#profile-menu"),
 };
 
 const views = {
   login: document.querySelector("#view-login"),
   setup: document.querySelector("#view-setup"),
+  home: document.querySelector("#view-home"),
   skills: document.querySelector("#view-skills"),
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
 };
 
+// Compact shell sizes — keep the panel as small as the current view
+// allows so it can sit next to Excel instead of covering it.
+const VIEW_SIZE = {
+  login: [320, 440],
+  setup: [320, 400],
+  home: [320, 360],
+  skills: [320, 420],
+  path: [320, 560],
+  chat: [320, 560],
+};
+
+async function fitWindow(name) {
+  const [w, h] = VIEW_SIZE[name] || VIEW_SIZE.home;
+  try {
+    const LogicalSize = window.__TAURI__.dpi?.LogicalSize ?? window.__TAURI__.window.LogicalSize;
+    const win = getCurrentWindow();
+    await win.setSize(new LogicalSize(w, h));
+    await win.setMinSize(new LogicalSize(300, 320));
+  } catch {
+    // Browser preview / missing Tauri API — leave CSS to fill the webview.
+  }
+}
+
 // view -> [title, subtitle getter, back-target-or-null]
 function viewMeta(name) {
   switch (name) {
     case "login":
-      return ["Tutoria", "", null];
+      return ["Guido", "", null];
     case "setup":
-      return ["Set up", "", null];
+      return ["Set up", "", "home"];
+    case "home":
+      return ["Chats", "", null];
     case "skills":
-      return ["Your skills", "", null];
+      return ["Excel chats", "", "home"];
     case "path":
-      return [currentSkill.title, currentSkill.goal, "skills"];
+      return [currentSkill.title, currentSkill.goal, "home"];
     case "chat":
       return [currentStep.title, "", "path"];
     default:
-      return ["Tutoria", "", null];
+      return ["Guido", "", null];
   }
 }
 
 let currentView = "login";
+
+function setProfileOpen(open) {
+  els.profileMenu.classList.toggle("open", open);
+  els.profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
 
 function showView(name) {
   currentView = name;
@@ -90,6 +124,9 @@ function showView(name) {
   els.barSubtitle.textContent = subtitle;
   els.barBack.hidden = !backTarget;
   els.barBack.onclick = backTarget ? () => showView(backTarget) : null;
+  els.profileWrap.hidden = name === "login";
+  setProfileOpen(false);
+  fitWindow(name);
 }
 
 // ---------- Window-level quirks ----------
@@ -187,14 +224,43 @@ async function selectWindow() {
 
 document.querySelector("#setup-region-select").addEventListener("click", selectWindow);
 document.querySelector("#setup-continue").addEventListener("click", () => {
-  renderSkillsList();
-  showView("skills");
+  showView("home");
 });
 
 // ---------- Login ----------
 
 document.querySelector("#login-continue").addEventListener("click", () => {
+  showView("home");
+});
+
+async function startGoogleLogin() {
+  try {
+    await invoke("start_google_login");
+  } catch {
+    window.open("https://tutoria-website.guidotutor.workers.dev/login", "_blank");
+  }
+}
+
+document.querySelector("#login-google").addEventListener("click", startGoogleLogin);
+
+els.profileBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setProfileOpen(!els.profileMenu.classList.contains("open"));
+});
+document.addEventListener("click", () => setProfileOpen(false));
+els.profileMenu.addEventListener("click", (e) => e.stopPropagation());
+document.querySelector("#profile-signin").addEventListener("click", () => {
+  setProfileOpen(false);
+  startGoogleLogin();
+});
+document.querySelector("#profile-attach").addEventListener("click", () => {
+  setProfileOpen(false);
   showView("setup");
+});
+
+document.querySelector("#excel-chats").addEventListener("click", () => {
+  const excelSkill = SKILLS.find((s) => (s.appName || "").toLowerCase() === "excel") ?? SKILLS[0];
+  openSkill(excelSkill);
 });
 
 // ---------- Skills list ----------
@@ -287,6 +353,8 @@ document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
 function openSkill(skill) {
   currentSkill = skill;
   expandedSteps.clear();
+  const first = skill.steps.find((s) => s.generated);
+  if (first) expandedSteps.add(first.id);
   renderPath();
   showView("path");
 }
@@ -412,20 +480,13 @@ function renderPath() {
 
       for (const sub of step.substeps) {
         const subRow = document.createElement("div");
-        subRow.className = `substep-row origin-${sub.origin}`;
-        const preview = sub.origin === "user" ? sub.question : sub.target_description;
-        subRow.innerHTML = `
-          <span class="substep-dot"></span>
-          <span class="substep-text">
-            <span class="label">${sub.origin === "user" ? "You asked" : "AI step"}</span>
-            ${preview}
-          </span>
-        `;
-        subRow.addEventListener("click", (e) => {
+        subRow.innerHTML = overlayPlaceholderHtml(sub, { compact: true });
+        const card = subRow.firstElementChild;
+        card.addEventListener("click", (e) => {
           e.stopPropagation();
           openStep(step, sub.id);
         });
-        substepList.appendChild(subRow);
+        substepList.appendChild(card);
       }
       main.appendChild(substepList);
 
@@ -491,32 +552,71 @@ function locateTarget(sub) {
   return sub.target_description || sub.question || "";
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function overlayHitStyle(bbox) {
+  if (!bbox) return "left:28%;top:36%;width:34%;height:16%";
+  const w = bbox.image_width || 1920;
+  const h = bbox.image_height || 1080;
+  const left = (bbox.x0 / w) * 100;
+  const top = (bbox.y0 / h) * 100;
+  const width = ((bbox.x1 - bbox.x0) / w) * 100;
+  const height = ((bbox.y1 - bbox.y0) / h) * 100;
+  return `left:${left}%;top:${top}%;width:${width}%;height:${height}%`;
+}
+
+function overlayCalloutPlacement(bbox) {
+  if (!bbox) return "callout-bottom";
+  const midY = (bbox.y0 + bbox.y1) / 2 / (bbox.image_height || 1080);
+  return midY > 0.45 ? "callout-top" : "callout-bottom";
+}
+
+function overlayPlaceholderHtml(sub, { compact = false, nested = false } = {}) {
+  const kicker = sub.origin === "user" ? "You asked" : sub.target_description || "Step";
+  const text = sub.instruction_text || sub.question || "";
+  const app = currentSkill?.appName || "Excel";
+  const idAttr = nested ? "" : ` data-substep-id="${sub.id}"`;
+  return `
+    <div class="overlay-ph origin-${sub.origin}${compact ? " compact" : ""}"${idAttr}>
+      <div class="overlay-stage">
+        <div class="overlay-chrome">
+          <i></i><i></i><i></i>
+          <em>${escapeHtml(app)}</em>
+        </div>
+        <div class="overlay-hit" style="${overlayHitStyle(sub.last_known_bbox)}"></div>
+        <div class="overlay-callout ${overlayCalloutPlacement(sub.last_known_bbox)}">
+          <div class="overlay-callout-kicker">${escapeHtml(kicker)}</div>
+          <div class="overlay-callout-text">${escapeHtml(text)}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function locateButtonHtml(sub) {
   if (!locateTarget(sub)) return "";
-  return `<button class="bubble-locate" data-locate="${sub.id}" type="button">🎯 Locate</button>`;
+  return `<button class="bubble-locate" data-locate="${sub.id}" type="button">Locate</button>`;
 }
 
 function substepBubbleHtml(sub) {
-  if (sub.origin === "ai") {
-    return `
-      <div class="bubble-ai" data-substep-id="${sub.id}">
-        <div class="bubble-target">${sub.target_description}</div>
-        <div class="bubble-instruction">${sub.instruction_text}</div>
-        ${sub.last_known_bbox ? `<button class="bubble-show" data-show="${sub.id}" type="button">📍 Show</button>` : ""}
-        ${locateButtonHtml(sub)}
-        <div class="schematic-slot" data-slot="${sub.id}"></div>
-      </div>
-    `;
-  }
+  const question = sub.origin === "user" && sub.question
+    ? `<div class="bubble-question">${escapeHtml(sub.question)}</div>`
+    : "";
   return `
-    <div class="bubble-user-block" data-substep-id="${sub.id}">
-      <div class="bubble-question">${sub.question}</div>
-      <div class="bubble-answer">
-        <div class="bubble-instruction">${sub.instruction_text}</div>
-        ${sub.last_known_bbox ? `<button class="bubble-show" data-show="${sub.id}" type="button">📍 Show</button>` : ""}
+    <div class="overlay-card" data-substep-id="${sub.id}">
+      ${question}
+      ${overlayPlaceholderHtml(sub, { nested: true })}
+      <div class="overlay-actions">
+        ${sub.last_known_bbox ? `<button class="bubble-show" data-show="${sub.id}" type="button">Show schematic</button>` : ""}
         ${locateButtonHtml(sub)}
-        <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
+      <div class="schematic-slot" data-slot="${sub.id}"></div>
     </div>
   `;
 }
@@ -593,3 +693,4 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") emit("tutoria:quit");
 });
 listen("tutoria:quit", () => getCurrentWindow().close());
+fitWindow("login");

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 230" width="200" height="230" role="img" aria-label="Tuto the mascot, idle">
+  <defs>
+    <linearGradient id="body-idle" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bfe0fb"/>
+      <stop offset="55%" stop-color="#d7c8f0"/>
+      <stop offset="100%" stop-color="#f6c7dd"/>
+    </linearGradient>
+    <radialGradient id="shine-idle" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="blur-idle" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="shadowblur-idle" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="100" cy="205" rx="52" ry="10" fill="#5b4b63" opacity="0.16" filter="url(#shadowblur-idle)"/>
+
+  <ellipse cx="76" cy="182" rx="15" ry="11" fill="url(#body-idle)" fill-opacity="0.9"/>
+  <ellipse cx="124" cy="182" rx="15" ry="11" fill="url(#body-idle)" fill-opacity="0.9"/>
+
+  <g fill="url(#body-idle)" fill-opacity="0.9">
+    <ellipse cx="100" cy="132" rx="76" ry="64"/>
+    <circle cx="54" cy="82" r="36"/>
+    <circle cx="86" cy="62" r="33"/>
+    <circle cx="122" cy="63" r="35"/>
+    <circle cx="152" cy="86" r="33"/>
+  </g>
+
+  <ellipse cx="80" cy="58" rx="46" ry="16" fill="url(#shine-idle)" opacity="0.55" transform="rotate(-18 80 58)"/>
+  <ellipse cx="66" cy="82" rx="20" ry="12" fill="#ffffff" opacity="0.5" filter="url(#blur-idle)" transform="rotate(-24 66 82)"/>
+  <ellipse cx="60" cy="72" rx="7" ry="4.2" fill="#ffffff" opacity="0.8" transform="rotate(-24 60 72)"/>
+
+    <circle cx="78" cy="122" r="15" fill="#ffffff" opacity="0.95"/>
+    <circle cx="123" cy="120" r="15" fill="#ffffff" opacity="0.95"/>
+    <circle cx="80" cy="123" r="10.5" fill="#2a2233"/>
+    <circle cx="125" cy="121" r="10.5" fill="#2a2233"/>
+    <circle cx="76.5" cy="119" r="3" fill="#ffffff"/>
+    <circle cx="121.5" cy="117" r="3" fill="#ffffff"/>
+</svg>

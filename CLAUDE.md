@@ -82,7 +82,10 @@ before shipping beyond a demo.)
 | Website scope (Pauline) | `docs/planning/website-v0.md` |
 | What to work on without a Claude Code session | `docs/planning/offline-planning-guide.md` |
 | Skill generation/editing/storage algorithm | `docs/features/skills.md` |
+| Guido mascot (Tuto) states, cursor buddy | `docs/features/mascot.md` |
+| Website + desktop visual language | `docs/features/website-design-system.md` |
 | Login, Google account link, membership check (Quentin) | `docs/planning/login-membership-plan.md` |
+| Membership pricing, Anthropic API COGS | `docs/business/pricing.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.

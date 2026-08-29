@@ -231,7 +231,8 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     window's `app_name`), so Research scopes its search to the actual
     target app instead of guessing it from goal text. Skill cards
     (`sidebar.js`) show the app as a small tag — display only for now;
-    grouping by app is still BL-004, not built here.
+    grouping by app is still BL-004; the overlay home now fakes one
+    “Excel chats” group that opens the fixture skill.
   - **Verified**: `cargo check` clean; the Linux/X11 backend was smoke-
     tested live against XWayland on this GNOME/Wayland dev session
     (connects and queries correctly — this sandbox just has zero real app
@@ -245,7 +246,7 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     real pointer/display and a real second window to click on — this
     sandbox has no window manager surface to test against and no
     synthetic-input tool, same limitation as the pin-icon work above).
-  - Branch: `claudev/charlie/window-select-capture`, not yet merged.
+  - Merged to `main` (`e2948b6`) and onto `claudev/quentin/google-login`.
 
 - **Lazy per-step substep generation — first real piece of the designed
   per-step algorithm (`docs/features/skills.md`) actually built.** Research
@@ -301,7 +302,7 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain
   `guidotutor`) — see `docs/reference/team.md`. Website deployed:
   **https://tutoria-website.guidotutor.workers.dev/**. Scaffold in
-  `website/` (`wrangler.jsonc`, `src/index.ts`,
+  `website/` (`wrangler.jsonc`, `worker/index.ts`,
   `migrations/0001_create_waitlist.sql`) — Worker + static assets + a
   waitlist-only D1 database (`tutoria-waitlist`). Verified end to end in
   production: loaded the live URL in a browser, submitted the waitlist
@@ -309,18 +310,36 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   execute --remote`. Full accounts/auth still deferred, per ADR 0004's
   narrowed scope. **Not yet done:** inviting teammates as Cloudflare
   account members (Manage Account → Members in the dashboard); a real
-  domain (currently on the free `workers.dev` subdomain). Pauline still
-  owns the actual landing-page content — the current
-  `website/public/index.html` is a placeholder proving the wiring, not the
-  real site.
+  domain (currently on the free `workers.dev` subdomain). Pauline’s
+  Guido landing page from `claudev/pauline/landing-page` is now the
+  site in `website/` (Vite app → `dist/` on deploy).
+- **Anthropic API COGS estimated** in `docs/business/pricing.md`
+  (planning: 1 skill/day × 5 steps × 5 locates/step, images sent at
+  half linear res 960×540 → ~$4.05 typical subscriber/month; heavy
+  ~$8). Membership tiers decided in the same file: `free` (5
+  lifetime skills), `starter` ($12 + $0.25/skill overage), `plus`
+  ($24, can save skills), `owner` (unlimited). `BL-007` is now
+  enforce-quotas, not define-tiers.
 - **Open, undecided:**
   - Where the Do-mode opt-in toggle lives (global setting vs. per-question).
   - Gamification mechanic (`BL-002`).
-- **Planned, not started: Google login + membership check (Quentin).** See
-  `docs/planning/login-membership-plan.md` — extends the D1 waitlist
-  database with users/memberships/sessions, adds a Google OAuth flow to
-  the website Worker, and wires the desktop app's placeholder login view
-  to it. Formalizes the auth scope ADR 0004 explicitly deferred. Blocked
-  on Charlie providing Cloudflare account access, a Google Cloud project,
-  and a privacy policy page — see that doc's "Before Quentin can start"
-  section.
+- **Guido mascot (Tuto) checked in** at `assets/mascot/` (SVG + React
+  cursor-follow components + app icons). Website landing and `/login`
+  use the cursor buddy; desktop login, title bar, and bundle icons use
+  `guido-icon.png`. The overlay shell (login/setup/skills/path/chat)
+  now uses the website design system (light plus-grid, keycap
+  buttons, Space Grotesk). See `docs/features/website-design-system.md`.
+- **Landing page (Pauline) brought onto the Worker branch.** Guido Vite
+  app from `claudev/pauline/landing-page` lives in `website/` (`npm run
+  dev`); Worker is `website/worker/` and serves `dist/` on deploy.
+  Waitlist + `/privacy.html` are on the landing footer.
+- **Google login Worker + quotas (Quentin) — Worker half started.**
+  Branch `claudev/quentin/google-login`: D1 migration
+  `website/migrations/0002_create_auth_and_quotas.sql`, privacy page at
+  `/privacy.html`, routes `/auth/google/start`,
+  `/auth/google/callback`, `/api/me` (quota fields),
+  `POST /api/skills/start` (hard-caps `free` at 5 and
+  `starter`/`plus` at 30/month). Still needed: Google Cloud OAuth
+  client + `wrangler secret put GOOGLE_CLIENT_SECRET`, remote migrate,
+  and Charlie pairing on the Tauri keyring/loopback half. See
+  `docs/planning/login-membership-plan.md`.

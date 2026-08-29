@@ -2,7 +2,9 @@
 // backend, no real Research/vision calls. Its whole point is to exercise
 // the real UI and the real overlay-drawing path with fixture data instead
 // of live ones, so wiring up the actual thing later is a data-source swap,
-// not a UI rewrite. See docs/features/skills.md for the model this mirrors.
+// not a UI rewrite. Substeps render as fake overlay stages (highlight +
+// step textbox) until a real on-screen callout exists. See
+// docs/features/skills.md for the model this mirrors.
 //
 // Substep shape is deliberately the same shape a real pipeline would
 // produce: `last_known_bbox` is exactly the {x0,y0,x1,y1,image_width,
@@ -36,6 +38,7 @@ export const SKILLS = [
     id: "excel-chart",
     title: "Make a chart in Excel",
     goal: "How do I make a chart in Excel?",
+    appName: "Excel",
     steps: [
       {
         id: "s1",
