@@ -154,13 +154,14 @@ window sitting over the target app blocks clicks into it — the sidebar's
 own panel has the same problem if it's large or centrally placed, quite
 apart from whatever `main`'s click-through state was doing. Rather than
 keep managing a full-screen window's interactivity at all, highlighting
-now renders as a small schematic diagram *inside the sidebar's own chat
-view*: a proportional box on a placeholder rectangle, not a real overlay
-on the real screen. See `renderSchematic`-equivalent code in
-`spikes/tauri-overlay/src/sidebar.js` and
+now renders as a fake overlay *inside the sidebar* (path + chat): a mini
+target-app window with a highlight box and a step textbox — placeholder
+for the real on-screen callout. Show still opens a small schematic
+diagram (a proportional box on a placeholder rectangle). Nothing is
+drawn on the real screen. See `overlayPlaceholderHtml` /
+`schematicHtml` in `spikes/tauri-overlay/src/sidebar.js` and
 [features/skills.md](../features/skills.md)'s substep model
-(`last_known_bbox` + `image_width`/`image_height` drive the schematic's
-proportions). This is a real product trade-off, not just cleanup — the
+(`last_known_bbox` + `image_width`/`image_height` drive both). This is a real product trade-off, not just cleanup — the
 original "point at the real element on the real screen" promise in
 [philosophy/vision.md](../philosophy/vision.md) is not currently
 delivered; revisit if/when a way to highlight without blocking clicks is

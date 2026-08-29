@@ -3,7 +3,7 @@
 **Contract** [partial]
 - Visual language for the Guido brand, established by the landing page
   (`website/src/Landing.jsx` / `website/src/brand.jsx`).
-- Desktop overlay (`spikes/tauri-overlay`) reuses these tokens instead
+- Desktop overlay (`guido-overlay` in `spikes/tauri-overlay`) reuses these tokens instead
   of a second identity. If the website colors/type/buttons change,
   update this doc and the overlay in the same commit (co-change rule).
 - This describes the current code, not a future spec.
@@ -70,6 +70,13 @@ view (login, setup, skills, path, chat):
 
 - White plus-grid background, Inter body, Space Grotesk labels.
 - `guido-icon.png` in the title bar and on the login card.
+- Compact 320px shell; profile pill (top right) after Continue.
+- Home uses the same card + halo treatment for the fake “Excel chats”
+  group (`assets/excel.png`).
+- Demo substeps use a fake overlay stage (dark window chrome, pink
+  highlight, white callout) as a stand-in for the real on-screen
+  step textbox. Teach steps get a blue callout border; user
+  follow-ups get pink.
 - Keycap buttons for Google sign-in, Continue, Ask, and Send.
 - Window-pick hint uses the dark-glass treatment from the download
   modal (`region-select.html`).

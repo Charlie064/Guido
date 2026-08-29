@@ -114,6 +114,130 @@
         box-shadow: 0 0 0 4px var(--halo-bloom);
       }
 
+      .bar-profile-wrap {
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .bar-profile {
+        width: 32px;
+        height: 32px;
+        border-radius: 999px;
+        border: 1.5px solid rgba(0, 0, 0, 0.10);
+        background: #0A0A0A;
+        color: #ffffff;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 0;
+        box-shadow: 0 0 0 3px var(--halo);
+      }
+
+      .bar-profile:hover {
+        box-shadow: 0 0 0 4px var(--halo-bloom);
+      }
+
+      .bar-profile-wrap[hidden] {
+        display: none;
+      }
+
+      .profile-menu {
+        display: none;
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: 196px;
+        padding: 8px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.35);
+        z-index: 20;
+      }
+
+      .profile-menu.open {
+        display: block;
+      }
+
+      .profile-menu-who {
+        padding: 8px 10px 10px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .profile-menu-meta {
+        padding: 0 10px 8px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .profile-menu button {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .profile-menu button:hover {
+        background: #f5f5f5;
+      }
+
+      .home-kicker {
+        margin: 16px 16px 10px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .app-group {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 0 16px 16px;
+        padding: 12px;
+        width: calc(100% - 32px);
+        text-align: left;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
+      }
+
+      .app-group:hover {
+        box-shadow: 0 0 0 4px var(--halo-bloom), 0 8px 24px -18px rgba(0, 0, 0, 0.35);
+      }
+
+      .app-group img {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        object-fit: cover;
+        flex-shrink: 0;
+      }
+
+      .app-group-title {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+
+      .app-group-meta {
+        margin-top: 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
       .view {
         display: none;
         flex-direction: column;
@@ -531,7 +655,125 @@
         margin-top: 8px;
         display: flex;
         flex-direction: column;
+        gap: 10px;
+      }
+
+      /* Fake on-screen overlay — placeholder until a real Excel
+         callout is drawn over the target window. */
+      .overlay-ph {
+        cursor: pointer;
+      }
+
+      .overlay-stage {
+        position: relative;
+        aspect-ratio: 16 / 10;
+        background:
+          radial-gradient(ellipse 70% 60% at 50% 40%, #1c1c1f 0%, #0A0A0A 70%);
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.45);
+      }
+
+      .overlay-chrome {
+        display: flex;
+        align-items: center;
         gap: 5px;
+        padding: 6px 8px;
+        background: #141414;
+      }
+
+      .overlay-chrome i {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        display: block;
+      }
+
+      .overlay-chrome i:nth-child(1) { background: #FF5F57; }
+      .overlay-chrome i:nth-child(2) { background: #FEBC2E; }
+      .overlay-chrome i:nth-child(3) { background: #28C840; }
+
+      .overlay-chrome em {
+        margin-left: 6px;
+        color: rgba(255, 255, 255, 0.55);
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 9px;
+        font-style: normal;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
+
+      .overlay-hit {
+        position: absolute;
+        border: 2px solid var(--pink);
+        background: rgba(255, 46, 154, 0.18);
+        border-radius: 4px;
+        box-shadow: 0 0 0 4px rgba(255, 46, 154, 0.12);
+        pointer-events: none;
+      }
+
+      .overlay-ph.compact .overlay-stage {
+        aspect-ratio: 16 / 7;
+      }
+
+      .overlay-ph.compact .overlay-callout-text {
+        font-size: 11px;
+      }
+
+      .overlay-ph:hover .overlay-stage {
+        box-shadow: 0 0 0 4px var(--halo);
+      }
+
+      .overlay-callout {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        padding: 8px 10px;
+        background: #ffffff;
+        border: 1px solid var(--blue-border);
+        border-radius: 12px;
+        box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.5);
+      }
+
+      .overlay-callout.callout-bottom {
+        bottom: 10px;
+      }
+
+      .overlay-callout.callout-top {
+        top: 30px;
+      }
+
+      .overlay-ph.origin-user .overlay-callout {
+        border-color: var(--pink-border);
+        background: #fff7fb;
+      }
+
+      .overlay-callout-kicker {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--blue);
+        margin-bottom: 3px;
+      }
+
+      .overlay-ph.origin-user .overlay-callout-kicker {
+        color: var(--pink);
+      }
+
+      .overlay-callout-text {
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--ink);
+      }
+
+      .overlay-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
       }
 
       .substep-row {
@@ -628,9 +870,9 @@
         padding: 10px 12px;
       }
 
+      .overlay-card,
       .bubble-user-block {
-        align-self: flex-end;
-        max-width: 92%;
+        align-self: stretch;
         display: flex;
         flex-direction: column;
         gap: 5px;
@@ -766,6 +1008,15 @@
           <div class="bar-title" id="bar-title">Guido</div>
           <div class="bar-subtitle" id="bar-subtitle"></div>
         </div>
+        <div class="bar-profile-wrap" id="bar-profile-wrap" hidden>
+          <button class="bar-profile" id="bar-profile" type="button" aria-label="Profile" aria-expanded="false">G</button>
+          <div class="profile-menu" id="profile-menu" role="menu">
+            <div class="profile-menu-who">Guest</div>
+            <div class="profile-menu-meta">Not signed in</div>
+            <button type="button" id="profile-signin">Sign in with Google</button>
+            <button type="button" id="profile-attach">Use Excel window</button>
+          </div>
+        </div>
       </div>
 
       <!-- Placeholder auth — no validation, just a gate to the rest of
@@ -805,6 +1056,17 @@
       </section>
 
 
+      <section id="view-home" class="view">
+        <div class="home-kicker">Apps</div>
+        <button class="app-group" id="excel-chats" type="button">
+          <img src="assets/excel.png" alt="" />
+          <div>
+            <div class="app-group-title">Excel chats</div>
+            <div class="app-group-meta">1 demo · make a chart</div>
+          </div>
+        </button>
+      </section>
+
       <section id="view-skills" class="view">
         <div class="new-goal-row">
           <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
@@ -820,8 +1082,8 @@
 
       <section id="view-chat" class="view">
         <div class="chat-hint">
-          No overlay window is drawn on your screen — this preview is
-          schematic, shown only here.
+          Excel context — Locate finds the control on your real window.
+          The box here is a schematic, not drawn on Excel.
         </div>
         <div class="chat-body" id="chat-body"></div>
         <div class="chat-footer">

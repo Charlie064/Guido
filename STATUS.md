@@ -231,7 +231,8 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     window's `app_name`), so Research scopes its search to the actual
     target app instead of guessing it from goal text. Skill cards
     (`sidebar.js`) show the app as a small tag — display only for now;
-    grouping by app is still BL-004, not built here.
+    grouping by app is still BL-004; the overlay home now fakes one
+    “Excel chats” group that opens the fixture skill.
   - **Verified**: `cargo check` clean; the Linux/X11 backend was smoke-
     tested live against XWayland on this GNOME/Wayland dev session
     (connects and queries correctly — this sandbox just has zero real app

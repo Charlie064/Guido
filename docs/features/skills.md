@@ -7,15 +7,21 @@
   flagged undecided in [STATUS.md](../../STATUS.md).
 - **What's built**: the UI shape (steps/substeps, blue-vs-pink origin,
   expandable path, per-step chat) in `spikes/tauri-overlay/src/sidebar.js`,
-  originally driven by fixture data in `src/fake-skill.js`; the Research
-  call (`spikes/vision-detect/research.py`, invoked via the
-  `research_goal` Tauri command in `lib.rs`); and, as of this pass, the
-  first real per-step AI-planned substep generation (`plan_step`
+  originally driven by fixture data in `src/fake-skill.js`. Demo
+  substeps render as a fake overlay — a mini Excel window with a
+  highlight box and a step textbox — placeholder for the real
+  on-screen callout (see Visual overlay in
+  [architecture/overview.md](../architecture/overview.md)). Also
+  built: the Research call (`spikes/vision-detect/research.py`,
+  invoked via the `research_goal` Tauri command in `lib.rs`); and
+  the first real per-step AI-planned substep generation (`plan_step`
   command → `spikes/vision-detect/plan_step.py`, invoked lazily from
   `generateStepSubsteps` in `sidebar.js` — see "Per-step loop" below).
   **What isn't**: reactive user-question substeps, user-editable path,
   and any persistence — a chat's substeps still live only in memory for
-  that session.
+  that session. App grouping (BL-004) is **faked** on the home screen:
+  one “Excel chats” row opens the fixture skill; detection/icons from
+  the OS are not wired.
 - Implements the per-step mechanics of the
   Goal → Research → See → Guide → Do → Verify → Learn loop from
   [philosophy/vision.md](../philosophy/vision.md), inside the four-layer
@@ -34,10 +40,12 @@
 
 ## Session flow
 
-1. **Setup** — launch the app, select the capture region (default: full
-   screen; user can draw a smaller box). One-time, per session.
+1. **Home** — after Continue, a compact chats list grouped by app. Today
+   that is a fixture “Excel chats” row (temporary Excel icon). Profile
+   (top right) can sign in or attach a live Excel window for locate
+   scope. Real OS app detection is still BL-004.
 2. **Goal** — the user states what they want to accomplish, in chat
-   ("how do I make a chart").
+   ("how do I make a chart"). The demo skill is “Make a chart in Excel”.
 3. **Research** — one-shot, online, AI-assisted. Runs exactly once per
    chat, against the stated goal (not re-run per step). This is the
    expensive, highest-leverage call in the whole system: everything
