@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Fredoka:wght@500;600;700&family=Orbitron:wght@600;700&display=swap');
+@import "tailwindcss";
+
+html, body {
+  background-color: #ffffff;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.9); opacity: 0.9; }
+  70% { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@keyframes float-tooltip {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes float-card {
+  0%, 100% { transform: translateY(0) rotate(var(--card-rot, 0deg)); }
+  50% { transform: translateY(-8px) rotate(var(--card-rot, 0deg)); }
+}
+
+@keyframes eq-bar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+
+@keyframes marquee-y {
+  from { transform: translateY(0); }
+  to { transform: translateY(-50%); }
+}
+
+@keyframes marquee-x {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Intro: cursor arcs around the centered mark, lands, "clicks" it into place */
+@keyframes intro-arc {
+  0%   { transform: translate(calc(-50% - 220px), calc(-50% + 30px)) rotate(-24deg) scale(2.1); opacity: 0; }
+  10%  { opacity: 1; }
+  42%  { transform: translate(calc(-50% - 20px), calc(-50% - 190px)) rotate(6deg) scale(1.35); }
+  70%  { transform: translate(calc(-50% + 200px), calc(-50% - 10px)) rotate(14deg) scale(1); }
+  88%  { transform: translate(-50%, -50%) rotate(0deg) scale(1.08); }
+  93%  { transform: translate(-50%, -50%) rotate(0deg) scale(0.82); }
+  100% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+}
+
+@keyframes intro-mark-color {
+  0%, 90% { background-color: #B6FF3E; }
+  100% { background-color: #0A0A0A; }
+}
+
+@keyframes intro-cursor-outline {
+  0%, 90% { opacity: 1; }
+  91%, 100% { opacity: 0; }
+}
+
+@keyframes intro-cursor-solid {
+  0%, 90% { opacity: 0; }
+  91%, 100% { opacity: 1; }
+}
+
+@keyframes intro-bg-fade {
+  0%, 92% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes shake-no {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-10px); }
+  40% { transform: translateX(9px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
