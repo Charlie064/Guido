@@ -96,6 +96,9 @@ const els = {
   barSubtitle: document.querySelector("#bar-subtitle"),
   statusBar: document.querySelector("#status-bar"),
   statusText: document.querySelector("#status-text"),
+  profileWrap: document.querySelector("#bar-profile-wrap"),
+  profileBtn: document.querySelector("#bar-profile"),
+  profileMenu: document.querySelector("#profile-menu"),
 };
 
 // Persistent status strip (outside every view — see sidebar.html's
@@ -149,30 +152,61 @@ async function withStatus(label, fn, opts) {
 const views = {
   login: document.querySelector("#view-login"),
   setup: document.querySelector("#view-setup"),
+  home: document.querySelector("#view-home"),
   skills: document.querySelector("#view-skills"),
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
 };
 
+// Compact shell sizes — keep the panel as small as the current view
+// allows so it can sit next to Excel instead of covering it.
+const VIEW_SIZE = {
+  login: [320, 440],
+  setup: [320, 400],
+  home: [320, 360],
+  skills: [320, 420],
+  path: [320, 560],
+  chat: [320, 560],
+};
+
+async function fitWindow(name) {
+  const [w, h] = VIEW_SIZE[name] || VIEW_SIZE.home;
+  try {
+    const LogicalSize = window.__TAURI__.dpi?.LogicalSize ?? window.__TAURI__.window.LogicalSize;
+    const win = getCurrentWindow();
+    await win.setSize(new LogicalSize(w, h));
+    await win.setMinSize(new LogicalSize(300, 320));
+  } catch {
+    // Browser preview / missing Tauri API — leave CSS to fill the webview.
+  }
+}
+
 // view -> [title, subtitle getter, back-target-or-null]
 function viewMeta(name) {
   switch (name) {
     case "login":
-      return ["Tutoria", "", null];
+      return ["Guido", "", null];
     case "setup":
-      return ["Set up", "", null];
+      return ["Set up", "", "home"];
+    case "home":
+      return ["Chats", "", null];
     case "skills":
-      return ["Your skills", "", null];
+      return ["Excel chats", "", "home"];
     case "path":
-      return [currentSkill.title, currentSkill.goal, "skills"];
+      return [currentSkill.title, currentSkill.goal, "home"];
     case "chat":
       return [currentStep.title, "", "path"];
     default:
-      return ["Tutoria", "", null];
+      return ["Guido", "", null];
   }
 }
 
 let currentView = "login";
+
+function setProfileOpen(open) {
+  els.profileMenu.classList.toggle("open", open);
+  els.profileBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
 
 function showView(name) {
   // Leaving the chat view drops the on-screen overlay: it belongs to one
@@ -190,6 +224,9 @@ function showView(name) {
   els.barSubtitle.textContent = subtitle;
   els.barBack.hidden = !backTarget;
   els.barBack.onclick = backTarget ? () => showView(backTarget) : null;
+  els.profileWrap.hidden = name === "login";
+  setProfileOpen(false);
+  fitWindow(name);
 }
 
 // ---------- Window-level quirks ----------
@@ -347,14 +384,43 @@ async function selectWindow() {
 
 document.querySelector("#setup-region-select").addEventListener("click", selectWindow);
 document.querySelector("#setup-continue").addEventListener("click", () => {
-  renderSkillsList();
-  showView("skills");
+  showView("home");
 });
 
 // ---------- Login ----------
 
 document.querySelector("#login-continue").addEventListener("click", () => {
+  showView("home");
+});
+
+async function startGoogleLogin() {
+  try {
+    await invoke("start_google_login");
+  } catch {
+    window.open("https://tutoria-website.guidotutor.workers.dev/login", "_blank");
+  }
+}
+
+document.querySelector("#login-google").addEventListener("click", startGoogleLogin);
+
+els.profileBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  setProfileOpen(!els.profileMenu.classList.contains("open"));
+});
+document.addEventListener("click", () => setProfileOpen(false));
+els.profileMenu.addEventListener("click", (e) => e.stopPropagation());
+document.querySelector("#profile-signin").addEventListener("click", () => {
+  setProfileOpen(false);
+  startGoogleLogin();
+});
+document.querySelector("#profile-attach").addEventListener("click", () => {
+  setProfileOpen(false);
   showView("setup");
+});
+
+document.querySelector("#excel-chats").addEventListener("click", () => {
+  const excelSkill = SKILLS.find((s) => (s.appName || "").toLowerCase() === "excel") ?? SKILLS[0];
+  openSkill(excelSkill);
 });
 
 // ---------- Skills list ----------
@@ -497,6 +563,8 @@ document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
 function openSkill(skill) {
   currentSkill = skill;
   expandedSteps.clear();
+  const first = skill.steps.find((s) => s.generated);
+  if (first) expandedSteps.add(first.id);
   renderPath();
   showView("path");
 }
@@ -875,3 +943,4 @@ listen("tutoria:quit", () => getCurrentWindow().close());
 // can't be rendered correctly until this resolves.
 initCaptureBackend();
 loadPersistedSkills();
+fitWindow("login");

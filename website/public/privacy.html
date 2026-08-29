@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Guido — Privacy policy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" />
+  <style>
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #0A0A0A;
+      font-family: Inter, system-ui, sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 40rem;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+    h1, h2 {
+      font-family: "Space Grotesk", sans-serif;
+      letter-spacing: -0.02em;
+    }
+    h1 { font-size: 2rem; margin: 0 0 0.5rem; }
+    h2 { font-size: 1.15rem; margin: 2rem 0 0.6rem; }
+    p, li { color: #404040; }
+    a { color: #0A0A0A; }
+    .meta { color: #a3a3a3; font-size: 0.8rem; }
+    .back { display: inline-block; margin-bottom: 2rem; font-size: 0.85rem; font-weight: 600; text-decoration: none; }
+    .back:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">← Back to Guido</a>
+    <h1>Privacy policy</h1>
+    <p class="meta">Last updated: 29 August 2026</p>
+    <p>
+      Guido (project name Tutoria) is a desktop assistant that guides you
+      through software on your own screen. This page is the privacy policy
+      for the website and the Google sign-in used by the desktop app.
+    </p>
+
+    <h2>What we collect</h2>
+    <ul>
+      <li>Waitlist email, if you join the list on the website.</li>
+      <li>
+        Google account email and Google’s stable account id (<code>sub</code>)
+        when you sign in. We use these to create your user and membership row.
+      </li>
+      <li>
+        A session token stored on your device’s OS keychain after login, and
+        the matching row on our Cloudflare D1 database so we can revoke it.
+      </li>
+      <li>
+        A count of new skills you start (a goal + research + on-screen
+        steps). We use this only to enforce the membership quota.
+      </li>
+    </ul>
+
+    <h2>Screen captures</h2>
+    <p>
+      When you ask Guido to look at your screen, a screenshot is sent to
+      Anthropic’s Claude API to locate a UI element. Screenshots are not
+      stored as part of a saved skill.
+    </p>
+
+    <h2>Who we share with</h2>
+    <ul>
+      <li>Google — only to complete Sign in with Google.</li>
+      <li>Anthropic — screenshots and prompts for vision/research while you use the app.</li>
+      <li>Cloudflare — hosts this site and the D1 database.</li>
+    </ul>
+    <p>We do not sell your data.</p>
+
+    <h2>How long we keep it</h2>
+    <p>
+      Waitlist emails and account rows stay until you ask us to delete them.
+      Sessions expire and can be revoked by deleting the session row.
+      Skill-run counts stay so we can apply your plan’s quota.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Questions or deletion requests:
+      <a href="mailto:quentinfeinaeugle@gmail.com">quentinfeinaeugle@gmail.com</a>
+    </p>
+  </main>
+</body>
+</html>
