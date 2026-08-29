@@ -169,7 +169,9 @@ table (not a signed-JWT-only approach) so a session can be revoked
 
 ### 5. Membership tiers (Quentin — do this before or alongside step 1)
 
-Nothing in the docs defines what a "membership" is yet — [ADR
+Tracked as [BL-006](../BACKLOG.md) — this is broader product scope than
+just this login task, so it has its own backlog entry rather than living
+only here. Nothing in the docs defines what a "membership" is yet — [ADR
 0002](../decisions/0002-agency-hybrid-vision-platform-business.md) only
 says "monthly subscription," no tiers. This doc deliberately does not
 decide it. Write the answer into `docs/business/` (currently just a
