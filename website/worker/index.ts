@@ -11,6 +11,15 @@ import {
   remainingFor,
   sha256Base64Url,
 } from "./auth";
+import {
+  accessEmailLabel,
+  csvResponse,
+  fetchWaitlist,
+  htmlResponse,
+  loadErrorResponse,
+  waitlistCsv,
+  waitlistHtml,
+} from "./internal-waitlist";
 
 export type { Env };
 
@@ -42,6 +51,17 @@ export default {
     }
     if (url.pathname === "/api/skills/start" && request.method === "POST") {
       return handleSkillStart(request, env);
+    }
+
+    // Internal waitlist admin. This Worker does NOT implement auth — these
+    // routes are expected to be protected by Cloudflare Access (Zero Trust)
+    // in production. Local `wrangler dev` has no Access in front.
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    if (path === "/internal/waitlist" && request.method === "GET") {
+      return handleInternalWaitlist(request, env);
+    }
+    if (path === "/internal/waitlist/export" && request.method === "GET") {
+      return handleInternalWaitlistExport(env);
     }
 
     return env.ASSETS.fetch(request);
@@ -331,6 +351,26 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     skills_included: includedFor(member.plan),
     can_save_skills: canSaveSkills(member.plan),
   });
+}
+
+async function handleInternalWaitlist(request: Request, env: Env): Promise<Response> {
+  try {
+    const snapshot = await fetchWaitlist(env.DB);
+    return htmlResponse(waitlistHtml(snapshot, accessEmailLabel(request)));
+  } catch (err) {
+    console.error("internal waitlist failed", err);
+    return loadErrorResponse();
+  }
+}
+
+async function handleInternalWaitlistExport(env: Env): Promise<Response> {
+  try {
+    const snapshot = await fetchWaitlist(env.DB);
+    return csvResponse(waitlistCsv(snapshot));
+  } catch (err) {
+    console.error("internal waitlist export failed", err);
+    return loadErrorResponse();
+  }
 }
 
 async function handleSkillStart(request: Request, env: Env): Promise<Response> {

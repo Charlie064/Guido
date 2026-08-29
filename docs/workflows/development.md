@@ -124,10 +124,18 @@ terminal run `npm run dev:api` (`wrangler dev` on :8787). Vite proxies
 
 `npm run build` writes the SPA to `website/dist/`. `npm run deploy`
 builds then runs `wrangler deploy`, which serves `dist/` as assets plus
-`worker/index.ts`. Browser navigations to `/api/*` and `/auth/*` run
-the Worker first (`run_worker_first` in `wrangler.jsonc`) so the SPA
-fallback does not swallow Google login. **No Cloudflare login needed for local `dev` /
+`worker/index.ts`. Browser navigations to `/api/*`, `/auth/*`, and
+`/internal/*` run the Worker first (`run_worker_first` in
+`wrangler.jsonc`) so the SPA fallback does not swallow Google login or
+the waitlist admin. **No Cloudflare login needed for local `dev` /
 `dev:api`** — `wrangler dev` uses local D1.
+
+`GET /internal/waitlist` (and `GET /internal/waitlist/export` for CSV)
+is served by the Worker, not the React app, and is not linked from the
+public site. In production put Cloudflare Access in front of
+`/internal/waitlist*`. Locally, open
+`http://localhost:8787/internal/waitlist` on `wrangler dev` — there is
+no Access header, so the page shows “Logged in as: (no Access header)”.
 
 **If you built your site separately** (your own localhost project, not
 started from this scaffold), bringing it in is a copy, not a rewrite:
