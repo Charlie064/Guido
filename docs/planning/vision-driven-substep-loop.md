@@ -23,7 +23,7 @@
 The original framing below ("vision-driven substep loop") treated
 screenshot-informed planning, auto-locate-on-entry, and smarter callout
 placement as one bundle. Charlie's follow-up reprioritized: **the thing
-that actually matters is that Tutoria can check the user's work itself,
+that actually matters is that Guido can check the user's work itself,
 instead of trusting a "Done" click** — this is the literal
 Guide → Do → **Verify** step from
 [philosophy/vision.md](../philosophy/vision.md)'s loop, and it's been

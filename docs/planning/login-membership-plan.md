@@ -40,7 +40,7 @@
 
 `website/` already has a live Cloudflare Worker with a D1 binding
 (`tutoria-waitlist`, see `wrangler.jsonc`) and is deployed at
-`tutoria-website.guidotutor.workers.dev`. Auth is small enough to add as
+`guido-website.guidotutor.workers.dev`. Auth is small enough to add as
 more routes on that same Worker rather than standing up a second service —
 one Cloudflare account, one D1 database, one deploy. Revisit only if this
 Worker ever needs to scale independently of the marketing site, which
@@ -74,7 +74,7 @@ Standard fix, same shape as VS Code, Slack, and most desktop apps use:
    token, done. Browser tab can be closed.
 
 This is the flow Google's own "OAuth for desktop apps" guidance describes
-(loopback redirect) — don't use a custom URI scheme (`tutoria://...`)
+(loopback redirect) — don't use a custom URI scheme (`guido://...`)
 instead; Google's current guidance prefers loopback and some platforms
 handle custom schemes inconsistently.
 
@@ -218,9 +218,9 @@ Still outstanding, not yet decided:
   Charlie's, teammates') go on that list once the project exists.
 - **The exact callback URL to register.** Google requires exact-match
   registered redirect URIs. Confirm this stays on
-  `tutoria-website.guidotutor.workers.dev` (per ADR 0004, no real domain
+  `guido-website.guidotutor.workers.dev` (per ADR 0004, no real domain
   yet) so Quentin registers the right URL the first time —
-  `https://tutoria-website.guidotutor.workers.dev/auth/google/callback`.
+  `https://guido-website.guidotutor.workers.dev/auth/google/callback`.
 
 ## Security notes
 

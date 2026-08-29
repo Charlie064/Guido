@@ -270,6 +270,6 @@ async function hide() {
   await getCurrentWindow().hide();
 }
 
-listen("tutoria:show-overlay", (event) => show(event.payload));
-listen("tutoria:hide-overlay", () => hide());
-listen("tutoria:quit", () => getCurrentWindow().close());
+listen("guido:show-overlay", (event) => show(event.payload));
+listen("guido:hide-overlay", () => hide());
+listen("guido:quit", () => getCurrentWindow().close());

@@ -525,7 +525,7 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   on the second run.
 - Record the Tauri choice as a proper ADR (was implicitly re-confirmed
   tonight by continuing the existing spike, not freshly decided).
-- Settle the product name (Tutoria vs. TutorialCue) — see the naming note in
+- Settle the product name (Guido vs. TutorialCue) — see the naming note in
   `docs/philosophy/vision.md`.
 - Decide non-negotiables (screen-data handling was explicitly deferred, not
   decided) and fill them into `CLAUDE.md`.
@@ -536,11 +536,11 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   user-question substeps, user-editable path, no-screenshot skill storage,
   opt-in refresh on replay — see `docs/features/skills.md`. Also closes
   what a saved "skill" stores.
-- **ADR 0004 (Cloudflare) accepted, and live.** Dedicated "Tutoria"
+- **ADR 0004 (Cloudflare) accepted, and live.** Dedicated "Guido"
   Cloudflare account created and administered by Charlie (Account ID
   `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain
   `guidotutor`) — see `docs/reference/team.md`. Website deployed:
-  **https://tutoria-website.guidotutor.workers.dev/**. Scaffold in
+  **https://guido-website.guidotutor.workers.dev/**. Scaffold in
   `website/` (`wrangler.jsonc`, `worker/index.ts`,
   `migrations/0001_create_waitlist.sql`) — Worker + static assets + a
   waitlist-only D1 database (`tutoria-waitlist`). Verified end to end in

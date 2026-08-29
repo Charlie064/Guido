@@ -8,7 +8,7 @@ point — this file should never pose as a source of truth for what's done.
   the user completes more tutorials/skills. No spaced-repetition system.
   Mechanic undecided (badges? streaks? per-app mastery levels?). See
   [philosophy/vision.md](philosophy/vision.md).
-- **BL-003 — Movable overlay icon + selection state.** The Tutoria icon
+- **BL-003 — Movable overlay icon + selection state.** The Guido icon
   should be draggable/repositionable instead of fixed to one screen
   location, so it doesn't block content. Deselected state shows a gray
   version of the icon svg; selected state (sidebar open) shows the blue
@@ -99,7 +99,7 @@ point — this file should never pose as a source of truth for what's done.
   [business/pricing.md](business/pricing.md).
 - **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
   currently runs on the free `workers.dev` subdomain
-  (`tutoria-website.guidotutor.workers.dev`, see
+  (`guido-website.guidotutor.workers.dev`, see
   [reference/team.md](reference/team.md)/[STATUS.md](../STATUS.md)).
   Register/point a real domain at the Cloudflare account and wire it into
   `website/wrangler.jsonc` (custom domain / route), including DNS and TLS.

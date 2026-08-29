@@ -63,7 +63,7 @@ function svg(size, body, extra = "") {
 // Masked icons need a DOM-unique id (the React originals used useId) —
 // a module-level counter is the plain-JS equivalent.
 let maskSeq = 0;
-const nextMaskId = () => `tutoria-icon-mask-${maskSeq++}`;
+const nextMaskId = () => `guido-icon-mask-${maskSeq++}`;
 
 // --- the pool ---
 

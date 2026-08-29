@@ -52,11 +52,11 @@ validation.
 
 ## Decision
 
-Accepted, and deployed. Cloudflare account "Tutoria" created and
+Accepted, and deployed. Cloudflare account "Guido" created and
 administered by Charlie (update [reference/team.md](../reference/team.md)
 if this changes). Scope: Workers + static assets for the website, D1 for
 the waitlist table only. Live at
-**https://tutoria-website.guidotutor.workers.dev/** — deployed and
+**https://guido-website.guidotutor.workers.dev/** — deployed and
 verified end to end (waitlist form write confirmed in the real D1
 database). Scaffold lives in `website/` (`wrangler.jsonc`, `src/index.ts`,
 `migrations/`). Team members still need to be invited to the Cloudflare

@@ -167,13 +167,15 @@ pub fn get_window_rect(id: &str) -> Result<WindowInfo, String> {
     }
 }
 
-// The app's own windows ("Tutoria" / "tutoria-region-select", product
-// name "tauri-overlay") should never be offered as a pick target — a
-// click that lands on the sidebar, or on the now-hidden click-catcher
-// itself between hide() and this query landing, shouldn't resolve to us.
+// The app's own windows ("Guido" / "guido-region-select" /
+// "guido-overlay") should never be offered as a pick target — a click
+// that lands on the sidebar, or on the now-hidden click-catcher itself
+// between hide() and this query landing, shouldn't resolve to us. The
+// product name, every window title, and the binary all start with
+// "guido", so one substring covers all of them.
 fn is_own_window(w: &WindowInfo) -> bool {
     let haystack = format!("{} {}", w.app_name, w.title).to_lowercase();
-    haystack.contains("tutoria") || haystack.contains("tauri-overlay")
+    haystack.contains("guido")
 }
 
 // Resolves a click (in absolute screen px, the same space `WindowInfo`'s

@@ -551,11 +551,11 @@ async function selectWindow() {
   await getCurrentWindow().hide();
 
   const point = await new Promise(async (resolve) => {
-    const unlisten = await listen("tutoria:window-point-selected", (event) => {
+    const unlisten = await listen("guido:window-point-selected", (event) => {
       unlisten();
       resolve(event.payload);
     });
-    emit("tutoria:begin-window-select");
+    emit("guido:begin-window-select");
   });
 
   if (point) {
@@ -707,7 +707,7 @@ async function startGoogleLogin() {
   try {
     await invoke("start_google_login");
   } catch {
-    window.open("https://tutoria-website.guidotutor.workers.dev/login", "_blank");
+    window.open("https://guido-website.guidotutor.workers.dev/login", "_blank");
   }
 }
 
@@ -962,7 +962,7 @@ function recomputeNextSkillId() {
 // Whole-tree persistence: every skill, its research steps, and any
 // AI-planned/user-asked substeps already reached, as one JSON file under
 // this app's OS-managed data directory (see skills_file_path in lib.rs —
-// on this Linux build that's `~/.local/share/com.charlie.tauri-overlay/
+// on this Linux build that's `~/.local/share/com.guidotutor.guido/
 // skills.json`; open it directly to inspect what got saved). Called after
 // every mutation below rather than batched/debounced: the file is small
 // and a hackathon build losing the last few seconds of edits on a crash is
@@ -1454,7 +1454,7 @@ function substepBubbleHtml(sub) {
 // target window as it moves (see overlay.js's file header).
 async function showOverlayFor(sub) {
   overlaidSubstepId = sub.id;
-  await emit("tutoria:show-overlay", {
+  await emit("guido:show-overlay", {
     bbox: sub.last_known_bbox,
     targetDescription: sub.target_description ?? "",
     instructionText: sub.instruction_text ?? "",
@@ -1465,7 +1465,7 @@ async function showOverlayFor(sub) {
 async function hideOverlay() {
   if (overlaidSubstepId === null) return;
   overlaidSubstepId = null;
-  await emit("tutoria:hide-overlay");
+  await emit("guido:hide-overlay");
   renderChat();
 }
 
@@ -1733,9 +1733,9 @@ document.querySelector("#chat-input").addEventListener("keydown", (e) => {
 // ---------- Global ----------
 
 window.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") emit("tutoria:quit");
+  if (e.key === "Escape") emit("guido:quit");
 });
-listen("tutoria:quit", () => getCurrentWindow().close());
+listen("guido:quit", () => getCurrentWindow().close());
 
 
 // Which pick gesture is possible depends on the session, so the setup view

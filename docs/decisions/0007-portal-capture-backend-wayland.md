@@ -59,7 +59,7 @@ geometry.
   so the picker offers both its screen and window tabs.
 - **Persist the grant, prompt once.** `persist_mode = 2` plus the returned
   `restore_token`, stored at
-  `$XDG_STATE_HOME/tutoria/portal-<scope>.json`. Every later capture
+  `$XDG_STATE_HOME/guido/portal-<scope>.json`. Every later capture
   restores the session from the token and is silent. The token is
   re-saved on each use because the compositor rotates it — keeping a stale
   one starts prompting again mid-skill.

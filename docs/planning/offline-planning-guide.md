@@ -35,7 +35,7 @@ Claude Code needed, just edit the ADR's "Decision" section once you know:
    *can* wait for Claude Code — `wrangler` setup is scriptable — but the
    account/domain/billing steps above are not).
 
-## 2. Product name — Tutoria vs. TutorialCue
+## 2. Product name — Guido vs. TutorialCue
 
 Flagged as unsettled in `CLAUDE.md` and
 [philosophy/vision.md](../philosophy/vision.md). This just needs a team

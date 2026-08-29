@@ -61,7 +61,7 @@ render), per [demo-v0.md](../planning/demo-v0.md).
 ### 1. Clone and set the API key
 
 ```sh
-git clone <this repo> && cd tutoria
+git clone <this repo> && cd guido
 cp .env.example .env
 # edit .env, set ANTHROPIC_API_KEY=sk-...
 ```
@@ -105,7 +105,7 @@ npm install
 npx tauri dev
 ```
 
-This launches the Tutoria panel as a plain decorated window at its full
+This launches the Guido panel as a plain decorated window at its full
 size — **there is no collapsed icon to click anymore** (it was removed
 along with the collapse/expand resize dance, which relied on
 always-on-top/undecorated behaviour that didn't hold up on GNOME; see the
@@ -265,7 +265,7 @@ branded `/login` (Guido fonts/buttons), then `/auth/google/start`,
 `website/.dev.vars` and fill `GOOGLE_CLIENT_ID` /
 `GOOGLE_CLIENT_SECRET`. Register the exact callback
 `http://localhost:8787/auth/google/callback` (local) or
-`https://tutoria-website.guidotutor.workers.dev/auth/google/callback`
+`https://guido-website.guidotutor.workers.dev/auth/google/callback`
 (production) on the Google OAuth client. The privacy policy Google
 requires is `website/public/privacy.html` (`/privacy.html`). Quota
 rules are in [business/pricing.md](../business/pricing.md).
@@ -277,6 +277,6 @@ npm run deploy
 ```
 
 This needs `wrangler login` once, and needs you to actually be a member
-of the Tutoria Cloudflare account — invites went out 2026-08-29 (see
+of the Guido Cloudflare account — invites went out 2026-08-29 (see
 [reference/team.md](../reference/team.md)); check your email/spam if you
 haven't accepted yours yet.

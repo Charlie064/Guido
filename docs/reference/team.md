@@ -18,7 +18,7 @@ one place that fact lives; don't restate roles elsewhere.
 
 ## Cloudflare account
 
-Charlie Sandvall created and administers the Tutoria Cloudflare account
+Charlie Sandvall created and administers the Guido Cloudflare account
 (billing, DNS, member invites) — see
 [ADR 0004](../decisions/0004-cloudflare-infrastructure-proposal.md).
 Account ID `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain

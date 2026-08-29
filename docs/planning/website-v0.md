@@ -9,7 +9,7 @@
 
 ## In scope
 
-- A single landing page: what Tutoria is, the Goal→Learn loop, Teach/Show/Do
+- A single landing page: what Guido is, the Goal→Learn loop, Teach/Show/Do
   modes, key features. Source material is
   [philosophy/vision.md](../philosophy/vision.md) — adapt it, don't
   restate it independently (same content also exists as a one-pager built

@@ -1,7 +1,7 @@
 **Contract**
-- Product name: **Tutoria** (repo/working title; **"tutoriapp"** is the
-  leading product-facing name candidate, with "TutorialCue" also under
-  consideration — see the naming note at the end of this doc).
+- Product name: **Guido** — settled, and used everywhere (repo, bundle
+  identifier, UI, website). See the naming note at the end of this doc for
+  the one check still outstanding.
 - Core loop: **Goal → Research → See → Guide → Do → Verify → Learn**.
 - Positioning: an AI *tutor* that can see and use the computer — not primarily
   an autonomous computer-use agent. See [ADR 0001](../decisions/0001-ai-tutor-not-computer-use-agent.md).
@@ -13,19 +13,19 @@ application they are using, and help them accomplish a goal inside that
 application.
 
 Instead of giving users a generic text tutorial or sending them to a YouTube
-video, Tutoria guides them through the actual software they have open. It can
+video, Guido guides them through the actual software they have open. It can
 identify UI elements on screen, explain what to do, visually highlight the
 relevant control, optionally perform actions itself, and verify that the user
 completed each step before continuing.
 
 ### Core promise
 
-> Tell Tutoria what you want to accomplish — by typing or speaking — and it
+> Tell Guido what you want to accomplish — by typing or speaking — and it
 > finds the right workflow and teaches you how to do it directly inside your
 > software.
 
 Example: "Teach me how to create a cinematic color grade in DaVinci Resolve."
-Tutoria researches the task, creates a sequence of steps, looks at the
+Guido researches the task, creates a sequence of steps, looks at the
 current screen, identifies the relevant UI element, highlights it, explains
 what to do, waits for the user, verifies the result, and continues. The user
 learns the software by actually using it.
@@ -47,7 +47,7 @@ can focus on one or two applications.
 ## Core differentiation
 
 Existing AI computer-use products focus on "tell me what to do and I'll do
-it." Tutoria focuses on "tell me what you want to learn or accomplish, and
+it." Guido focuses on "tell me what you want to learn or accomplish, and
 I'll teach you how to do it."
 
 The distinction is **agency**. The AI can operate the computer, but the user
@@ -72,7 +72,7 @@ The user can switch between modes at any point.
 
 The AI should not blindly follow a pre-written tutorial. It researches the
 goal, builds a short practical plan, and adapts that plan based on what it
-actually sees on the user's screen. If the user does the wrong thing, Tutoria
+actually sees on the user's screen. If the user does the wrong thing, Guido
 should not simply continue — it should recognize the actual state and adjust
 ("You're currently in the Edit page — that's okay, the Color tab is at the
 bottom. I'll highlight it.").
@@ -99,20 +99,18 @@ tutorials (see [BL-002](../BACKLOG.md)). Exact mechanic undecided.
 > The learning layer for your computer.
 
 Instead of searching YouTube every time you encounter unfamiliar software,
-you tell Tutoria what you want to accomplish and it guides you through the
+you tell Guido what you want to accomplish and it guides you through the
 actual interface in front of you.
 
-## Naming note [work in progress]
+## Naming note
 
-The GitHub repo and working product name is **Tutoria**. Earlier drafts of
-this vision used "TutorialCue" as the product-facing name — that has not
-been decided either way.
+The name is **Guido**, everywhere: repo, bundle identifier
+(`com.guidotutor.guido`), UI, and website. Earlier candidates —
+"Tutoria", "TutorialCue", "tutoriapp" — are dropped.
 
-**"tutoriapp"** (it teaches you to use applications) is now the leading
-candidate: unlike "Tutoria," which collides with existing products/services
-using close variants of that name, "tutoriapp" is understood to have
-limited competing use — a real trademark/domain/app-store search has not
-been run yet and should happen before locking it in.
-
-Update this note (and the repo/product references throughout `docs/`) once
-the team settles on one name.
+One thing was flagged when the name was still open and is still
+unresolved: **Guido collides with existing products and services using
+close variants of that name.** A real trademark, domain, and app-store
+search has not been run. Do that before the first public release —
+renaming after shipping means a new bundle identifier, which orphans
+installed users' app data and breaks the updater's signing identity.

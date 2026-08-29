@@ -10,7 +10,7 @@ overlay exists yet ([BACKLOG.md](../BACKLOG.md) BL-012, deferred).
 
 - VS Code open to a working directory (not empty — a real project, per
   the scenario framing).
-- Tutoria app running (`cd spikes/tauri-overlay && npx tauri dev`), an
+- Guido app running (`cd spikes/tauri-overlay && npx tauri dev`), an
   `ANTHROPIC_API_KEY` set in `.env` at the repo root.
 - This goal is typed fresh into chat, so it drives the **live**
   `research_goal` / `plan_step` calls — not the `fake-skill.js` fixture
@@ -44,7 +44,7 @@ from being silently dropped).
 
 ### 3. Do
 
-No automation — Tutoria doesn't click for you. The user performs the
+No automation — Guido doesn't click for you. The user performs the
 instruction in VS Code by hand.
 
 ### 4. Verify — optional, per substep (`verifyHtml()` ~line 1378,

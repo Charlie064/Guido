@@ -1,4 +1,4 @@
-# Tutoria — Constitution
+# Guido — Constitution
 
 An AI software tutor: a desktop assistant (macOS, Windows, Linux) that
 watches the user's screen, understands the application they're in, and
@@ -9,7 +9,7 @@ agent; the product is the guided-learning loop
 `docs/philosophy/vision.md` and
 `docs/decisions/0001-ai-tutor-not-computer-use-agent.md`.
 
-Product name is "Tutoria" (working title, not finalized — see the naming
+Product name is "Guido" (working title, not finalized — see the naming
 note in `docs/philosophy/vision.md`).
 
 ## Core principles (priority order)

@@ -1,8 +1,8 @@
 [package]
-name = "tauri-overlay"
+name = "guido"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Guido — an AI tutor that watches your screen and guides you through the software you are using"
+authors = ["Guido"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "tauri_overlay_lib"
+name = "guido_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

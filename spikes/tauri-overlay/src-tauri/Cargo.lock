@@ -1473,6 +1473,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "guido"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "core-foundation",
+ "gtk",
+ "gtk-layer-shell",
+ "png 0.17.16",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "windows 0.58.0",
+ "x11rb",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3557,24 +3575,6 @@ dependencies = [
  "syn 2.0.119",
  "tauri-codegen",
  "tauri-utils",
-]
-
-[[package]]
-name = "tauri-overlay"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "core-foundation",
- "gtk",
- "gtk-layer-shell",
- "png 0.17.16",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "windows 0.58.0",
- "x11rb",
 ]
 
 [[package]]

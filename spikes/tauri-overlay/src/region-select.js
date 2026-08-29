@@ -133,16 +133,16 @@ function runClickSelect() {
   });
 }
 
-listen("tutoria:begin-region-select", async () => {
+listen("guido:begin-region-select", async () => {
   const region = await runSelection();
-  emit("tutoria:region-selected", region);
+  emit("guido:region-selected", region);
 });
 
-listen("tutoria:begin-window-select", async () => {
+listen("guido:begin-window-select", async () => {
   const point = await runClickSelect();
-  emit("tutoria:window-point-selected", point);
+  emit("guido:window-point-selected", point);
 });
 
-listen("tutoria:quit", () => getCurrentWindow().close());
+listen("guido:quit", () => getCurrentWindow().close());
 
 window.addEventListener("DOMContentLoaded", resizeToMonitor);

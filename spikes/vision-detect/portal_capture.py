@@ -41,9 +41,9 @@ def _reexec_with_system_python() -> None:
 
     # Set before exec so the replacement process can't bounce again if it
     # also lacks gi — one hop, then a real error message.
-    if os.environ.get("TUTORIA_PORTAL_REEXEC"):
+    if os.environ.get("GUIDO_PORTAL_REEXEC"):
         return
-    env_marker = dict(os.environ, TUTORIA_PORTAL_REEXEC="1")
+    env_marker = dict(os.environ, GUIDO_PORTAL_REEXEC="1")
 
     # Compared as written, not resolved: a venv's bin/python3 is usually a
     # symlink to the very same system binary, so realpath() would call them
@@ -95,7 +95,7 @@ SCREENCAST_IFACE = "org.freedesktop.portal.ScreenCast"
 # fresh portal session and restores from this token), so it goes on disk.
 def state_path(scope: str) -> Path:
     base = os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state")
-    return Path(base) / "tutoria" / f"portal-{scope}.json"
+    return Path(base) / "guido" / f"portal-{scope}.json"
 
 
 def load_token(scope: str) -> str | None:
@@ -135,7 +135,7 @@ class PortalSession:
         cancelled by the user, 2 = ended some other way.
         """
         self.counter += 1
-        token = f"tutoria{self.counter}"
+        token = f"guido{self.counter}"
         request_path = f"/org/freedesktop/portal/desktop/request/{self.unique}/{token}"
 
         loop = GLib.MainLoop()
@@ -169,7 +169,7 @@ class PortalSession:
 
     def create(self) -> None:
         self.counter += 1
-        session_token = f"tutoriasession{self.counter}"
+        session_token = f"guidosession{self.counter}"
         code, results = self._call(
             "CreateSession",
             {"session_handle_token": GLib.Variant("s", session_token)},
