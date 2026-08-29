@@ -35,9 +35,7 @@ shared login.
 
 Non-billing teammates get the built-in **Administrator** role, not **Super
 Administrator** — full Workers/Pages/D1 access for development, but no
-billing profile or membership management. Invites still need to be sent
-from the dashboard (Manage Account → Members → Invite) — not yet done as
-of 2026-08-29.
+billing profile or membership management. Invites sent 2026-08-29.
 
 ## Creating a branch
 

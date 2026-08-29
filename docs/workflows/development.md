@@ -103,3 +103,59 @@ Note the directory name (`tauri-overlay`) predates the current design —
 there is no on-screen overlay anymore, only this panel. See the "Visual
 overlay" section in [architecture/overview.md](../architecture/overview.md)
 for why.
+
+### 4. Website (Cloudflare Workers + D1)
+
+Scope owned by Pauline — see [website-v0.md](../planning/website-v0.md).
+The scaffold already has a working waitlist end to end (a Worker, a D1
+table, and a form that POSTs to it); this section is how to run it and
+how to drop your own site content into it.
+
+```sh
+cd website
+npm install
+npm run dev
+```
+
+This runs `wrangler dev`, serving `public/` as static files plus the
+Worker (`src/index.ts`) at a local URL wrangler prints (typically
+`http://localhost:8787`). **No Cloudflare login needed for this** —
+`wrangler dev` runs D1 against a local SQLite emulation by default, not
+the real remote database.
+
+**If you built your site separately** (your own localhost project, not
+started from this scaffold), bringing it in is a copy, not a rewrite:
+
+- **Plain HTML/CSS/JS:** copy your files into `website/public/`,
+  replacing the placeholder `index.html` there. `npm run dev` serves
+  whatever's in `public/` — nothing else to wire up.
+- **Built with a bundler/framework** (Vite, React, etc.): run your own
+  build, then either copy the build output into `website/public/`, or
+  point `assets.directory` in `website/wrangler.jsonc` at your build
+  output folder directly.
+
+**Keep the waitlist working:** the placeholder `public/index.html`'s
+`<form id="waitlist-form">` already POSTs JSON to `/api/waitlist`, which
+the Worker validates and inserts into D1 (`src/index.ts` +
+`migrations/0001_create_waitlist.sql`) — you don't need to touch any
+Worker code to keep this feature. Either keep that same
+id/fetch/`/api/waitlist` shape in your markup, or copy the `<script>`
+block near the bottom of the placeholder `index.html` wholesale into your
+page.
+
+Local D1 migrations (only needed once, or after a schema change):
+
+```sh
+npm run db:migrate:local
+```
+
+Deploying live:
+
+```sh
+npm run deploy
+```
+
+This needs `wrangler login` once, and needs you to actually be a member
+of the Tutoria Cloudflare account — invites went out 2026-08-29 (see
+[reference/team.md](../reference/team.md)); check your email/spam if you
+haven't accepted yours yet.

@@ -57,3 +57,13 @@ point — this file should never pose as a source of truth for what's done.
     inside a tab. Fixing this needs a second, optional layer (a browser
     extension reporting active tab title/URL), not more OS-level work.
     Degrade to "Chrome" + let the user rename the chat until that's built.
+- **BL-006 — Integrate Pauline's website build into the codebase.**
+  Owner: Pauline. She's built the site separately on her own localhost;
+  needs to bring it into `website/public/` (or point `wrangler.jsonc`'s
+  `assets.directory` at her build output if it's bundled), keep the
+  waitlist form (`/api/waitlist` → D1) working, and deploy — see the
+  Website section in
+  [workflows/development.md](workflows/development.md) for the exact
+  steps. Also still open: real design pass on the landing page. Cloudflare
+  Member invites are sent ([reference/team.md](reference/team.md)), so
+  `wrangler deploy` is no longer blocked on that.
