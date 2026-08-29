@@ -41,47 +41,6 @@ html, body {
   to { transform: translateX(-50%); }
 }
 
-/* Intro: pointer orbits a circle, eases into the middle, clicks, Guido fades in */
-@keyframes intro-orbit-spin {
-  0%   { transform: rotate(-20deg); }
-  72%  { transform: rotate(340deg); }
-  100% { transform: rotate(360deg); }
-}
-
-@keyframes intro-orbit-counter {
-  0%   { transform: rotate(20deg); }
-  72%  { transform: rotate(-340deg); }
-  100% { transform: rotate(-360deg); }
-}
-
-@keyframes intro-orbit-in {
-  0%   { transform: translate(168px, -18px) scale(1.05); opacity: 0; }
-  8%   { opacity: 1; }
-  64%  { transform: translate(168px, -18px) scale(1); opacity: 1; }
-  78%  { transform: translate(-18px, -14px) scale(1.06); }
-  83%  { transform: translate(-18px, -14px) scale(0.78); }
-  88%  { transform: translate(-18px, -14px) scale(1); opacity: 1; }
-  100% { transform: translate(-18px, -14px) scale(1); opacity: 0; }
-}
-
-@keyframes intro-mascot {
-  0%, 76% { opacity: 0; transform: translate(-50%, -50%) scale(0.88); }
-  88%     { opacity: 1; transform: translate(-50%, -52%) scale(1.02); }
-  94%     { opacity: 1; transform: translate(-50%, -49%) scale(1); }
-  100%    { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-
-@keyframes intro-click-ring {
-  0%, 80% { opacity: 0; transform: scale(0.35); }
-  84%     { opacity: 0.5; transform: scale(0.9); }
-  100%    { opacity: 0; transform: scale(1.85); }
-}
-
-@keyframes intro-bg-fade {
-  0%, 88% { opacity: 1; }
-  100%    { opacity: 0; }
-}
-
 @keyframes shake-no {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-10px); }

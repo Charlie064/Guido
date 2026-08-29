@@ -23,76 +23,134 @@ const MODE_COLORS = {
   do: { accent: "#A78BFA", text: "#0A0A0A" }, // violet — video editor
 };
 
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function easeOutCubic(t) {
+  return 1 - (1 - t) ** 3;
+}
+
 function IntroAnimation() {
   const [visible, setVisible] = useState(true);
-  const [look, setLook] = useState("left");
-  const [clicked, setClicked] = useState(false);
-  const duration = 3400;
+  const [face, setFace] = useState("idle");
+  const overlayRef = useRef(null);
+  const mascotRef = useRef(null);
+  const cursorRef = useRef(null);
 
   useEffect(() => {
     const reduceMotion =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduceMotion) {
-      const t = setTimeout(() => setVisible(false), 400);
+      const t = setTimeout(() => setVisible(false), 280);
       return () => clearTimeout(t);
     }
 
-    let glance;
-    const appearAt = setTimeout(() => {
-      setClicked(true);
-      glance = setInterval(() => {
-        setLook((side) => (side === "left" ? "right" : "left"));
-      }, 480);
-    }, Math.round(duration * 0.8));
-    const hide = setTimeout(() => setVisible(false), duration);
-    return () => {
-      clearInterval(glance);
-      clearTimeout(appearAt);
-      clearTimeout(hide);
+    const RADIUS = 128;
+    const ORBIT_MS = 2100;
+    const IN_MS = 820;
+    const CLICK_MS = 160;
+    const CURSOR_FADE_MS = 520;
+    const MASCOT_AT = ORBIT_MS + IN_MS - 80;
+    const MASCOT_MS = 980;
+    const OUTRO_AT = MASCOT_AT + 720;
+    const OUTRO_MS = 640;
+    const TOTAL = OUTRO_AT + OUTRO_MS;
+
+    let raf = 0;
+    let revealed = false;
+    let t0 = null;
+
+    const frame = (now) => {
+      const overlay = overlayRef.current;
+      const mascot = mascotRef.current;
+      const cursor = cursorRef.current;
+      if (!overlay || !mascot || !cursor) {
+        raf = requestAnimationFrame(frame);
+        return;
+      }
+      if (t0 == null) t0 = now;
+      const elapsed = now - t0;
+
+      const fadeIn = easeOutCubic(clamp(elapsed / 240, 0, 1));
+      let angle = -Math.PI / 2;
+      let radius = RADIUS;
+      let scale = 1;
+      let cursorOpacity = fadeIn;
+
+      if (elapsed < ORBIT_MS) {
+        angle = -Math.PI / 2 + (elapsed / ORBIT_MS) * Math.PI * 2;
+      } else if (elapsed < ORBIT_MS + IN_MS) {
+        const u = easeOutCubic((elapsed - ORBIT_MS) / IN_MS);
+        angle = -Math.PI / 2 + Math.PI * 2 + u * 0.28;
+        radius = RADIUS * (1 - u);
+      } else {
+        const after = elapsed - ORBIT_MS - IN_MS;
+        angle = -Math.PI / 2 + Math.PI * 2 + 0.28;
+        radius = 0;
+        if (after < CLICK_MS) {
+          scale = 1 - 0.07 * Math.sin((after / CLICK_MS) * Math.PI);
+        } else {
+          cursorOpacity = 1 - easeOutCubic(clamp((after - CLICK_MS) / CURSOR_FADE_MS, 0, 1));
+        }
+      }
+
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      cursor.style.opacity = String(cursorOpacity);
+      cursor.style.transform = `translate(${x - 5}px, ${y - 3}px) scale(${scale})`;
+
+      const mt = easeOutCubic(clamp((elapsed - MASCOT_AT) / MASCOT_MS, 0, 1));
+      mascot.style.opacity = String(mt);
+      mascot.style.transform = `translate(-50%, calc(-50% + ${(1 - mt) * 16}px)) scale(${0.96 + 0.04 * mt})`;
+
+      if (!revealed && elapsed >= MASCOT_AT + 180) {
+        revealed = true;
+        setFace("happy");
+      }
+
+      const outro = easeOutCubic(clamp((elapsed - OUTRO_AT) / OUTRO_MS, 0, 1));
+      overlay.style.opacity = String(1 - outro);
+
+      if (elapsed < TOTAL) {
+        raf = requestAnimationFrame(frame);
+      } else {
+        setVisible(false);
+      }
     };
+
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   if (!visible) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center"
-      style={{ animation: `intro-bg-fade ${duration}ms ease forwards` }}
+      ref={overlayRef}
+      className="fixed inset-0 z-[100] pointer-events-none"
+      style={{ background: "#ffffff" }}
     >
-      <div className="absolute inset-0 bg-white" />
-
       <div
-        className="absolute top-1/2 left-1/2"
-        style={{ animation: `intro-mascot ${duration}ms ease-out forwards` }}
+        ref={mascotRef}
+        className="absolute top-1/2 left-1/2 will-change-transform"
+        style={{ opacity: 0, transform: "translate(-50%, calc(-50% + 16px)) scale(0.96)" }}
       >
-        <GlassMascot
-          state={clicked ? "happy" : "idle"}
-          pose={clicked ? "squish" : "normal"}
-          look={look}
-          size={118}
-        />
+        <GlassMascot state={face} size={118} />
       </div>
-
       <div
-        className="absolute top-1/2 left-1/2"
-        style={{ animation: `intro-orbit-spin ${duration}ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards` }}
+        ref={cursorRef}
+        className="absolute top-1/2 left-1/2 will-change-transform"
+        style={{ opacity: 0, transform: "translate(-5px, -3px)" }}
       >
-        <div
-          className="absolute top-0 left-0 w-11 h-11 flex items-center justify-center"
-          style={{ animation: `intro-orbit-in ${duration}ms cubic-bezier(0.45, 0.05, 0.2, 1) forwards` }}
-        >
-          <div
-            className="relative drop-shadow-[0_10px_16px_rgba(0,0,0,0.35)]"
-            style={{ animation: `intro-orbit-counter ${duration}ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards` }}
-          >
-            <MousePointer2 size={36} color="#0A0A0A" fill="#f4f4f4" strokeWidth={2.4} />
-            <div
-              className="absolute left-1 top-1 w-7 h-7 rounded-full border-2 border-black/25"
-              style={{ animation: `intro-click-ring ${duration}ms ease-out forwards` }}
-            />
-          </div>
-        </div>
+        <MousePointer2
+          size={28}
+          color="#111111"
+          fill="#f7f7f7"
+          strokeWidth={2.2}
+          style={{ filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.18))" }}
+        />
       </div>
     </div>
   );
