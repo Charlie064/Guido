@@ -163,7 +163,7 @@ const views = {
 const VIEW_SIZE = {
   login: [320, 440],
   setup: [320, 400],
-  home: [320, 360],
+  home: [320, 440],
   skills: [320, 420],
   path: [320, 560],
   chat: [320, 560],

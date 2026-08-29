@@ -190,7 +190,7 @@
       }
 
       .home-kicker {
-        margin: 16px 16px 10px;
+        margin: 8px 16px 10px;
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-size: 11px;
         font-weight: 600;
@@ -1026,6 +1026,11 @@
 
 
       <section id="view-home" class="view">
+        <div class="new-goal-row">
+          <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
+          <button id="new-goal-send" type="button">Ask</button>
+        </div>
+        <div class="new-goal-error" id="new-goal-error"></div>
         <div class="home-kicker">Apps</div>
         <button class="app-group" id="excel-chats" type="button">
           <img src="assets/excel.png" alt="" />
@@ -1037,11 +1042,6 @@
       </section>
 
       <section id="view-skills" class="view">
-        <div class="new-goal-row">
-          <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
-          <button id="new-goal-send" type="button">Ask</button>
-        </div>
-        <div class="new-goal-error" id="new-goal-error"></div>
         <div class="skills-body" id="skills-list"></div>
       </section>
 

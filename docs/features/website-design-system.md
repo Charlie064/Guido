@@ -71,8 +71,9 @@ view (login, setup, skills, path, chat):
 - White plus-grid background, Inter body, Space Grotesk labels.
 - `guido-icon.png` in the title bar and on the login card.
 - Compact 320px shell; profile pill (top right) after Continue.
-- Home uses the same card + halo treatment for the fake “Excel chats”
-  group (`assets/excel.png`).
+- Home puts the Research Ask field above the Apps list, then the same
+  card + halo treatment for the fake “Excel chats” group
+  (`assets/excel.png`).
 - Demo substeps use a fake overlay stage (dark window chrome, pink
   highlight, white callout) as a stand-in for the real on-screen
   step textbox. Teach steps get a blue callout border; user
