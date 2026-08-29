@@ -505,3 +505,25 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   client + `wrangler secret put GOOGLE_CLIENT_SECRET`, remote migrate,
   and Charlie pairing on the Tauri keyring/loopback half. See
   `docs/planning/login-membership-plan.md`.
+- **App icons for picked windows — built, unverifiable on this machine.**
+  `window_icon` (`src-tauri/src/lib.rs`) extracts the picked window's own
+  `_NET_WM_ICON` on Linux X11, encodes it to PNG once, and caches it per
+  *app* under `<app_data>/app-icons/<slug>.png` — keyed by app name, not
+  window, so a saved chat still shows its icon after the window is gone
+  (the cache is read with no window id at all). Shown on the setup label
+  and on every chat row. The decode has unit tests but has never run on
+  real pixels: this is a GNOME Wayland machine, Mutter publishes no
+  `_NET_CLIENT_LIST`, and a walk of the entire X11 tree finds zero
+  windows carrying an icon even with `GDK_BACKEND=x11`. Needs an X11
+  session to confirm; macOS/Windows backends are still unwritten and
+  return "no icon". See `BL-004`.
+- **App identity is entirely missing on Wayland — new `BL-009`.** Not a
+  regression, just now measured: on the portal backend a chat saves
+  `appName: null`, so Research gets no app to scope to and no icon can be
+  looked up. The portal only ever reports `"window (1920x1080)"`. BL-004
+  assumed manual entry as the fallback here; it was never built.
+- **Chats can be deleted.** Trash button per row in the chat list
+  (`renderAppsList`/`deleteSkill` in `sidebar.js`); deleting the chat
+  currently open returns to home rather than leaving a view onto a
+  deleted skill. With zero chats the whole `Apps` section, heading
+  included, is hidden. Not yet exercised in the running app.

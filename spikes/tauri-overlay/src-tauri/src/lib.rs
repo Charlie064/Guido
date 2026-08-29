@@ -120,13 +120,29 @@ fn vision_detect_dir() -> std::path::PathBuf {
 // responding". Every command below that shells out or touches the
 // filesystem gets the same treatment for the same reason.
 #[tauri::command]
-async fn locate_element(app: tauri::AppHandle, target: String, scope: Option<CaptureScope>) -> Result<Box2D, String> {
-    tauri::async_runtime::spawn_blocking(move || locate_element_blocking(&app, &target, scope))
+async fn locate_element(
+    app: tauri::AppHandle,
+    target: String,
+    scope: Option<CaptureScope>,
+    // Everything Research/plan_step already know about the step this
+    // target belongs to (goal, brief, watch_for, substeps already
+    // covered) — assembled by sidebar.js's locateContext, since the
+    // skill/step/substep shape lives entirely there (see the comment on
+    // skills_file_path). Passed straight through to the vision prompt
+    // alongside the screenshot; Rust never inspects it.
+    context: Option<String>,
+) -> Result<Box2D, String> {
+    tauri::async_runtime::spawn_blocking(move || locate_element_blocking(&app, &target, scope, context.as_deref()))
         .await
         .map_err(|e| format!("locate_element task panicked: {e}"))?
 }
 
-fn locate_element_blocking(app: &tauri::AppHandle, target: &str, scope: Option<CaptureScope>) -> Result<Box2D, String> {
+fn locate_element_blocking(
+    app: &tauri::AppHandle,
+    target: &str,
+    scope: Option<CaptureScope>,
+    context: Option<&str>,
+) -> Result<Box2D, String> {
     use tauri::Manager;
 
     let sidebar = app
@@ -168,7 +184,7 @@ fn locate_element_blocking(app: &tauri::AppHandle, target: &str, scope: Option<C
         }
     };
 
-    let result = run_locate(target, &region, portal_scope.as_deref()).map(|mut b| {
+    let result = run_locate(target, &region, portal_scope.as_deref(), context).map(|mut b| {
         b.anchor = anchor;
         b
     });
@@ -206,6 +222,95 @@ async fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, 
     tauri::async_runtime::spawn_blocking(move || window_provider::window_at_point(x, y))
         .await
         .map_err(|e| format!("window_at_point task panicked: {e}"))?
+}
+
+// The picked window's app icon, as a PNG data URI ready for an <img src>.
+//
+// Cached on disk per app rather than per window, keyed by app name: the
+// icon is a property of the application, so every Excel window shares one
+// file, and it survives restarts — which is what BL-004's "group chats
+// into an Excel-skills page" needs, since a chat outlives the window it
+// was recorded against. The extraction itself only works while the window
+// is alive, so the cache is also the only way to still have an icon for a
+// saved skill later.
+//
+// `Ok(None)` = this app exposes no icon (or the platform backend isn't
+// built yet); the caller draws a letter avatar instead.
+fn icon_cache_path(app: &tauri::AppHandle, app_name: &str) -> Result<std::path::PathBuf, String> {
+    use tauri::Manager;
+    // Slugged, not used raw: app_name comes from the OS (WM_CLASS, a
+    // process name) and would otherwise be able to steer the write with
+    // slashes or "..".
+    let slug: String = app_name
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect();
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        return Err("no app name to key the icon cache on".to_string());
+    }
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("couldn't resolve the app data directory: {e}"))?
+        .join("app-icons");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("couldn't create {}: {e}", dir.display()))?;
+    Ok(dir.join(format!("{slug}.png")))
+}
+
+fn encode_png(icon: &window_provider::IconImage) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, icon.width, icon.height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    writer.write_image_data(&icon.rgba).map_err(|e| e.to_string())?;
+    drop(writer);
+    Ok(out)
+}
+
+// `id` is optional so a *saved* chat can still get its app's icon long
+// after the window it was recorded against is gone: with no id this is a
+// cache-only lookup, which is the whole reason the cache is keyed by app
+// name rather than by window.
+#[tauri::command]
+async fn window_icon(
+    app: tauri::AppHandle,
+    id: Option<String>,
+    app_name: String,
+) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::Engine;
+        let to_uri = |bytes: &[u8]| {
+            format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(bytes)
+            )
+        };
+
+        let cached = icon_cache_path(&app, &app_name).ok();
+        if let Some(path) = &cached {
+            if let Ok(bytes) = std::fs::read(path) {
+                return Ok(Some(to_uri(&bytes)));
+            }
+        }
+
+        let Some(id) = id else {
+            return Ok(None);
+        };
+        let Some(icon) = window_provider::window_icon(&id)? else {
+            return Ok(None);
+        };
+        let png = encode_png(&icon)?;
+        if let Some(path) = &cached {
+            // A cache miss that can't be written back is still a hit for
+            // this call — the icon is in hand, so don't fail on it.
+            let _ = std::fs::write(path, &png);
+        }
+        Ok(Some(to_uri(&png)))
+    })
+    .await
+    .map_err(|e| format!("window_icon task panicked: {e}"))?
 }
 
 // Lets the setup view ask which pick gesture is even possible here before
@@ -445,6 +550,7 @@ fn run_locate(
     target: &str,
     region: &Option<Region>,
     portal_scope: Option<&str>,
+    context: Option<&str>,
 ) -> Result<Box2D, String> {
     let dir = vision_detect_dir();
     let python = dir.join(".venv").join("bin").join("python3");
@@ -456,6 +562,16 @@ fn run_locate(
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
         cmd.arg(format!("{},{},{},{}", r.x, r.y, r.width, r.height));
+    }
+    // A flag rather than another positional arg: region/--portal are
+    // already mutually exclusive positionals, and context is optional and
+    // independent of either — appending it positionally would make the
+    // parse order in live_step.py ambiguous (is arg 3 the region or the
+    // context?). Passed as a single argv value, not shell-escaped text:
+    // Command never goes through a shell, so embedded spaces/newlines in
+    // an AI-written brief/watch_for need no quoting.
+    if let Some(ctx) = context {
+        cmd.arg("--context").arg(ctx);
     }
 
     let output = cmd
@@ -546,7 +662,8 @@ pub fn run() {
             load_skills_json,
             save_skills_json,
             refresh_window_rect,
-            window_at_point
+            window_at_point,
+            window_icon
         ])
         .setup(|app| {
             use tauri::Manager;

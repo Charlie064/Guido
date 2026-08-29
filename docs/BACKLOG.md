@@ -38,6 +38,27 @@ point — this file should never pose as a source of truth for what's done.
     screenshot thumbnail would conflict with the "no screenshots stored"
     rule in [features/skills.md](features/skills.md) and the still-open
     screen-data non-negotiable in [CLAUDE.md](../CLAUDE.md).
+  - **Partly built** (window-pick path, `window_icon` in
+    `spikes/tauri-overlay/src-tauri/src/lib.rs`): app *name* already comes
+    free from the window pick (`WindowInfo.app_name`, BL-005's provider),
+    and the icon is extracted on Linux X11 from the window's own
+    `_NET_WM_ICON` — no icon-theme or `.desktop` resolution needed, since
+    the pixels are already on the picked window. Encoded once to PNG and
+    cached on disk per app under `<app_data>/app-icons/<slug>.png`, so the
+    icon outlives the window and a saved skill can still show it.
+    The chat list (`renderAppsList` in `sidebar.js`) shows it, looking it
+    up by app name with no window id — a cache-only read, which is why the
+    cache is keyed per app rather than per window.
+    Remaining: the macOS (`NSRunningApplication.icon` off the window's
+    owner pid) and Windows (`WM_GETICON`/`ExtractIconEx`) backends, and a
+    `.desktop` fallback for X11 apps that set no `_NET_WM_ICON`.
+  - **Not verified against a real app.** The `_NET_WM_ICON` decode has
+    unit tests (`window_provider.rs`) but has never run on real pixels:
+    the dev machine is GNOME Wayland, where Mutter publishes no
+    `_NET_CLIENT_LIST`, so a walk of the whole X11 tree finds zero windows
+    carrying an icon even with `GDK_BACKEND=x11` forced. Needs an X11
+    login session (or the macOS/Windows backends) before it can be called
+    working.
 - **BL-005 — Live window-rect tracking backend + window-picker capture +
   real on-screen overlay.** The actual OS calls behind
   [ADR 0005](decisions/0005-window-anchored-overlay-coordinates.md)'s
@@ -78,3 +99,21 @@ point — this file should never pose as a source of truth for what's done.
   Needed before the login flow in
   [planning/login-membership-plan.md](planning/login-membership-plan.md)
   can use a stable OAuth redirect origin instead of a `workers.dev` URL.
+- **BL-009 — No app identity at all on Wayland.** BL-004 assumes the
+  fallback for Wayland is manual entry ("user names the app, same as
+  today"), but there is no such fallback in the build: on the portal
+  backend `selectedAppName()` returns `null`, so a chat saves
+  `appName: null`, Research gets no app to scope its search to, and the
+  chat list can show no icon. Verified, not theoretical — the portal's
+  only identifying output is `"window (1920x1080)"` (`describe()` in
+  `spikes/vision-detect/portal_capture.py`); it never discloses which
+  app the user picked, by design.
+  - This is the *whole* app-identity story on GNOME/KDE Wayland, which is
+    the dev machine and a large share of Linux users — not an edge case.
+  - Cheapest fix: let the user type/confirm the app name in setup on the
+    portal backend, and key the icon cache off that. Same manual entry
+    BL-004 already names, just actually built.
+  - Decide before building: whether manual entry is portal-only or offered
+    everywhere as an override (a native pick can also resolve "wrong",
+    e.g. a browser-hosted app reporting only "Chrome" — the known gap
+    already noted under BL-005).

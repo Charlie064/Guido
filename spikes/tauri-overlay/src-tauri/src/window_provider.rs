@@ -37,6 +37,36 @@ pub struct WindowInfo {
     pub height: i64,
 }
 
+// A decoded app icon: straight (non-premultiplied) RGBA8, row-major.
+// Deliberately not PNG bytes — the OS backends each hand back raw pixels
+// in their own layout, so encoding is done once, above them, in lib.rs.
+pub struct IconImage {
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+// The icon the window itself advertises, if any. `Ok(None)` means "this
+// app ships no icon we can reach" — a normal outcome (plenty of X11
+// clients set no _NET_WM_ICON), not a failure, so the caller falls back
+// to a letter avatar rather than showing an error.
+pub fn window_icon(id: &str) -> Result<Option<IconImage>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        linux_x11::window_icon(id)
+    }
+    // macOS (NSRunningApplication.icon via the window's owner pid) and
+    // Windows (WM_GETICON / ExtractIconEx off the exe path) are the
+    // BL-004 paths and are not wired up yet — reported as "no icon"
+    // rather than an error so the picker degrades to the letter avatar
+    // instead of surfacing a failure the user can't act on.
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = id;
+        Ok(None)
+    }
+}
+
 // Which pick-and-capture strategy this session actually supports.
 //
 // `Native`: windows can be enumerated and given live screen rects, so the
@@ -470,6 +500,114 @@ mod linux_x11 {
                 .to_string());
         }
         Ok(out)
+    }
+
+    // _NET_WM_ICON is the icon the client hands the window manager, so it
+    // needs no icon-theme lookup, no .desktop-file resolution and no
+    // filesystem access — the pixels are already sitting on the window we
+    // just picked. (The .desktop route in BL-004 is the fallback for apps
+    // that set no _NET_WM_ICON; not built yet.)
+    //
+    // Wire format is one flat CARDINAL array holding *several* sizes back
+    // to back: width, height, then width*height pixels, repeated. Each
+    // pixel is ARGB packed in the low 32 bits, alpha not premultiplied.
+    const ICON_TARGET_PX: u32 = 64;
+
+    pub fn window_icon(id: &str) -> Result<Option<super::IconImage>, String> {
+        let (conn, _) = connect()?;
+        let win: u32 = id.parse().map_err(|e| format!("bad window id {id}: {e}"))?;
+        let net_wm_icon = atom(&conn, "_NET_WM_ICON")?;
+
+        let reply = conn
+            .get_property(false, win, net_wm_icon, AtomEnum::CARDINAL, 0, u32::MAX)
+            .map_err(|e| e.to_string())?
+            .reply()
+            .map_err(|e| e.to_string())?;
+        let Some(values) = reply.value32() else {
+            return Ok(None);
+        };
+        Ok(decode_net_wm_icon(&values.collect::<Vec<u32>>()))
+    }
+
+    fn decode_net_wm_icon(data: &[u32]) -> Option<super::IconImage> {
+        // Walk the concatenated sizes and keep the best one: the smallest
+        // that still meets the display size, so nothing is ever upscaled,
+        // falling back to the largest available when every icon is small.
+        let mut best: Option<(u32, u32, usize)> = None;
+        let mut i = 0usize;
+        while i + 2 <= data.len() {
+            let (w, h) = (data[i], data[i + 1]);
+            let pixels = (w as usize) * (h as usize);
+            let start = i + 2;
+            if w == 0 || h == 0 || start + pixels > data.len() {
+                break;
+            }
+            best = Some(match best {
+                None => (w, h, start),
+                Some(cur) => {
+                    let better = if cur.0 >= ICON_TARGET_PX {
+                        w >= ICON_TARGET_PX && w < cur.0
+                    } else {
+                        w > cur.0
+                    };
+                    if better { (w, h, start) } else { cur }
+                }
+            });
+            i = start + pixels;
+        }
+
+        let (width, height, start) = best?;
+        let mut rgba = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        for px in &data[start..start + (width as usize) * (height as usize)] {
+            rgba.extend_from_slice(&[(px >> 16) as u8, (px >> 8) as u8, *px as u8, (px >> 24) as u8]);
+        }
+        Some(super::IconImage { width, height, rgba })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::decode_net_wm_icon;
+
+        fn size(w: u32, h: u32, fill: u32) -> Vec<u32> {
+            let mut v = vec![w, h];
+            v.extend(std::iter::repeat(fill).take((w * h) as usize));
+            v
+        }
+
+        #[test]
+        fn picks_smallest_size_at_or_above_the_target() {
+            let mut data = size(16, 16, 0);
+            data.extend(size(128, 128, 0));
+            data.extend(size(64, 64, 0));
+            assert_eq!(decode_net_wm_icon(&data).unwrap().width, 64);
+        }
+
+        #[test]
+        fn falls_back_to_the_largest_when_all_are_small() {
+            let mut data = size(16, 16, 0);
+            data.extend(size(32, 32, 0));
+            assert_eq!(decode_net_wm_icon(&data).unwrap().width, 32);
+        }
+
+        #[test]
+        fn unpacks_argb_into_straight_rgba() {
+            let icon = decode_net_wm_icon(&size(1, 1, 0x80_11_22_33)).unwrap();
+            assert_eq!(icon.rgba, vec![0x11, 0x22, 0x33, 0x80]);
+        }
+
+        // A property truncated by the server (or simply malformed) must
+        // not be read past its end — the last header is dropped instead.
+        #[test]
+        fn ignores_a_size_whose_pixels_are_truncated() {
+            let mut data = size(16, 16, 0);
+            data.extend([64, 64, 0, 0]);
+            assert_eq!(decode_net_wm_icon(&data).unwrap().width, 16);
+        }
+
+        #[test]
+        fn empty_property_yields_no_icon() {
+            assert!(decode_net_wm_icon(&[]).is_none());
+        }
     }
 
     pub fn get_window_rect(id: &str) -> Result<WindowInfo, String> {

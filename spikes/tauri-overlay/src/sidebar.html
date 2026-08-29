@@ -225,6 +225,41 @@
         flex-shrink: 0;
       }
 
+      /* The row's clickable body. Carries no chrome of its own — the
+         surrounding .app-group div still draws the card. */
+      .app-group-main {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+        min-width: 0;
+        padding: 0;
+        background: none;
+        border: none;
+        text-align: left;
+        color: inherit;
+      }
+
+      .app-group-delete {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        color: var(--muted);
+      }
+
+      .app-group-delete:hover {
+        background: var(--pink-soft);
+        border-color: var(--pink-border);
+        color: var(--pink);
+      }
+
       .app-group-title {
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-size: 14px;
@@ -426,9 +461,19 @@
 
       #setup-region-label {
         color: var(--muted);
+        flex: 1;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      #setup-region-icon {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+        border-radius: 3px;
+        object-fit: contain;
       }
 
       #setup-region-select {
@@ -447,73 +492,6 @@
         box-shadow: 0 0 0 4px var(--halo-bloom);
       }
 
-
-      /* ---------- Skills list ---------- */
-
-      .skills-body {
-        flex: 1;
-        overflow-y: auto;
-        padding: 14px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .skill-card {
-        background: #ffffff;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 12px 14px;
-        cursor: pointer;
-        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
-      }
-
-      .skill-card:hover {
-        box-shadow: 0 0 0 4px var(--halo-bloom), 0 8px 24px -18px rgba(0, 0, 0, 0.35);
-      }
-
-      .skill-card h3 {
-        margin: 0 0 4px;
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 14px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-
-      /* app_name from the OS window pick (window_provider.rs) — lets
-         skills eventually group by app (BL-004's "Excel skills" style
-         page); today it's just a display tag. */
-      .skill-app-tag {
-        display: inline-block;
-        background: var(--blue-soft);
-        border: 1px solid var(--blue-border);
-        border-radius: 999px;
-        padding: 1px 7px;
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        vertical-align: middle;
-        margin-right: 4px;
-        color: var(--blue);
-      }
-
-      .skill-card p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.4;
-      }
-
-      .skill-card-empty {
-        border-style: dashed;
-        color: var(--muted);
-        cursor: default;
-        text-align: center;
-        font-size: 12px;
-        box-shadow: none;
-      }
 
       .new-goal-row {
         display: flex;
@@ -647,7 +625,11 @@
         margin-top: 4px;
       }
 
-      .step-watch-for {
+      /* Only for an actual failure (plan_step errored) — step.brief/
+         watch_for aren't rendered anywhere now (internal-only, see
+         locateContext in sidebar.js), so this is the sole use of the
+         "something's wrong" color left in a locked step's captions. */
+      .step-error {
         color: var(--pink);
       }
 
@@ -1018,6 +1000,7 @@
           fullscreen or focused.
         </p>
         <div id="setup-region">
+          <img id="setup-region-icon" alt="" hidden />
           <span id="setup-region-label">Window: full screen</span>
           <button id="setup-region-select" type="button">Select window</button>
         </div>
@@ -1031,18 +1014,18 @@
           <button id="new-goal-send" type="button">Ask</button>
         </div>
         <div class="new-goal-error" id="new-goal-error"></div>
-        <div class="home-kicker">Apps</div>
-        <button class="app-group" id="excel-chats" type="button">
-          <img src="assets/excel.png" alt="" />
-          <div>
-            <div class="app-group-title">Excel chats</div>
-            <div class="app-group-meta">1 demo · make a chart</div>
-          </div>
-        </button>
-      </section>
-
-      <section id="view-skills" class="view">
-        <div class="skills-body" id="skills-list"></div>
+        <div class="home-kicker" id="apps-kicker" hidden>Apps</div>
+        <!-- Populated by renderAppsList() in sidebar.js, one row per
+             SKILLS entry — real generated skills used to be reachable
+             only in the instant right after asking (openSkill at the end
+             of submitNewGoal); leaving that view orphaned them, since
+             this used to be one hardcoded button that only ever opened
+             the fixture demo skill. Each row shows its app's real icon
+             where one could be extracted (window_icon in lib.rs, keyed by
+             the skill's appName) and no icon at all where one couldn't —
+             which is every chat made on a Wayland session, since the
+             portal never says which app was picked (BL-009). -->
+        <div id="apps-list"></div>
       </section>
 
       <section id="view-path" class="view">

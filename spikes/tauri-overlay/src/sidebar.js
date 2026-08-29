@@ -15,7 +15,29 @@
 //   for platforms with no live window rect (a Wayland portal capture never
 //   discloses screen position) and as a non-intrusive "roughly where".
 import { SKILLS, nextCannedReply } from "./fake-skill.js";
-import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon } from "./icons.js";
+import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon } from "./icons.js";
+
+// Registered before anything below gets a chance to throw — including
+// this file's own top-level init further down, which would otherwise
+// silently leave every addEventListener after the failure point never
+// attached (an "Ask" button that looks dead with no error anywhere).
+// Nothing forwards WebKitGTK's console to the terminal that launched
+// `tauri dev`, so without this a JS error just vanishes unless someone
+// happens to have the inspector open. Uses querySelector directly rather
+// than the `els` cache below (not yet defined this early) — the module
+// script is deferred by the browser until the DOM is parsed, so
+// `#status-bar` already exists no matter how early in this file we are.
+function reportUnexpectedError(context, err) {
+  console.error(context, err);
+  const bar = document.querySelector("#status-bar");
+  const text = document.querySelector("#status-text");
+  if (!bar || !text) return;
+  bar.classList.add("active", "stalled");
+  text.textContent = `${context}: ${err?.message ?? err}`;
+}
+
+window.addEventListener("error", (e) => reportUnexpectedError("Unexpected error", e.error ?? e.message));
+window.addEventListener("unhandledrejection", (e) => reportUnexpectedError("Unexpected error", e.reason));
 
 const { getCurrentWindow } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
@@ -153,7 +175,6 @@ const views = {
   login: document.querySelector("#view-login"),
   setup: document.querySelector("#view-setup"),
   home: document.querySelector("#view-home"),
-  skills: document.querySelector("#view-skills"),
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
 };
@@ -164,7 +185,6 @@ const VIEW_SIZE = {
   login: [320, 440],
   setup: [320, 400],
   home: [320, 440],
-  skills: [320, 420],
   path: [320, 560],
   chat: [320, 560],
 };
@@ -190,8 +210,6 @@ function viewMeta(name) {
       return ["Set up", "", "home"];
     case "home":
       return ["Chats", "", null];
-    case "skills":
-      return ["Excel chats", "", "home"];
     case "path":
       return [currentSkill.title, currentSkill.goal, "home"];
     case "chat":
@@ -215,6 +233,10 @@ function showView(name) {
   // (and no visible way to dismiss it, since the eye that toggles it is
   // in the view being left).
   if (currentView === "chat" && name !== "chat") hideOverlay();
+  // Refreshed on every visit, not just after a new goal — this is also
+  // how a skill generated earlier (or restored from disk) stays reachable
+  // after navigating away from it, see renderAppsList's comment.
+  if (name === "home") renderAppsList();
   currentView = name;
   for (const [key, el] of Object.entries(views)) {
     el.classList.toggle("active", key === name);
@@ -279,6 +301,39 @@ window.addEventListener("keydown", (e) => {
 // command (window_provider.rs), which walks front-to-back so overlapping
 // windows resolve to whichever one is actually visible at that point.
 
+// App icons, keyed by app_name. Rust already caches the extracted PNG on
+// disk per app (see window_icon in lib.rs); this second, in-memory layer
+// only exists so re-picking the same app inside one session doesn't cross
+// the IPC boundary at all. The Rust side hands back a data URI, so the
+// icon survives the window it came from — which is what lets a saved
+// skill still show its app's icon later.
+const appIcons = new Map();
+
+// `id` is the live window to extract from; without one this is a
+// cache-only lookup, which is how a saved chat still shows its app's icon
+// after the window it was recorded against is long gone.
+async function appIcon(app, id = null) {
+  if (!app) return null;
+  if (!appIcons.has(app)) {
+    try {
+      appIcons.set(app, await invoke("window_icon", { id, appName: app }));
+    } catch (err) {
+      // Not worth surfacing: an app with no reachable icon is normal, and
+      // the label already says which app was picked.
+      console.error("window_icon failed", err);
+      appIcons.set(app, null);
+    }
+  }
+  return appIcons.get(app);
+}
+
+async function updateWindowIcon() {
+  const img = document.querySelector("#setup-region-icon");
+  const uri = await appIcon(selectedWindow?.app_name, selectedWindow?.id);
+  img.hidden = !uri;
+  if (uri) img.src = uri;
+}
+
 function formatWindowLabel() {
   if (portalPick) {
     // Says which highlight the user is going to get, since that is the one
@@ -325,6 +380,7 @@ async function selectPortalSource() {
       },
     );
     selectedWindow = null;
+    updateWindowIcon();
     label.textContent = formatWindowLabel();
     if (!portalPick.persisted) {
       // Without a restore token every capture re-prompts, which would make
@@ -377,6 +433,7 @@ async function selectWindow() {
   }
 
   label.textContent = selectedWindow ? formatWindowLabel() : previousLabel;
+  updateWindowIcon();
   await getCurrentWindow().show();
   await getCurrentWindow().setFocus();
   button.disabled = false;
@@ -418,33 +475,79 @@ document.querySelector("#profile-attach").addEventListener("click", () => {
   showView("setup");
 });
 
-document.querySelector("#excel-chats").addEventListener("click", () => {
-  const excelSkill = SKILLS.find((s) => (s.appName || "").toLowerCase() === "excel") ?? SKILLS[0];
-  openSkill(excelSkill);
-});
-
-// ---------- Skills list ----------
-
-function renderSkillsList() {
-  const list = document.querySelector("#skills-list");
+// One row per skill actually in SKILLS, not a single hardcoded "Excel
+// chats" button — that button only ever opened the fixture (or
+// SKILLS[0], which is the fixture too, since it's first in the array and
+// loadPersistedSkills keeps save order). A skill was otherwise reachable
+// only in the instant right after asking (openSkill at the end of
+// submitNewGoal); leaving that view for any reason orphaned it — still
+// safely on disk (persistSkills already saved it), just nothing in the
+// UI could get back to it. Call this after every SKILLS mutation and
+// before showing the home view, so it's always current.
+// With nothing saved, the whole Apps section goes away — heading included
+// — rather than leaving an empty header over a blank strip. The ask box
+// above it is already the "what do you do here" affordance on a fresh
+// install, so a second empty-state line under a lone heading is just
+// chrome with nothing behind it.
+function renderAppsList() {
+  const list = document.querySelector("#apps-list");
+  const kicker = document.querySelector("#apps-kicker");
   list.innerHTML = "";
+  kicker.hidden = SKILLS.length === 0;
 
   for (const skill of SKILLS) {
     const generated = skill.steps.filter((s) => s.generated).length;
-    const card = document.createElement("div");
-    card.className = "skill-card";
-    const appTag = skill.appName ? `<span class="skill-app-tag">${skill.appName}</span> ` : "";
-    card.innerHTML = `<h3>${appTag}${skill.title}</h3><p>${generated}/${skill.steps.length} steps ready · “${skill.goal}”</p>`;
-    card.addEventListener("click", () => openSkill(skill));
-    list.appendChild(card);
-  }
+    // A div, not a button: the delete control is itself a button and
+    // nesting one inside another is invalid, so the row is a container
+    // with a full-width "open" button plus the delete button beside it.
+    const row = document.createElement("div");
+    row.className = "app-group";
+    row.innerHTML = `
+      <button class="app-group-main" type="button">
+        <img alt="" hidden />
+        <div>
+          <div class="app-group-title"></div>
+          <div class="app-group-meta"></div>
+        </div>
+      </button>
+      <button class="app-group-delete" type="button" title="Delete this chat">
+        ${TrashIcon({ size: 15 })}
+      </button>
+    `;
+    row.querySelector(".app-group-title").textContent = skill.title;
+    row.querySelector(".app-group-meta").textContent =
+      `${generated}/${skill.steps.length} steps ready · ${skill.goal}`;
+    row.querySelector(".app-group-main").addEventListener("click", () => openSkill(skill));
+    row.querySelector(".app-group-delete").addEventListener("click", () => deleteSkill(skill));
 
-  if (SKILLS.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "skill-card skill-card-empty";
-    empty.textContent = "Ask a question above to generate your first skill.";
-    list.appendChild(empty);
+    // Cache-only lookup (no live window id) — the icon was extracted and
+    // written to disk when the app was picked in setup. Async so a chat
+    // whose app has no icon just never shows one, rather than blocking
+    // the row from rendering at all.
+    const img = row.querySelector("img");
+    appIcon(skill.appName).then((uri) => {
+      if (!uri) return;
+      img.src = uri;
+      img.hidden = false;
+    });
+
+    list.appendChild(row);
   }
+}
+
+async function deleteSkill(skill) {
+  const i = SKILLS.indexOf(skill);
+  if (i === -1) return;
+  SKILLS.splice(i, 1);
+  // Leaving the deleted skill open would show a chat that no longer
+  // exists and re-persist it on the next edit.
+  if (currentSkill === skill) {
+    currentSkill = null;
+    currentStep = null;
+    showView("home");
+  }
+  renderAppsList();
+  await persistSkills();
 }
 
 let nextSkillId = SKILLS.length + 1;
@@ -491,7 +594,6 @@ async function loadPersistedSkills() {
     SKILLS.length = 0;
     SKILLS.push(...persisted);
     recomputeNextSkillId();
-    renderSkillsList();
   } catch (err) {
     console.error("failed to load persisted skills, keeping fixture demo data", err);
   }
@@ -547,11 +649,15 @@ async function submitNewGoal() {
     await persistSkills();
     openSkill(skill);
   } catch (err) {
+    // Logged as well as shown in the UI: the UI message is truncated/plain
+    // text, but the console gets the full error object (stack, cause) —
+    // the difference between "why does it break" being a guess and being
+    // an actual answer.
+    console.error("research_goal failed", err);
     errorEl.textContent = `Couldn't research that: ${err}`;
   } finally {
     input.disabled = false;
     button.disabled = false;
-    renderSkillsList();
   }
 }
 
@@ -654,23 +760,15 @@ function renderPath() {
 
     if (!step.generated) {
       // step.brief/watch_for come from Research (goal-scoped facts, no
-      // screenshot involved) and exist even before the AI-planned
-      // substeps below do, so they're shown alongside the substep
-      // placeholder rather than instead of it — a real research step
-      // always has a brief, and used to skip the placeholder entirely as
-      // a result. Fixture steps (fake-skill.js) predate `brief`.
-      if (step.brief) {
-        const brief = document.createElement("div");
-        brief.className = "step-caption";
-        brief.textContent = step.brief;
-        main.appendChild(brief);
-      }
-      if (step.watch_for) {
-        const watch = document.createElement("div");
-        watch.className = "step-caption step-watch-for";
-        watch.textContent = `⚠ ${step.watch_for}`;
-        main.appendChild(watch);
-      }
+      // screenshot involved) — internal now, not rendered here at all:
+      // they're an input to the vision call instead (see locateContext),
+      // read alongside the screenshot when a substep's element is
+      // located, rather than shown to the user as prose. "Details" for a
+      // locked step used to expand this text; there's nothing left for it
+      // to show until the step is actually generated, at which point
+      // clicking the step head (above) already expands the real substep
+      // list — that's the "Details expand shows substeps" behavior, and
+      // it needs no separate control since one already exists.
       // Substep placeholder — the actual per-substep bubbles only exist
       // once plan_step has run (see generateStepSubsteps), which is a
       // separate, deferred concern from having something to show here in
@@ -690,7 +788,7 @@ function renderPath() {
       }
       if (step.planError) {
         const error = document.createElement("div");
-        error.className = "step-caption step-watch-for";
+        error.className = "step-caption step-error";
         error.textContent = `Couldn't plan this step: ${step.planError}`;
         main.appendChild(error);
       }
@@ -790,6 +888,31 @@ function locateTarget(sub) {
   return sub.target_description || sub.question || "";
 }
 
+// Everything Research/plan_step already knows about this step, folded
+// into one plain-text block for the vision call (locate_element →
+// live_step.py → locate.py) to read alongside the screenshot — the
+// description text a step's Research output carries (brief/watch_for)
+// was previously rendered on screen behind the "Details" toggle; it's
+// internal now; this is where it actually gets used instead of shown.
+// "Progress" is the substeps already reached in this step (excluding the
+// one being located right now), so a call mid-step knows what's already
+// been covered rather than treating every locate as the first one.
+function locateContext(sub) {
+  const lines = [];
+  if (currentSkill?.goal) lines.push(`Overall goal: ${currentSkill.goal}`);
+  if (currentStep?.title) lines.push(`Current step: ${currentStep.title}`);
+  if (currentStep?.brief) lines.push(`Step description: ${currentStep.brief}`);
+  if (currentStep?.watch_for) lines.push(`Watch for: ${currentStep.watch_for}`);
+
+  const covered = (currentStep?.substeps ?? []).filter((s) => s !== sub && s.target_description);
+  if (covered.length > 0) {
+    lines.push("Already covered earlier in this step:");
+    for (const s of covered) lines.push(`- ${s.target_description}`);
+  }
+
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
 // Which substep's overlay is currently on screen, if any.
 let overlaidSubstepId = null;
 
@@ -884,6 +1007,7 @@ function renderChat() {
         sub.last_known_bbox = await invoke("locate_element", {
           target: locateTarget(sub),
           scope: currentCaptureScope(),
+          context: locateContext(sub),
         });
         // Already-visible overlay for this substep should jump to the new
         // box rather than keep showing the old one.
@@ -938,6 +1062,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") emit("tutoria:quit");
 });
 listen("tutoria:quit", () => getCurrentWindow().close());
+
 
 // Which pick gesture is possible depends on the session, so the setup view
 // can't be rendered correctly until this resolves.
