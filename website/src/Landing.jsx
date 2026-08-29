@@ -11,7 +11,6 @@ import {
   Apple,
   MonitorSmartphone,
   Command,
-  Video,
 } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
 import { BRAND, FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
@@ -274,7 +273,7 @@ const WORKS_WITH = [
   { name: "Video editor", img: "/assets/video-editor.png" },
   { name: "VS Code", img: "/assets/vscode.png" },
   { name: "Blender", img: "/assets/blender.png" },
-  { name: "DaVinci Resolve", icon: Video, bg: "#1B1B3A", fg: "#ffffff" },
+  { name: "DaVinci Resolve", img: "/assets/davinci-resolve.svg" },
 ];
 
 function WorksWithMarquee() {
