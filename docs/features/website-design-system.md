@@ -50,7 +50,9 @@ Inter (400–700)              — body / sentences
 border plus the violet halo ring. This is the canonical brand mark
 (website header, desktop login, desktop title bar, bundle icons). Do
 not swap it for the glass SVG mascot; that buddy is a separate
-cursor-follow helper (see [mascot.md](mascot.md)).
+cursor-follow helper (see [mascot.md](mascot.md)). The landing intro
+uses the glass mascot (not the lime square) as the thing the pointer
+clicks; the header logo stays `guido-icon.png`.
 
 **Primary CTA ("keycap" button)** — black pill, hard bottom offset
 shadow (`0 5px 0 0 #000`) that collapses on press, white sheen on the

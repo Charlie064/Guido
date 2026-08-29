@@ -16,6 +16,7 @@ import { useId } from "react";
  *
  * States: "idle" | "happy" | "thinking" | "success" | "error"
  * Poses (optional, layered on top of any state): "normal" | "squish" | "stretch" | "tilt"
+ * Look (optional, idle pupils only): "center" | "left" | "right"
  */
 
 const INK = "#2a2233";
@@ -42,7 +43,14 @@ function poseTransformFor(pose) {
   }
 }
 
-function Face({ state }) {
+function pupilShift(look) {
+  if (look === "left") return -6;
+  if (look === "right") return 6;
+  return 0;
+}
+
+function Face({ state, look = "center" }) {
+  const dx = pupilShift(look);
   switch (state) {
     case "happy":
       return (
@@ -101,16 +109,16 @@ function Face({ state }) {
         <>
           <circle cx="78" cy="122" r="15" fill="#ffffff" opacity="0.95" />
           <circle cx="123" cy="120" r="15" fill="#ffffff" opacity="0.95" />
-          <circle cx="80" cy="123" r="10.5" fill={INK} />
-          <circle cx="125" cy="121" r="10.5" fill={INK} />
-          <circle cx="76.5" cy="119" r="3" fill="#ffffff" />
-          <circle cx="121.5" cy="117" r="3" fill="#ffffff" />
+          <circle cx={80 + dx} cy="123" r="10.5" fill={INK} />
+          <circle cx={125 + dx} cy="121" r="10.5" fill={INK} />
+          <circle cx={76.5 + dx} cy="119" r="3" fill="#ffffff" />
+          <circle cx={121.5 + dx} cy="117" r="3" fill="#ffffff" />
         </>
       );
   }
 }
 
-export default function GlassMascot({ state = "idle", pose = "normal", size = 96, className, style }) {
+export default function GlassMascot({ state = "idle", pose = "normal", look = "center", size = 96, className, style }) {
   const rawId = useId();
   const uid = rawId.replace(/[^a-zA-Z0-9]/g, "");
   const height = Math.round((size * VIEWBOX_H) / VIEWBOX_W);
@@ -162,7 +170,7 @@ export default function GlassMascot({ state = "idle", pose = "normal", size = 96
         <ellipse cx="66" cy="82" rx="20" ry="12" fill="#ffffff" opacity="0.5" filter={`url(#blur-${uid})`} transform="rotate(-24 66 82)" />
         <ellipse cx="60" cy="72" rx="7" ry="4.2" fill="#ffffff" opacity="0.8" transform="rotate(-24 60 72)" />
 
-        <Face state={state} />
+        <Face state={state} look={look} />
       </g>
     </svg>
   );

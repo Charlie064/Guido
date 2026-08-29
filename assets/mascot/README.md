@@ -35,6 +35,7 @@ Props:
 |---|---|---|---|
 | `state` | `"idle" \| "happy" \| "thinking" \| "success" \| "error"` | `"idle"` | Swaps the face. |
 | `pose` | `"normal" \| "squish" \| "stretch" \| "tilt"` | `"normal"` | Body transform, layers on top of any state. |
+| `look` | `"center" \| "left" \| "right"` | `"center"` | Shifts idle pupils so Guido can glance. |
 | `size` | number (px) | `96` | Width; height follows the fixed aspect ratio automatically. |
 | `className` | string | — | Passed through to the `<svg>`. |
 | `style` | object | — | Passed through to the `<svg>`. |

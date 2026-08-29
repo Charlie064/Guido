@@ -13,8 +13,9 @@ import {
   Command,
   Video,
 } from "lucide-react";
+import GlassMascot from "@mascot/GlassMascot.jsx";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
-import { BRAND, FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
+import { FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
 
 const MODE_COLORS = {
   teach: { accent: "#3B82F6", text: "#ffffff" }, // blue — Notion
@@ -24,11 +25,32 @@ const MODE_COLORS = {
 
 function IntroAnimation() {
   const [visible, setVisible] = useState(true);
-  const duration = 2600;
+  const [look, setLook] = useState("left");
+  const [clicked, setClicked] = useState(false);
+  const duration = 3400;
 
   useEffect(() => {
-    const t = setTimeout(() => setVisible(false), duration);
-    return () => clearTimeout(t);
+    const reduceMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion) {
+      const t = setTimeout(() => setVisible(false), 400);
+      return () => clearTimeout(t);
+    }
+
+    let glance;
+    const appearAt = setTimeout(() => {
+      setClicked(true);
+      glance = setInterval(() => {
+        setLook((side) => (side === "left" ? "right" : "left"));
+      }, 480);
+    }, Math.round(duration * 0.8));
+    const hide = setTimeout(() => setVisible(false), duration);
+    return () => {
+      clearInterval(glance);
+      clearTimeout(appearAt);
+      clearTimeout(hide);
+    };
   }, []);
 
   if (!visible) return null;
@@ -40,28 +62,36 @@ function IntroAnimation() {
     >
       <div className="absolute inset-0 bg-white" />
 
-      {/* the mark: empty green square -> flips black once "clicked" */}
       <div
-        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-[22px] shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)]"
-        style={{ animation: `intro-mark-color ${duration}ms steps(1) forwards` }}
-      />
+        className="absolute top-1/2 left-1/2"
+        style={{ animation: `intro-mascot ${duration}ms ease-out forwards` }}
+      >
+        <GlassMascot
+          state={clicked ? "happy" : "idle"}
+          pose={clicked ? "squish" : "normal"}
+          look={look}
+          size={118}
+        />
+      </div>
 
-      {/* cursor: arcs around the mark, lands centered, crossfades outline -> solid brand */}
       <div
-        className="absolute top-1/2 left-1/2 w-11 h-11 flex items-center justify-center"
-        style={{ animation: `intro-arc ${duration}ms cubic-bezier(0.4,0,0.2,1) forwards` }}
+        className="absolute top-1/2 left-1/2"
+        style={{ animation: `intro-orbit-spin ${duration}ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards` }}
       >
         <div
-          className="absolute drop-shadow-[0_10px_16px_rgba(0,0,0,0.35)]"
-          style={{ animation: `intro-cursor-outline ${duration}ms steps(1) forwards` }}
+          className="absolute top-0 left-0 w-11 h-11 flex items-center justify-center"
+          style={{ animation: `intro-orbit-in ${duration}ms cubic-bezier(0.45, 0.05, 0.2, 1) forwards` }}
         >
-          <MousePointer2 size={34} color="#0A0A0A" fill="white" strokeWidth={2} />
-        </div>
-        <div
-          className="absolute"
-          style={{ animation: `intro-cursor-solid ${duration}ms steps(1) forwards` }}
-        >
-          <MousePointer2 size={20} color={BRAND} strokeWidth={2.5} />
+          <div
+            className="relative drop-shadow-[0_10px_16px_rgba(0,0,0,0.35)]"
+            style={{ animation: `intro-orbit-counter ${duration}ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards` }}
+          >
+            <MousePointer2 size={36} color="#0A0A0A" fill="#f4f4f4" strokeWidth={2.4} />
+            <div
+              className="absolute left-1 top-1 w-7 h-7 rounded-full border-2 border-black/25"
+              style={{ animation: `intro-click-ring ${duration}ms ease-out forwards` }}
+            />
+          </div>
         </div>
       </div>
     </div>
