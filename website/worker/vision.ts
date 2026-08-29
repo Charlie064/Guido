@@ -204,28 +204,25 @@ async function reserveBudget(db: D1Database, userId: number, ceiling: number): P
   return (results[1].meta.changes ?? 0) > 0;
 }
 
-// Gives back the unused part of a reservation. `keep` is what the call
-// actually turned out to cost (0 if it never reached Anthropic, or if
-// Anthropic errored before returning usage). Clamped so a bug here can
-// only ever under-charge the user, never push them over the ceiling.
-async function refundBudget(db: D1Database, userId: number, keep: number): Promise<void> {
+// Gives back the unused part of a reservation and returns the resulting
+// running total in the same statement (D1 supports UPDATE ... RETURNING,
+// confirmed against a local database rather than assumed) — one D1
+// operation instead of a refund-then-read pair, and no window where a
+// separate read could return a value from before this refund landed
+// (moot under D1's serialization, but free to avoid anyway). `keep` is
+// what the call actually turned out to cost (0 if it never reached
+// Anthropic, or if Anthropic errored before returning usage). Clamped so
+// a bug here can only ever under-charge the user, never push them over
+// the ceiling.
+async function refundBudget(db: D1Database, userId: number, keep: number): Promise<number> {
   const refund = Math.max(0, RESERVE_MICRO_USD - keep);
-  if (refund === 0) return;
-  await db
-    .prepare(
-      `UPDATE monthly_spend SET reserved_micro_usd = MAX(0, reserved_micro_usd - ?)
-       WHERE user_id = ? AND month = strftime('%Y-%m', 'now')`,
-    )
-    .bind(refund, userId)
-    .run();
-}
-
-async function currentReserved(db: D1Database, userId: number): Promise<number> {
   const row = await db
     .prepare(
-      "SELECT reserved_micro_usd FROM monthly_spend WHERE user_id = ? AND month = strftime('%Y-%m', 'now')",
+      `UPDATE monthly_spend SET reserved_micro_usd = MAX(0, reserved_micro_usd - ?)
+       WHERE user_id = ? AND month = strftime('%Y-%m', 'now')
+       RETURNING reserved_micro_usd`,
     )
-    .bind(userId)
+    .bind(refund, userId)
     .first<{ reserved_micro_usd: number }>();
   return Number(row?.reserved_micro_usd ?? 0);
 }
@@ -373,9 +370,9 @@ export async function handleVision(request: Request, env: Env): Promise<Response
 
     let remaining: number | null = null;
     if (ceiling !== null) {
-      await refundBudget(env.DB, member.user_id, spend);
+      const reservedAfter = await refundBudget(env.DB, member.user_id, spend);
       refunded = true;
-      remaining = Math.max(0, ceiling - (await currentReserved(env.DB, member.user_id)));
+      remaining = Math.max(0, ceiling - reservedAfter);
     }
 
     return json({

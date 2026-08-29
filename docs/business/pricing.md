@@ -117,6 +117,46 @@ Coordinate boxes are in the *sent* image’s pixels; if we downsample,
 `locate.py` / the overlay must scale boxes back to the capture. Not
 implemented yet — this is the costed send size, not current code.
 
+## `/api/vision` — ad-hoc "what do I click" (outside the skill loop)
+
+A second, separate cost surface from the skill loop priced above: a
+one-shot screenshot + goal/question, answered without Research or a
+saved plan. `website/worker/vision.ts`. Same model as this doc already
+assumes — **Claude Sonnet 5**, $2/$10 per MTok — so the unit costs
+above apply directly; nothing here changes the $4.05/user/month
+skill-loop estimate, it's additive.
+
+**Per-call cost.** Capped hard at **2,100,000px** input (matches this
+doc's own "full 4K" 2691-token reference point) and **2048** output
+tokens, so no single call can exceed **~$0.0285**. Real measured cost
+at half-res is far below that ceiling — **$0.0014–0.005/call** — the
+cap exists for a crafted or misbehaving request, not typical use.
+
+**Monthly ceiling per plan** (micro-USD, i.e. millionths of a dollar):
+free **$1**, starter **$6**, plus **$12**, owner unmetered. These are
+abuse ceilings, not the product quota — `skill_runs` (5 lifetime free,
+30/month starter/plus) still governs how many *skills* someone gets.
+At real per-call cost this supports roughly 200–700 calls/month on
+free before it bites, well past normal use.
+
+**Why it's a hard cap and not just a fast check.** The ceiling is
+enforced by reserving each call's worst-case cost *before* calling
+Anthropic, against a running per-user-per-month total, refunding the
+unused portion after. That reservation is atomic against concurrent
+requests because D1 is one Durable Object per database — writes to the
+same row serialize globally, so two simultaneous requests cannot both
+read "under budget" and both commit. A SUM()-over-rows check (the
+first version of this) could race; this can't. Verified against 40
+truly concurrent requests: exactly the theoretical max got through,
+the rest 402'd, and the ledger balanced to the real total afterward
+with nothing leaked. See the comments on `reserveBudget` /
+`refundBudget` in `vision.ts` for the mechanism, not repeated here.
+
+Layered under a burst limiter (6 requests/user/minute, Workers
+Rate Limiting binding) that bounds *speed*, separate from the ceiling
+that bounds *spend* — a request-count limit alone doesn't bound a bill
+when per-request cost varies, which is why both exist.
+
 ## Usage we price from
 
 Planning assumption (not the conservative `skills.md` “manual look”

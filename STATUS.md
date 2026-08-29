@@ -657,3 +657,22 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   Studio Code" / "Welcome"), the icon lookup by unit test against this
   machine's real icon themes (Firefox, VS Code, Nautilus, GNOME Settings
   all resolve). **Not yet run through a real portal pick.**
+- **`/api/vision` — Worker-side Claude proxy, on `claudev/charlie/rename-guido`.**
+  The desktop app's only path to Anthropic; it never holds a key.
+  `POST website/worker/vision.ts`: authenticates the session, then
+  gates every call behind a burst limiter (6/user/min) and a hard
+  monthly spend ceiling enforced by reserving each call's worst-case
+  cost atomically before the Anthropic call, refunding the unused
+  portion after (`monthly_spend`, migration `0004`) — race-proof
+  because D1 serializes writes to one row globally, not just "checked
+  before insert." Also bounds image cost by pixel count read straight
+  from the file's own header (PNG/JPEG/WebP), not by upload byte size,
+  after a crafted 66-byte PNG with a forged 20000×20000 canvas cleared
+  the byte cap in testing. Verified against 40 real concurrent calls:
+  exactly the theoretical max succeeded, the rest 402'd, nothing
+  leaked. Numbers and the model choice (Sonnet 5, matching this repo's
+  existing COGS assumptions) are in `docs/business/pricing.md`. **Not
+  yet wired to the desktop app** — `sidebar.js` doesn't call it yet —
+  and the branch still needs reconciling with
+  `claudev/charlie/desktop-google-login`, which has the real
+  `guidotutor.com` custom-domain deploy this depends on.
