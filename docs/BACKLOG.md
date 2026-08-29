@@ -208,3 +208,47 @@ point — this file should never pose as a source of truth for what's done.
     run** in the current substep sequence — self-confirmed-only substeps
     leave no baseline, so `plan_step` needs to know not to generate a
     relative `expected_outcome` there and fall back to an absolute one.
+- **BL-013 — Always-on-top sidebar on layer-shell-capable Linux
+  compositors.** The sidebar window was deliberately made a plain,
+  non-layer-shell toplevel (`sidebar` is NOT promoted in
+  `init_layer_shell`, see the trade-off comment at
+  `spikes/tauri-overlay/src-tauri/src/lib.rs:948-958`): two custom-drag
+  workarounds on a layer-shell/undecorated window weren't reliable, so a
+  real OS titlebar was chosen instead, trading away forced-on-top in
+  exchange for the window manager owning dragging normally. GNOME
+  (Mutter) doesn't implement `wlr-layer-shell` at all, confirmed via a
+  `WAYLAND_DEBUG=1` registry dump (no `zwlr_*` globals) — so this is out
+  of reach there regardless. Sway, Hyprland, and KDE do implement it, the
+  same path `region-select`/`overlay` already use
+  (`gtk_layer_shell::is_supported()`). Scope: promote the sidebar to
+  `gtk_layer_shell::Layer::Top` (not `Overlay`, which region-select/
+  overlay use — Top still lets other apps' menus/tooltips draw above it)
+  only on compositors where it's supported, falling back to today's plain
+  toplevel everywhere else (GNOME included) — needs re-verifying that
+  window-manager dragging still works once layer-shell is back on, since
+  that's exactly what broke last time.
+- **BL-014 — Native capture-exclusion + always-on-top on macOS/Windows.**
+  Both platforms have real OS APIs to keep the sidebar visibly pinned on
+  top *and* invisible to any screen capture at the same time — not a
+  trade-off between the two the way Linux/Wayland is:
+  - **Always-on-top**: plain `alwaysOnTop`, already the fallback path
+    `init_layer_shell`'s doc comment names for macOS/Windows (X11 too) —
+    unlike Wayland, these platforms let a client request top-of-stack
+    directly.
+  - **Capture exclusion**: macOS `NSWindow.sharingType = .none`; Windows
+    `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` (10 2004+).
+    Both hide the window from screen recorders, video calls, and this
+    app's own capture calls, while it stays fully visible and interactive
+    on-screen for the user.
+  - Together these let macOS/Windows builds **drop the hide()/show()
+    dance entirely** (`sidebar.hide()`/`.show()` around every capture
+    site in `lib.rs` — `locate_element`, `verify_substep`,
+    `answer_question`, `identify_app`, `pick_portal_source`): no more
+    flicker, sidebar just never appears in a captured frame. Linux keeps
+    the hide/show approach — no Wayland-portal equivalent to
+    `WDA_EXCLUDEFROMCAPTURE` exists for an ordinary client to call on
+    itself.
+  - Needs Tauri-side platform-conditional code (`#[cfg(target_os =
+    "macos")]` / `"windows"`), likely via `raw-window-handle` to reach
+    the native `NSWindow`/`HWND`, since neither is exposed by Tauri's
+    window API directly.
