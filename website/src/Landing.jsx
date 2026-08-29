@@ -759,9 +759,6 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <p className="text-xs text-neutral-400">© Guido team</p>
             <div className="flex items-center gap-4">
-              <a href="/login" className="text-xs text-neutral-400 hover:text-neutral-700">
-                Sign in
-              </a>
               <a href="/privacy.html" className="text-xs text-neutral-400 hover:text-neutral-700">
                 Privacy policy
               </a>

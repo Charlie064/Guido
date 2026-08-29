@@ -252,3 +252,17 @@ point — this file should never pose as a source of truth for what's done.
     "macos")]` / `"windows"`), likely via `raw-window-handle` to reach
     the native `NSWindow`/`HWND`, since neither is exposed by Tauri's
     window API directly.
+- **BL-015 — Require email verification before an account is usable.**
+  Login switched from Google OAuth to Better Auth email+password
+  (`website/worker/better-auth.ts`, decided 2026-08-29 to avoid Google's
+  test-user allowlist blocking self-serve signup during the demo). As
+  configured, `emailAndPassword.requireEmailVerification` is `false` — an
+  account is active the instant it's created, no proof the email address
+  is real. Explicitly deferred for the hackathon demo, but flagged here so
+  it isn't forgotten: **must be turned on before charging real users or
+  accepting signups beyond a small trusted demo group.** Needs an
+  email-sending provider wired in first (Resend, Postmark, etc.) — Better
+  Auth supports verification emails natively once one exists
+  (`sendVerificationEmail` in the `emailAndPassword` or
+  `emailVerification` config), no schema changes required since
+  `user.emailVerified` already exists in the generated table.

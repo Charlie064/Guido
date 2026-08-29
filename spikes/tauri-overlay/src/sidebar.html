@@ -661,7 +661,6 @@
       }
 
       .btn-keycap,
-      .btn-google,
       .btn-primary,
       #setup-continue,
       #new-goal-send,
@@ -684,7 +683,6 @@
       }
 
       .btn-keycap:hover,
-      .btn-google:hover,
       .btn-primary:hover,
       #setup-continue:hover,
       #new-goal-send:hover,
@@ -693,7 +691,6 @@
       }
 
       .btn-keycap:active,
-      .btn-google:active,
       .btn-primary:active,
       #setup-continue:active,
       #new-goal-send:active,
@@ -702,22 +699,12 @@
         box-shadow: 0 1px 0 0 #000, 0 6px 12px -8px rgba(0, 0, 0, 0.4);
       }
 
-      .btn-google-shine,
       .btn-keycap::after,
       .btn-primary::after,
       #setup-continue::after,
       #new-goal-send::after,
       #chat-send::after {
         content: "";
-        position: absolute;
-        inset: 4px 4px auto;
-        height: 40%;
-        border-radius: 999px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0));
-        pointer-events: none;
-      }
-
-      .btn-google-shine {
         position: absolute;
         inset: 4px 4px auto;
         height: 40%;
@@ -779,12 +766,34 @@
         margin: 8px 0 0;
       }
 
-      .btn-google {
+      #login-error {
+        color: #d1284a;
+      }
+
+      #login-form {
         width: 100%;
         max-width: 280px;
         margin-top: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .login-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1.5px solid rgba(0, 0, 0, 0.12);
+        font-family: Inter, system-ui, sans-serif;
         font-size: 14px;
-        padding: 11px 16px;
+        background: #ffffff;
+        color: #0A0A0A;
+      }
+
+      .login-input:focus {
+        outline: none;
+        border-color: #0A0A0A;
       }
 
       .login-skip {
@@ -804,6 +813,155 @@
       #setup-continue {
         width: 100%;
         margin-top: 8px;
+      }
+
+      /* ---------- Plan badge (top bar) ---------- */
+      /* One-word tier readout next to the profile avatar — see docs/business/pricing.md
+         for what each tier means. Hidden while signed out (applyMembership
+         in sidebar.js), same gate as the profile avatar itself. */
+
+      .plan-badge {
+        flex-shrink: 0;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: #f0f0f0;
+        border: 1px solid var(--border);
+      }
+
+      .plan-badge[data-plan="starter"],
+      .plan-badge[data-plan="plus"] {
+        color: #0A0A0A;
+        background: var(--halo-bloom);
+        border-color: var(--pink-border);
+      }
+
+      .plan-badge[data-plan="owner"] {
+        color: #ffffff;
+        background: #0A0A0A;
+        border-color: #0A0A0A;
+      }
+
+      /* ---------- Pay / upgrade ---------- */
+
+      .pay-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 18px;
+      }
+
+      .pay-status {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
+        margin-bottom: 14px;
+      }
+
+      .pay-status-plan {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+
+      .pay-status-meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .pay-reason {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--pink-soft);
+        border: 1px solid var(--pink-border);
+        color: #0A0A0A;
+        font-size: 12px;
+        line-height: 1.5;
+        margin-bottom: 16px;
+      }
+
+      .pay-reason[hidden] {
+        display: none;
+      }
+
+      .pay-tier {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        margin-bottom: 12px;
+      }
+
+      .pay-tier-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .pay-tier-name {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+      }
+
+      .pay-tier-price {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .pay-tier-desc {
+        margin: 6px 0 12px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .pay-tier button {
+        width: 100%;
+        margin-top: 0;
+      }
+
+      .pay-manage {
+        margin-top: 6px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px dashed var(--border);
+        text-align: center;
+      }
+
+      .pay-manage p {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .pay-manage button {
+        width: 100%;
+        margin-top: 0;
+        background: #ffffff;
+        color: var(--ink);
+        border: 1.5px solid rgba(0, 0, 0, 0.12);
+        box-shadow: none;
+      }
+
+      .pay-manage button:hover {
+        transform: none;
+        background: #f5f5f5;
+      }
+
+      .pay-manage button::after {
+        display: none;
       }
 
       /* ---------- Setup ---------- */
@@ -1603,35 +1761,44 @@
           <div class="bar-title" id="bar-title">Guido</div>
           <div class="bar-subtitle" id="bar-subtitle"></div>
         </div>
+        <!-- Tier readout, always visible next to the avatar while signed
+             in — text/color set by applyMembership() in sidebar.js
+             (data-plan drives the color variants above). -->
+        <span class="plan-badge" id="plan-badge" hidden></span>
         <div class="bar-profile-wrap" id="bar-profile-wrap" hidden>
           <button class="bar-profile" id="bar-profile" type="button" aria-label="Profile" aria-expanded="false">G</button>
           <div class="profile-menu" id="profile-menu" role="menu">
             <div class="profile-menu-who">Guest</div>
             <div class="profile-menu-meta">Not signed in</div>
-            <button type="button" id="profile-signin">Sign in with Google</button>
+            <button type="button" id="profile-signin">Sign in</button>
+            <button type="button" id="profile-signout" hidden>Sign out</button>
+            <!-- Label ("Upgrade plan" / "Manage subscription") set by
+                 applyMembership() — same #view-pay screen either way, see
+                 openPayView("menu") in sidebar.js. -->
+            <button type="button" id="profile-upgrade" hidden>Upgrade plan</button>
             <button type="button" id="profile-attach">Use Excel window</button>
           </div>
         </div>
       </div>
 
-      <!-- Placeholder auth — no validation, just a gate to the rest of
-           the demo. See docs/decisions/0004-cloudflare-infrastructure-proposal.md
-           for the (still-proposed) real account story this stands in for. -->
+      <!-- Email+password login (docs/planning/login-membership-plan.md):
+           a plain form posting straight to the website Worker's Better
+           Auth routes (/api/auth/sign-in/email, /api/auth/sign-up/email)
+           — no browser round trip, since there's no cookie jar or OAuth
+           consent screen to hand off to. The returned bearer token is
+           stashed in the OS keychain (lib.rs). "Continue without signing
+           in" is still the demo bypass — no membership check gates it. -->
       <section id="view-login" class="view active">
         <img class="login-mark" src="assets/guido-icon.png" alt="Guido" />
         <div class="login-wordmark">Guido</div>
-        <div class="login-kicker">Sign in to continue</div>
-        <p>Use the same Google account the website uses.</p>
-        <button class="btn-google" id="login-google" type="button">
-          <span class="btn-google-shine"></span>
-          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-          </svg>
-          Sign in with Google
-        </button>
+        <div class="login-kicker" id="login-mode-label">Sign in to continue</div>
+        <p id="login-error" hidden></p>
+        <form id="login-form">
+          <input class="login-input" id="login-email" type="email" placeholder="Email" autocomplete="email" required />
+          <input class="login-input" id="login-password" type="password" placeholder="Password" autocomplete="current-password" required minlength="8" />
+          <button class="btn-primary" id="login-submit" type="submit">Sign in</button>
+        </form>
+        <button class="login-skip" id="login-toggle-mode" type="button">Need an account? Sign up</button>
         <button class="login-skip" id="login-continue" type="button">Continue without signing in</button>
       </section>
 
@@ -1731,6 +1898,46 @@
            home; the title bar's back arrow returns there (see viewMeta). -->
       <section id="view-group" class="view">
         <div class="group-body" id="group-body"></div>
+      </section>
+
+      <!-- Reached three ways: hitting the free-tier quota on a new ask,
+           a single ask costing more than what's left (docs/business/pricing.md's
+           flat 1-per-skill charge — see openPayView in sidebar.js), or the
+           profile menu's Upgrade/Manage item. Same screen every time; only
+           #pay-reason's text changes. No real billing — Stripe is a later
+           slice (docs/planning/login-membership-plan.md's "Open / deferred"). -->
+      <section id="view-pay" class="view">
+        <div class="pay-body">
+          <div class="pay-status">
+            <div class="pay-status-plan" id="pay-status-plan">Free plan</div>
+            <div class="pay-status-meta" id="pay-status-meta"></div>
+          </div>
+
+          <p class="pay-reason" id="pay-reason" hidden></p>
+
+          <div class="pay-tier">
+            <div class="pay-tier-head">
+              <span class="pay-tier-name">Starter</span>
+              <span class="pay-tier-price">$12/mo</span>
+            </div>
+            <p class="pay-tier-desc">30 new skills a month, then $0.25 per extra skill.</p>
+            <button type="button" class="btn-primary" data-plan-target="starter">Upgrade to Starter</button>
+          </div>
+
+          <div class="pay-tier">
+            <div class="pay-tier-head">
+              <span class="pay-tier-name">Plus</span>
+              <span class="pay-tier-price">$24/mo</span>
+            </div>
+            <p class="pay-tier-desc">Everything in Starter, plus saving skills to replay later.</p>
+            <button type="button" class="btn-primary" data-plan-target="plus">Upgrade to Plus</button>
+          </div>
+
+          <div class="pay-manage">
+            <p>Already on a paid plan? Manage billing, change tier, or cancel.</p>
+            <button type="button" class="btn-primary" id="pay-manage-btn">Manage subscription</button>
+          </div>
+        </div>
       </section>
 
       <section id="view-path" class="view">

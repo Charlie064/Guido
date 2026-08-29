@@ -239,6 +239,7 @@ const views = {
   group: document.querySelector("#view-group"),
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
+  pay: document.querySelector("#view-pay"),
 };
 
 // Compact shell sizes — keep the panel as small as the current view
@@ -253,6 +254,7 @@ const VIEW_SIZE = {
   group: [420, 620],
   path: [400, 600],
   chat: [400, 600],
+  pay: [420, 620],
 };
 
 async function fitWindow(name) {
@@ -266,6 +268,10 @@ async function fitWindow(name) {
     // Browser preview / missing Tauri API — leave CSS to fill the webview.
   }
 }
+
+// Set right before showView("pay") so its back arrow returns wherever the
+// user actually came from (home, mid-path) instead of always "home".
+let payReturnView = "home";
 
 // view -> [title, subtitle getter, back-target-or-null]
 function viewMeta(name) {
@@ -282,6 +288,8 @@ function viewMeta(name) {
       return [currentSkill.title, currentSkill.goal, "home"];
     case "chat":
       return [currentStep.title, "", "path"];
+    case "pay":
+      return ["Upgrade", "", payReturnView];
     default:
       return ["Guido", "", null];
   }
@@ -698,20 +706,179 @@ homeEls.researchSkip.addEventListener("click", () => {
 homeEls.goalInput.addEventListener("input", refreshHomeSteps);
 
 // ---------- Login ----------
+//
+// See docs/planning/login-membership-plan.md. The session token itself is
+// held in the OS keychain (Rust side, lib.rs's store/get/clear_session_token
+// — see docs.rs/keyring), never in localStorage/a file this app controls;
+// this module only ever holds the decoded /api/me response in memory.
+
+const WEBSITE_BASE_URL = "https://guidotutor.com";
+
+// null = signed out (or /api/me hasn't resolved yet). Shape:
+// { email, plan, status, skills_remaining, skills_included, can_save_skills }
+let membership = null;
+
+// Kept only so sign-out can tell the Worker which session to revoke
+// (Better Auth's /api/auth/sign-out, bearer-authenticated same as every
+// other call) — the token of record still lives in the OS keychain, this
+// is just the copy currently active in this run of the app.
+let currentSessionToken = null;
+
+const PLAN_LABELS = { free: "Free", starter: "Starter", plus: "Plus", owner: "Owner" };
+
+function applyMembership(info) {
+  membership = info;
+  const badge = document.querySelector("#plan-badge");
+  const upgradeBtn = document.querySelector("#profile-upgrade");
+
+  if (info) {
+    els.profileMenu.querySelector(".profile-menu-who").textContent = info.email;
+    const remaining = info.skills_remaining === null ? "unlimited" : `${info.skills_remaining} left`;
+    els.profileMenu.querySelector(".profile-menu-meta").textContent = `${info.plan} plan · ${remaining}`;
+    document.querySelector("#profile-signin").hidden = true;
+    document.querySelector("#profile-signout").hidden = false;
+
+    badge.hidden = false;
+    badge.textContent = PLAN_LABELS[info.plan] ?? info.plan;
+    badge.dataset.plan = info.plan;
+
+    // Free/Starter get "Upgrade plan" (pushes toward a paid tier); Plus
+    // and Owner get "Manage subscription" instead — same #view-pay screen
+    // either way, see openPayView below.
+    upgradeBtn.hidden = false;
+    upgradeBtn.textContent = info.plan === "plus" || info.plan === "owner" ? "Manage subscription" : "Upgrade plan";
+  } else {
+    els.profileMenu.querySelector(".profile-menu-who").textContent = "Guest";
+    els.profileMenu.querySelector(".profile-menu-meta").textContent = "Not signed in";
+    document.querySelector("#profile-signin").hidden = false;
+    document.querySelector("#profile-signout").hidden = true;
+
+    badge.hidden = true;
+    upgradeBtn.hidden = true;
+  }
+}
+
+// Single screen for every paywall trigger — hitting the quota on a new
+// ask, one ask costing more than what's left, or the profile menu's
+// Upgrade/Manage item (docs/business/pricing.md's flat 1-per-skill
+// charge is why "costs more" only ever means "you're at 0 left" today —
+// see the cost param on /api/skills/start in worker/index.ts).
+// `reason` is plain text shown in the pink callout, or null to hide it
+// (the profile-menu path, which isn't reacting to a blocked action).
+function openPayView(reason) {
+  payReturnView = currentView === "pay" ? payReturnView : currentView;
+
+  const planName = membership ? PLAN_LABELS[membership.plan] ?? membership.plan : "Free";
+  document.querySelector("#pay-status-plan").textContent = `${planName} plan`;
+  document.querySelector("#pay-status-meta").textContent = membership
+    ? membership.skills_remaining === null
+      ? "Unlimited new skills"
+      : `${membership.skills_remaining} of ${membership.skills_included ?? 0} new skills left`
+    : "Sign in to see your usage";
+
+  const reasonEl = document.querySelector("#pay-reason");
+  reasonEl.textContent = reason ?? "";
+  reasonEl.hidden = !reason;
+
+  showView("pay");
+}
+
+// Called both right after a fresh sign-in and on startup with a
+// previously-stored token. A 401 means the token expired or was revoked
+// server-side (the plan doc's reason for a real `sessions` table, not a
+// signed-JWT-only approach) — fall through to the login view either way,
+// same as never having signed in.
+async function refreshMembership(token) {
+  try {
+    const res = await fetch(`${WEBSITE_BASE_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`api/me returned ${res.status}`);
+    applyMembership(await res.json());
+    currentSessionToken = token;
+    return true;
+  } catch (err) {
+    console.error("refreshMembership failed", err);
+    await invoke("clear_session_token").catch(() => {});
+    applyMembership(null);
+    currentSessionToken = null;
+    return false;
+  }
+}
 
 document.querySelector("#login-continue").addEventListener("click", () => {
   showView("home");
 });
 
-async function startGoogleLogin() {
-  try {
-    await invoke("start_google_login");
-  } catch {
-    window.open("https://tutoria-website.guidotutor.workers.dev/login", "_blank");
-  }
+// "signin" | "signup" — sidebar.html has one form, this toggles its
+// copy/mode rather than showing two separate views.
+let loginMode = "signin";
+
+function setLoginMode(mode) {
+  loginMode = mode;
+  const isSignup = mode === "signup";
+  document.querySelector("#login-mode-label").textContent = isSignup ? "Create your account" : "Sign in to continue";
+  document.querySelector("#login-submit").textContent = isSignup ? "Sign up" : "Sign in";
+  document.querySelector("#login-toggle-mode").textContent = isSignup
+    ? "Already have an account? Sign in"
+    : "Need an account? Sign up";
+  document.querySelector("#login-password").autocomplete = isSignup ? "new-password" : "current-password";
+  setLoginError(null);
 }
 
-document.querySelector("#login-google").addEventListener("click", startGoogleLogin);
+function setLoginError(message) {
+  const el = document.querySelector("#login-error");
+  el.textContent = message ?? "";
+  el.hidden = !message;
+}
+
+document.querySelector("#login-toggle-mode").addEventListener("click", () => {
+  setLoginMode(loginMode === "signin" ? "signup" : "signin");
+});
+
+// Straight to the Worker's Better Auth routes (worker/better-auth.ts) —
+// no browser round trip, since a plain email+password form has no
+// OAuth consent screen to hand off to. The bearer plugin returns the
+// session token in the `set-auth-token` response header, not the JSON
+// body — see docs.better-auth.com/docs/plugins/bearer.
+async function submitLogin(email, password) {
+  const path = loginMode === "signup" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
+  const body = loginMode === "signup" ? { email, password, name: email.split("@")[0] } : { email, password };
+
+  const res = await fetch(`${WEBSITE_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const token = res.headers.get("set-auth-token");
+  if (!res.ok || !token) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.message || payload.error || "Sign-in failed");
+  }
+
+  await invoke("store_session_token", { token }).catch(() => {});
+  return token;
+}
+
+document.querySelector("#login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.querySelector("#login-email").value.trim();
+  const password = document.querySelector("#login-password").value;
+  const submitBtn = document.querySelector("#login-submit");
+
+  setLoginError(null);
+  submitBtn.disabled = true;
+  try {
+    const token = await submitLogin(email, password);
+    if (await refreshMembership(token)) showView("home");
+  } catch (err) {
+    console.error("login failed", err);
+    setLoginError(err.message || "Something went wrong. Try again.");
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
 
 els.profileBtn.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -721,11 +888,49 @@ document.addEventListener("click", () => setProfileOpen(false));
 els.profileMenu.addEventListener("click", (e) => e.stopPropagation());
 document.querySelector("#profile-signin").addEventListener("click", () => {
   setProfileOpen(false);
-  startGoogleLogin();
+  setLoginMode("signin");
+  showView("login");
+});
+document.querySelector("#profile-signout").addEventListener("click", async () => {
+  setProfileOpen(false);
+  // Revoke server-side first (deletes the `session` row — Better Auth's
+  // bearer-auth sign-out), not just the local keychain copy: otherwise a
+  // "signed out" token stays valid against /api/me for the rest of its
+  // 7-day life if anything else ever got hold of it.
+  if (currentSessionToken) {
+    // Better Auth's sign-out route 400s on a body-less POST — it insists
+    // on parseable JSON even though it ignores the content.
+    await fetch(`${WEBSITE_BASE_URL}/api/auth/sign-out`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentSessionToken}`, "Content-Type": "application/json" },
+      body: "{}",
+    }).catch((err) => console.error("sign-out request failed", err));
+  }
+  currentSessionToken = null;
+  await invoke("clear_session_token").catch(() => {});
+  applyMembership(null);
+  showView("login");
+});
+document.querySelector("#profile-upgrade").addEventListener("click", () => {
+  setProfileOpen(false);
+  openPayView(null);
 });
 document.querySelector("#profile-attach").addEventListener("click", () => {
   setProfileOpen(false);
   showView("setup");
+});
+
+// No Stripe yet (docs/planning/login-membership-plan.md's "Open /
+// deferred") — these are placeholders so the upgrade path has somewhere
+// to go without pretending to charge anyone. Real checkout replaces the
+// alert with whatever Stripe flow gets built.
+document.querySelectorAll("[data-plan-target]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    alert(`Checkout for ${btn.dataset.planTarget} isn't wired up yet — ask Charlie to flip your plan in D1 for now.`);
+  });
+});
+document.querySelector("#pay-manage-btn").addEventListener("click", () => {
+  alert("Subscription management is coming soon.");
 });
 
 // Logos we ship, for apps whose icon can't be extracted from a live
@@ -742,6 +947,19 @@ document.querySelector("#profile-attach").addEventListener("click", () => {
 const APP_MARK_IMAGES = [
   [/\bexcel\b|xlsx?/i, "assets/excel.png"],
 ];
+
+// On startup, a previously-stored session token (OS keychain) skips
+// straight past the login view if it still checks out against /api/me;
+// otherwise the app falls back to today's "Continue without signing in"
+// demo path.
+async function restoreSession() {
+  const token = await invoke("get_session_token").catch(() => null);
+  if (token && (await refreshMembership(token))) {
+    showView("home");
+  } else {
+    fitWindow("login");
+  }
+}
 
 function setFallbackMark(el, appName, size = 40) {
   const logo = APP_MARK_IMAGES.find(([pattern]) => pattern.test(appName ?? ""));
@@ -1000,12 +1218,45 @@ async function loadPersistedSkills() {
 // brief + watch_for — goal-scoped facts only, nothing screen-specific);
 // substeps are generated later, lazily, once the user actually reaches
 // each step (see openStep/the per-step chat view below).
+// Quota unit is a new skill (docs/business/pricing.md) — flat 1 per ask,
+// charged via /api/skills/start after Research succeeds (not before:
+// no point spending someone's quota on a call that might fail). Skipped
+// entirely when signed out — "Continue without signing in" stays the
+// unmetered demo path, per restoreSession's fallback above. Returns
+// false only on a real 403 (quota actually exhausted server-side); a
+// network hiccup here doesn't block a skill someone already researched.
+async function chargeForNewSkill() {
+  if (!currentSessionToken) return true;
+  try {
+    const res = await fetch(`${WEBSITE_BASE_URL}/api/skills/start`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentSessionToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ cost: 1 }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (membership) applyMembership({ ...membership, ...payload });
+    return res.ok;
+  } catch (err) {
+    console.error("skills/start failed, allowing the skill through", err);
+    return true;
+  }
+}
+
 async function submitNewGoal() {
   const input = document.querySelector("#new-goal-input");
   const button = document.querySelector("#new-goal-send");
   const errorEl = document.querySelector("#new-goal-error");
   const goal = input.value.trim();
   if (!goal) return;
+
+  // Client-side pre-check against the cached /api/me numbers — saves a
+  // Research call outright when it's obviously going to be blocked.
+  // chargeForNewSkill() still re-checks server-side after Research
+  // succeeds (this cache can be stale — another device, another chat).
+  if (membership && membership.skills_remaining !== null && membership.skills_remaining < 1) {
+    openPayView("You've used your free new skill — upgrade to keep going.");
+    return;
+  }
 
   input.disabled = true;
   button.disabled = true;
@@ -1059,6 +1310,12 @@ async function submitNewGoal() {
         substeps: [],
       })),
     };
+
+    if (!(await chargeForNewSkill())) {
+      openPayView("This skill needs more than you have left — upgrade to keep going.");
+      return;
+    }
+
     SKILLS.push(skill);
     // Saved and listed before the step list opens, not after: this is what
     // makes a brand-new chat show up under "Previous chats" even if the
@@ -1742,4 +1999,4 @@ listen("tutoria:quit", () => getCurrentWindow().close());
 // can't be rendered correctly until this resolves.
 initCaptureBackend();
 loadPersistedSkills();
-fitWindow("login");
+restoreSession();

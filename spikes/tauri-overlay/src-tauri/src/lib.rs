@@ -931,6 +931,57 @@ fn run_locate(
         .map_err(|e| format!("failed to parse live_step.py output ({stdout}): {e}"))
 }
 
+// Session-token storage (docs/planning/login-membership-plan.md): sign-in
+// itself is a plain fetch() from sidebar.js straight to the Worker's
+// Better Auth routes (email+password, no browser round trip needed) — the
+// only piece that has to live in Rust is holding onto the token it gets
+// back somewhere other programs / a stolen laptop's filesystem can't
+// casually read, which means the OS's own credential store.
+const KEYRING_SERVICE: &str = "guido";
+const KEYRING_ACCOUNT: &str = "session_token";
+
+fn session_token_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| format!("couldn't open the OS credential store: {e}"))
+}
+
+#[tauri::command]
+async fn store_session_token(token: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        session_token_entry()?
+            .set_password(&token)
+            .map_err(|e| format!("couldn't save the session token: {e}"))
+    })
+    .await
+    .map_err(|e| format!("store_session_token task panicked: {e}"))?
+}
+
+// None for "never signed in" (no credential saved yet), distinct from an
+// error — same reasoning as load_skills_json's None case above.
+#[tauri::command]
+async fn get_session_token() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| match session_token_entry()?.get_password() {
+        Ok(token) => Ok(Some(token)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("couldn't read the session token: {e}")),
+    })
+    .await
+    .map_err(|e| format!("get_session_token task panicked: {e}"))?
+}
+
+// Called on sign-out and on a 401 from /api/me (expired/revoked session) —
+// sidebar.js falls back to the login view either way. Deleting a
+// credential that isn't there is treated as success, not an error.
+#[tauri::command]
+async fn clear_session_token() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| match session_token_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("couldn't clear the session token: {e}")),
+    })
+    .await
+    .map_err(|e| format!("clear_session_token task panicked: {e}"))?
+}
+
 // region-select only, not sidebar (see run() below): a plain alwaysOnTop
 // toplevel on a tiling Wayland compositor (Sway, Hyprland) can get tiled
 // into the current workspace's layout instead of floating full-screen
@@ -1005,7 +1056,10 @@ pub fn run() {
             refresh_window_rect,
             window_at_point,
             window_icon,
-            identify_app
+            identify_app,
+            store_session_token,
+            get_session_token,
+            clear_session_token
         ])
         .setup(|app| {
             use tauri::Manager;
