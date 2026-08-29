@@ -31,6 +31,15 @@ const MAX_TOKENS = 2048;
 const MAX_SCREENSHOT_BYTES = 1_500_000;
 const MAX_TEXT_CHARS = 2000;
 
+// A byte-size cap alone doesn't bound cost: Claude's image tokenization
+// scales with pixel count, not file size, and a highly compressible
+// image (e.g. a mostly solid-color screenshot) can carry far more pixels
+// than its byte size suggests — RPM-only rate limiting misses this class
+// of request entirely. 2,100,000px matches pricing.md's own "full 4K"
+// reference point (1920x1080, 2691 tokens) — generous for a real
+// screenshot, a real ceiling against a crafted one.
+const MAX_IMAGE_PIXELS = 2_100_000;
+
 // Monthly spend ceiling per plan, in micro-USD. Set well above the
 // typical COGS in pricing.md ($4.05/mo on starter) so a real user never
 // meets them — these bound abuse, they are not a product quota. The
@@ -58,6 +67,100 @@ interface VisionRequest {
 }
 
 const ALLOWED_MEDIA = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+// Decodes only enough of the base64 payload to read the format's own
+// dimension header — never the full image — so this stays cheap even at
+// the byte cap.
+function base64Prefix(b64: string, maxBytes: number): Uint8Array {
+  const neededChars = Math.ceil(maxBytes / 3) * 4;
+  const slice = b64.slice(0, Math.min(b64.length, neededChars));
+  const safeLen = slice.length - (slice.length % 4);
+  const binary = atob(slice.slice(0, safeLen));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < 24 || !sig.every((b, i) => bytes[i] === b)) return null;
+  // IHDR is always the first chunk, immediately after the signature:
+  // 4-byte length, "IHDR", then width/height as big-endian uint32s.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return { width: view.getUint32(16), height: view.getUint32(20) };
+}
+
+function jpegDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset++;
+      continue;
+    }
+    const marker = bytes[offset + 1];
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    if (marker === 0xd9) break; // EOI
+    const segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    // SOF0-SOF15, excluding DHT(C4)/JPG(C8)/DAC(CC) which share the range.
+    const isSOF = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (isSOF) {
+      if (offset + 9 > bytes.length) return null; // header cut off by our prefix cap
+      return {
+        height: (bytes[offset + 5] << 8) | bytes[offset + 6],
+        width: (bytes[offset + 7] << 8) | bytes[offset + 8],
+      };
+    }
+    offset += 2 + segLen;
+  }
+  return null;
+}
+
+function webpDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 30) return null;
+  const riff = String.fromCharCode(...bytes.slice(0, 4));
+  const webp = String.fromCharCode(...bytes.slice(8, 12));
+  if (riff !== "RIFF" || webp !== "WEBP") return null;
+  const fourcc = String.fromCharCode(...bytes.slice(12, 16));
+  if (fourcc === "VP8X") {
+    // 24-bit little-endian canvas width/height minus one.
+    return {
+      width: (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16)) + 1,
+      height: (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16)) + 1,
+    };
+  }
+  if (fourcc === "VP8 ") {
+    // Lossy: two 14-bit little-endian dimensions after the frame tag.
+    return {
+      width: (bytes[26] | (bytes[27] << 8)) & 0x3fff,
+      height: (bytes[28] | (bytes[29] << 8)) & 0x3fff,
+    };
+  }
+  if (fourcc === "VP8L" && bytes.length >= 25) {
+    // Lossless: 14-bit width-1 then 14-bit height-1, packed little-endian.
+    const bits = bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24);
+    return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1 };
+  }
+  return null;
+}
+
+// Fails closed: an image whose dimensions can't be read is rejected
+// rather than let through unbounded. A real screenshot from the desktop
+// app always parses; only a malformed or deliberately obfuscated payload
+// doesn't.
+function imagePixelCount(base64: string, mediaType: string): number | null {
+  const prefix = base64Prefix(base64, 262_144);
+  const dims =
+    mediaType === "image/png"
+      ? pngDimensions(prefix)
+      : mediaType === "image/jpeg"
+        ? jpegDimensions(prefix)
+        : webpDimensions(prefix);
+  return dims ? dims.width * dims.height : null;
+}
 
 function costMicroUsd(inputTokens: number, outputTokens: number): number {
   return inputTokens * INPUT_MICRO_USD_PER_TOKEN + outputTokens * OUTPUT_MICRO_USD_PER_TOKEN;
@@ -95,10 +198,14 @@ export async function handleVision(request: Request, env: Env): Promise<Response
   }
 
   const ceiling = MONTHLY_CEILING_MICRO_USD[member.plan];
+  let spentBefore = 0;
   if (ceiling !== null) {
-    const spent = await spentThisMonth(env.DB, member.user_id);
-    if (spent >= ceiling) {
-      return json({ error: "Monthly usage limit reached", plan: member.plan }, 402);
+    spentBefore = await spentThisMonth(env.DB, member.user_id);
+    if (spentBefore >= ceiling) {
+      return json(
+        { error: "Monthly usage limit reached", plan: member.plan, remaining_micro_usd: 0 },
+        402,
+      );
     }
   }
 
@@ -120,6 +227,14 @@ export async function handleVision(request: Request, env: Env): Promise<Response
   const mediaType = body.media_type ?? "image/png";
   if (!ALLOWED_MEDIA.has(mediaType)) {
     return json({ error: "Unsupported media_type" }, 400);
+  }
+
+  const pixels = imagePixelCount(screenshot, mediaType);
+  if (pixels === null) {
+    return json({ error: "Could not read image dimensions" }, 400);
+  }
+  if (pixels > MAX_IMAGE_PIXELS) {
+    return json({ error: "Image resolution too high — downsample before sending" }, 413);
   }
 
   const goal = (body.goal ?? "").slice(0, MAX_TEXT_CHARS);
@@ -204,5 +319,8 @@ export async function handleVision(request: Request, env: Env): Promise<Response
       input_tokens: response.usage.input_tokens,
       output_tokens: response.usage.output_tokens,
     },
+    // Lets the desktop UI show "N left this month" or warn before the
+    // hard 402 rather than the ceiling arriving as a surprise.
+    remaining_micro_usd: ceiling === null ? null : Math.max(0, ceiling - spentBefore - spend),
   });
 }

@@ -707,7 +707,11 @@ async function startGoogleLogin() {
   try {
     await invoke("start_google_login");
   } catch {
-    window.open("https://guido-website.guidotutor.workers.dev/login", "_blank");
+    // guidotutor.com is a custom domain bound to the deployed Worker
+    // (wrangler.jsonc's routes block) — the raw *.workers.dev subdomain
+    // still resolves too, but the OAuth callback registered in the
+    // Google Cloud console is the custom domain, so login must open here.
+    window.open("https://guidotutor.com/login", "_blank");
   }
 }
 

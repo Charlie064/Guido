@@ -1,12 +1,24 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "guido-website",
+  // Kept as "tutoria-website" deliberately, even though the product is
+  // Guido everywhere else: this is the actual deployed Worker name, the
+  // secret (ANTHROPIC_API_KEY) is already uploaded to it, and
+  // guidotutor.com / www.guidotutor.com are bound to it as custom domains
+  // (see the routes block below, from claudev/charlie/desktop-google-login
+  // — a real production resource users never see the name of anyway, so
+  // renaming it would mean recreating the Worker, moving both domains,
+  // and re-uploading the secret for zero user-visible benefit.
+  "name": "tutoria-website",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
   // The Anthropic SDK's credential resolution imports node:path/node:fs
   // (for the on-disk auth profiles we don't use). Without this the Worker
   // throws at runtime on the first import, not at build time.
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    { "pattern": "guidotutor.com", "custom_domain": true },
+    { "pattern": "www.guidotutor.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
