@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tutoria-website",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tutoria-waitlist",
+      "database_id": "0a79ce70-824f-49a6-bdc0-1ea557d5d42c",
+      "migrations_dir": "./migrations"
+    }
+  ]
+}
