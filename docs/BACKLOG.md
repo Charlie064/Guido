@@ -43,16 +43,26 @@ point — this file should never pose as a source of truth for what's done.
     inside a tab. Fixing this needs a second, optional layer (a browser
     extension reporting active tab title/URL), not more OS-level work.
     Degrade to "Chrome" + let the user rename the chat until that's built.
-- **BL-006 — Define membership tiers (Quentin).** Numbered 006, not 005, to
-  avoid a known collision: BL-001 and BL-005 already exist on other
-  branches not yet merged into this one — see
+- **BL-007 — Define membership tiers (Quentin).** Renumbered from 006 to
+  007 on merge into `main` — `main` already had its own BL-006 (Pauline's
+  website-integration item) by the time this branch was picked up; see
   [planning/login-membership-plan.md](planning/login-membership-plan.md).
   Nothing in the docs defines what a "membership" actually is yet
   ([ADR 0002](decisions/0002-agency-hybrid-vision-platform-business.md)
   only says "monthly subscription," no tiers). Needs: how many tiers, what
   each unlocks, whether there's a free tier or trial, and whether the MVP
   checks a manually-set `plan` value in D1 or wires up real billing
-  (Stripe or similar — a materially bigger, separate task). Write the
-  answer into `docs/business/` (currently just a `.gitkeep`). Blocks the
-  `memberships` table's `plan`/`status` values in the login plan from
-  being anything more than placeholders.
+  (Stripe or similar — a materially bigger, separate task). **Write the
+  answer into `docs/business/pricing.md`** (create it — `docs/business/`
+  currently holds only a `.gitkeep`); this is a required deliverable of
+  the item, not optional. Blocks the `memberships` table's `plan`/`status`
+  values in the login plan from being anything more than placeholders.
+- **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
+  currently runs on the free `workers.dev` subdomain
+  (`tutoria-website.guidotutor.workers.dev`, see
+  [reference/team.md](reference/team.md)/[STATUS.md](../STATUS.md)).
+  Register/point a real domain at the Cloudflare account and wire it into
+  `website/wrangler.jsonc` (custom domain / route), including DNS and TLS.
+  Needed before the login flow in
+  [planning/login-membership-plan.md](planning/login-membership-plan.md)
+  can use a stable OAuth redirect origin instead of a `workers.dev` URL.

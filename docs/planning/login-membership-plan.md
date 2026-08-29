@@ -169,16 +169,19 @@ table (not a signed-JWT-only approach) so a session can be revoked
 
 ### 5. Membership tiers (Quentin — do this before or alongside step 1)
 
-Tracked as [BL-006](../BACKLOG.md) — this is broader product scope than
+Tracked as [BL-007](../BACKLOG.md) — this is broader product scope than
 just this login task, so it has its own backlog entry rather than living
 only here. Nothing in the docs defines what a "membership" is yet — [ADR
 0002](../decisions/0002-agency-hybrid-vision-platform-business.md) only
 says "monthly subscription," no tiers. This doc deliberately does not
-decide it. Write the answer into `docs/business/` (currently just a
-`.gitkeep`) — at minimum: how many tiers, what each unlocks, whether
-there's a free tier or a trial, and whether the MVP checks a **manually
-set** `plan` value in D1 (no payment processor — flip someone's row by
-hand for now) or wires up real billing. Real billing (Stripe or similar:
+decide it. **Write the answer into `docs/business/pricing.md`** (create
+it — `docs/business/` currently holds only a `.gitkeep`) — at minimum:
+how many tiers, what each unlocks, whether there's a free tier or a
+trial, and whether the MVP checks a **manually set** `plan` value in D1
+(no payment processor — flip someone's row by hand for now) or wires up
+real billing. This is a required deliverable of BL-007, not an optional
+write-up — the `memberships` table's `plan`/`status` values below stay
+placeholders until `pricing.md` exists. Real billing (Stripe or similar:
 checkout, webhooks, subscription lifecycle) is a materially bigger,
 separate task from the login flow above — scope it as a follow-up unless
 explicitly pulled in now.
