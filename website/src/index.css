@@ -43,7 +43,8 @@ html, body {
 }
 
 .site-nav a:hover,
-.site-nav a:focus-visible {
+.site-nav a:focus-visible,
+.site-nav a[aria-current="page"] {
   color: #0a0a0a;
 }
 
@@ -61,7 +62,8 @@ html, body {
 }
 
 .site-nav a:hover::after,
-.site-nav a:focus-visible::after {
+.site-nav a:focus-visible::after,
+.site-nav a[aria-current="page"]::after {
   transform: scaleX(1);
 }
 

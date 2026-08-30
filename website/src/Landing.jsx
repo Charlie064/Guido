@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, MousePointer2, Video } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
-import { FLASH_BLUE, Logo } from "./brand.jsx";
+import { FLASH_BLUE } from "./brand.jsx";
+import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 
 const INTRO_MS = 4200;
 
@@ -155,22 +156,7 @@ export default function Landing({ startWaitlist = false }) {
       ) : null}
 
       {/* Nav — links stay laptop-only (`site-nav`). Phone keeps logo + CTA. */}
-      <header className="site-header">
-        <div className="site-header-inner">
-          <Logo />
-          <nav className="site-nav" aria-label="Primary">
-            <a href="#how-it-works">How it works</a>
-            <a href="#works-with">Usecases</a>
-          </nav>
-          <button
-            type="button"
-            onClick={() => setWaitlistOpen(true)}
-            className="waitlist-cta"
-          >
-            Join the waitlist
-          </button>
-        </div>
-      </header>
+      <SiteHeader onJoin={() => setWaitlistOpen(true)} />
 
       {/* Hero — clean, editor-vibe */}
       <section>
@@ -288,17 +274,7 @@ export default function Landing({ startWaitlist = false }) {
         }}
       />
 
-      {/* Footer */}
-      <footer className="site-footer">
-        <div className="site-footer-inner">
-          <Logo />
-          <div className="site-footer-links">
-            <p>© Guido team</p>
-            <a href="/login">Sign in</a>
-            <a href="/privacy.html">Privacy policy</a>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
