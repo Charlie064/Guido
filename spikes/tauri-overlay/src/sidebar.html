@@ -893,46 +893,6 @@
         display: none;
       }
 
-      .pay-tier {
-        padding: 14px 16px;
-        border-radius: 14px;
-        background: #ffffff;
-        border: 1px solid var(--border);
-        margin-bottom: 12px;
-      }
-
-      .pay-tier-head {
-        display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 8px;
-      }
-
-      .pay-tier-name {
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-weight: 700;
-        font-size: 14px;
-      }
-
-      .pay-tier-price {
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-weight: 600;
-        font-size: 12px;
-        color: var(--muted);
-      }
-
-      .pay-tier-desc {
-        margin: 6px 0 12px;
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.5;
-      }
-
-      .pay-tier button {
-        width: 100%;
-        margin-top: 0;
-      }
-
       .pay-manage {
         margin-top: 6px;
         padding: 12px 14px;
@@ -1894,7 +1854,9 @@
            flat 1-per-skill charge — see openPayView in sidebar.js), or the
            profile menu's Upgrade/Manage item. Same screen every time; only
            #pay-reason's text changes. No real billing — Stripe is a later
-           slice (docs/planning/login-membership-plan.md's "Open / deferred"). -->
+           slice (docs/planning/login-membership-plan.md's "Open / deferred").
+           No tier cards here: prices live in one place, website/public/pricing.html,
+           so this just hands off to it (see openWebsitePricing in sidebar.js). -->
       <section id="view-pay" class="view">
         <div class="pay-body">
           <div class="pay-status">
@@ -1904,35 +1866,17 @@
 
           <p class="pay-reason" id="pay-reason" hidden></p>
 
-          <div class="pay-tier">
-            <div class="pay-tier-head">
-              <span class="pay-tier-name">Starter</span>
-              <span class="pay-tier-price">$12/mo</span>
-            </div>
-            <p class="pay-tier-desc">30 new skills a month, then $0.25 per extra skill.</p>
-            <button type="button" class="btn-primary" data-plan-target="starter">Upgrade to Starter</button>
-          </div>
-
-          <div class="pay-tier">
-            <div class="pay-tier-head">
-              <span class="pay-tier-name">Plus</span>
-              <span class="pay-tier-price">$24/mo</span>
-            </div>
-            <p class="pay-tier-desc">Everything in Starter, plus saving skills to replay later.</p>
-            <button type="button" class="btn-primary" data-plan-target="plus">Upgrade to Plus</button>
-          </div>
-
           <div class="pay-manage">
-            <p>Already on a paid plan? Manage billing, change tier, or cancel.</p>
-            <button type="button" class="btn-primary" id="pay-manage-btn">Manage subscription</button>
+            <p>See plans and pricing, upgrade, or manage an existing subscription on the website.</p>
+            <button type="button" class="btn-primary" id="pay-manage-btn">See plans</button>
           </div>
         </div>
       </section>
 
-      <!-- Counts only, no cost breakdown — reads membership (skills,
-           already in memory from /api/me) and the local voice-usage
-           tracker (sidebar.js's loadVoiceUsage/voiceUsageCapSeconds,
-           per-device not per-account, so this works for guests too). -->
+      <!-- Counts only, no cost breakdown — both cards read straight off
+           the /api/me membership already in memory (skills_remaining/
+           included, voice_seconds_used/included — see handleMe in
+           worker/index.ts and openUsageView in sidebar.js). -->
       <section id="view-usage" class="view">
         <div class="pay-body">
           <div class="usage-card">
@@ -1944,6 +1888,11 @@
             <div class="usage-card-title">Voice</div>
             <div class="usage-card-meta" id="usage-voice-meta"></div>
             <div class="usage-bar"><div class="usage-bar-fill" id="usage-voice-fill"></div></div>
+          </div>
+
+          <div class="pay-manage">
+            <p>Need more skills or voice minutes?</p>
+            <button type="button" class="btn-primary" id="usage-upgrade-btn">View plans</button>
           </div>
         </div>
       </section>

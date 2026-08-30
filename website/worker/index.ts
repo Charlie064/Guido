@@ -6,11 +6,12 @@ import {
   includedFor,
   json,
   membershipFromBearer,
-  monthlyVoiceSecondsUsed,
   remainingFor,
+  voiceSecondsUsed,
 } from "./auth";
 import { createAuth } from "./better-auth";
-import { handleVoiceTranscribe, MONTHLY_CAP_SECONDS } from "./voice";
+import { handleVision, visionCeilingMicroUsdFor } from "./vision";
+import { handleVoiceTranscribe, voiceCapSecondsFor } from "./voice";
 
 export type { Env };
 
@@ -35,7 +36,8 @@ export default {
       url.pathname.startsWith("/api/auth/") ||
       url.pathname === "/api/me" ||
       url.pathname === "/api/skills/start" ||
-      url.pathname === "/api/voice/transcribe"
+      url.pathname === "/api/voice/transcribe" ||
+      url.pathname === "/api/vision"
     ) {
       if (!env.BETTER_AUTH_SECRET) {
         return json({ error: "Auth is not configured on this Worker" }, 500);
@@ -71,6 +73,10 @@ export default {
     if (url.pathname === "/api/voice/transcribe" && request.method === "POST") {
       const auth = createAuth(env, url.origin);
       return handleVoiceTranscribe(request, env, auth);
+    }
+    if (url.pathname === "/api/vision" && request.method === "POST") {
+      const auth = createAuth(env, url.origin);
+      return handleVision(request, env, auth);
     }
 
     return env.ASSETS.fetch(request);
@@ -134,9 +140,7 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
   }
 
   const used = await countSkillRuns(env.DB, member.user_id, member.plan);
-  // Same flat cap for every plan (voice.ts) — not a per-plan allowance
-  // like skills, so no includedFor-style lookup needed here.
-  const voiceSecondsUsed = await monthlyVoiceSecondsUsed(env.DB, member.user_id);
+  const voiceUsed = await voiceSecondsUsed(env.DB, member.user_id, member.plan);
   return json({
     email: member.email,
     plan: member.plan,
@@ -144,8 +148,8 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     skills_remaining: remainingFor(member.plan, used),
     skills_included: includedFor(member.plan),
     can_save_skills: canSaveSkills(member.plan),
-    voice_seconds_used: voiceSecondsUsed,
-    voice_seconds_included: MONTHLY_CAP_SECONDS,
+    voice_seconds_used: voiceUsed,
+    voice_seconds_included: voiceCapSecondsFor(member.plan),
   });
 }
 

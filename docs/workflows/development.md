@@ -257,6 +257,16 @@ updater** and can't auto-update themselves to this or any later version —
 whoever has one of those installed has to redownload manually one more
 time. Every release from here on updates in place.
 
+**`tauri.conf.json`'s `version` field drove blind through v0.1.0-v0.1.4** —
+committed source stayed at `"0.1.0"` the whole time regardless of tag, so
+`app.getVersion()` (what the profile menu shows, and what the updater
+compares against `latest.json`'s tag-derived version) never actually
+changed across any of those releases. `release.yml` now has a "Set app
+version from release tag" step, gated on `github.ref_type == 'tag'`, that
+overwrites `tauri.conf.json`'s and `package.json`'s `version` with the
+pushed tag (stripped of its `v`) before `tauri build` runs — this can't
+drift out of sync again since there's no release-time step to remember.
+
 Two things that make this possible and must not be lost:
 - **The signing keypair.** Its private half + password live only in this
   repo's GitHub Actions secrets (`TAURI_SIGNING_PRIVATE_KEY`,

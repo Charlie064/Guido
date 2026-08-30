@@ -519,6 +519,16 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   `window_provider.rs`'s backends for both are unverified (this dev
   environment can't build either target). Also needs a real display to
   exercise the picker UI and a live `locate_element` round trip end-to-end.
+- **Verify the vision-proxy migration and PyInstaller sidecar packaging on
+  a real build** — `spikes/vision-detect`'s scripts no longer call
+  Anthropic directly (moved to `/api/vision`, see
+  `docs/features/vision.md`) and `.github/workflows/release.yml` now
+  compiles them into sidecars instead of relying on an unbundled `.venv`.
+  Both changes were only exercised locally (Linux `py_compile`/`cargo
+  check`/one PyInstaller freeze smoke test, no real screen to capture) —
+  the actual CI job producing all three platforms' bundles, and a real
+  end-to-end call through a shipped `.dmg`/`.exe`/`.AppImage`, are both
+  unverified.
 - **Morning: rehearse the actual demo script** (`docs/planning/demo-v0.md`)
   — fresh VS Code Welcome window, `npx tauri dev` in
   `spikes/tauri-overlay`, walk N through all 3 steps, fix whatever breaks

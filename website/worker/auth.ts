@@ -22,6 +22,11 @@ export interface Env {
   // worker/voice.ts and docs/features/voice.md.
   AQUA_VOICE_API_KEY?: string;
   VOICE_LIMITER: RateLimit;
+  // Set with `wrangler secret put ANTHROPIC_API_KEY` — never in `vars`,
+  // never in the repo, and never shipped to the desktop app. See
+  // worker/vision.ts and docs/features/vision.md.
+  ANTHROPIC_API_KEY?: string;
+  VISION_LIMITER: RateLimit;
 }
 
 export interface MembershipRow {
@@ -82,11 +87,19 @@ export async function countSkillRuns(
   return Number(row?.n ?? 0);
 }
 
-// Sum of `duration_seconds` this calendar month, across every plan — see
-// voice.ts's MONTHLY_CAP_USD, a flat $ cap shared by all plans rather than
-// a per-plan allowance like skill_runs gets, since Aqua Voice is still a
-// cost-control measure, not a metered product feature yet.
-export async function monthlyVoiceSecondsUsed(db: D1Database, userId: string): Promise<number> {
+// Free is a one-shot lifetime trial (mirrors countSkillRuns's free-plan
+// branch above), not a monthly allowance — a free account that used its
+// trial last month shouldn't get a fresh one this month. Paid plans keep
+// the calendar-month window, since voice.ts's cap there is a recurring
+// cost-control measure rather than a trial.
+export async function voiceSecondsUsed(db: D1Database, userId: string, plan: Plan): Promise<number> {
+  if (plan === "free") {
+    const row = await db
+      .prepare("SELECT COALESCE(SUM(duration_seconds), 0) AS s FROM voice_transcriptions WHERE user_id = ?")
+      .bind(userId)
+      .first<{ s: number }>();
+    return Number(row?.s ?? 0);
+  }
   const row = await db
     .prepare(
       "SELECT COALESCE(SUM(duration_seconds), 0) AS s FROM voice_transcriptions WHERE user_id = ? AND created_at >= date('now', 'start of month')",
@@ -94,6 +107,20 @@ export async function monthlyVoiceSecondsUsed(db: D1Database, userId: string): P
     .bind(userId)
     .first<{ s: number }>();
   return Number(row?.s ?? 0);
+}
+
+// Sum of vision_calls.cost_micro_usd this calendar month — see
+// PLAN_CEILING_MICRO_USD (vision.ts), a per-plan $ ceiling like skill
+// quotas rather than voice's single flat cap, since vision cost varies
+// far more by call kind (research's web search vs. a plain verify).
+export async function visionCostUsedMicroUsd(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      "SELECT COALESCE(SUM(cost_micro_usd), 0) AS c FROM vision_calls WHERE user_id = ? AND created_at >= date('now', 'start of month')",
+    )
+    .bind(userId)
+    .first<{ c: number }>();
+  return Number(row?.c ?? 0);
 }
 
 export function remainingFor(plan: Plan, used: number): number | null {

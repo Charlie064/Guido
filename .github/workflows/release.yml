@@ -62,6 +62,59 @@ jobs:
 
       - run: npm install
 
+      # tauri.conf.json's version field is what app.getVersion() reports
+      # and what the updater compares against latest.json (whose own
+      # version comes from this same tag, see publish-latest-json below) —
+      # it drove blind for releases v0.1.0-v0.1.4 (committed source stuck
+      # at "0.1.0" the whole time, so every build reported the same
+      # version and the updater's comparison never converged). Deriving it
+      # from the tag here means it can't drift out of sync again — no
+      # release-time step to remember or forget.
+      - name: Set app version from release tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          node -e '
+            const fs = require("fs");
+            for (const path of ["src-tauri/tauri.conf.json", "package.json"]) {
+              const conf = JSON.parse(fs.readFileSync(path, "utf8"));
+              conf.version = process.argv[1];
+              fs.writeFileSync(path, JSON.stringify(conf, null, 2) + "\n");
+            }
+          ' "$version"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # A downloaded build has no spikes/vision-detect/.venv — that
+      # directory only ever existed on a developer's own checkout — so
+      # each vision-detect script gets compiled into a standalone binary
+      # here and shipped as a Tauri sidecar (see tauri.conf.json's
+      # bundle.externalBin and lib.rs's sidecar_path, which looks for one
+      # of these next to the main executable before falling back to the
+      # dev .venv). --onefile trades a bit of per-call startup latency
+      # (self-extracts to a temp dir each run) for a single binary per
+      # script, which is what externalBin expects — revisit if that
+      # latency is noticeable in practice.
+      - name: Build vision-detect sidecars
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install -r ../vision-detect/requirements.txt pyinstaller
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          mkdir -p src-tauri/binaries
+          ext=""
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then ext=".exe"; fi
+          for name in verify_step answer_step identify_app plan_step research live_step portal_capture; do
+            pyinstaller --onefile --name "$name" \
+              --distpath dist-sidecars --workpath build-sidecars --specpath build-sidecars \
+              "../vision-detect/$name.py"
+            cp "dist-sidecars/$name$ext" "src-tauri/binaries/$name-$triple$ext"
+          done
+
       - run: npx tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

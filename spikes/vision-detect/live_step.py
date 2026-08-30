@@ -45,7 +45,6 @@ import subprocess
 import sys
 import tempfile
 
-import anthropic
 from dotenv import load_dotenv
 
 from locate import locate_element
@@ -57,11 +56,22 @@ def capture_portal(output_path: str, scope: str) -> None:
     # Delegates to portal_capture.py rather than reimplementing the portal
     # handshake here: it owns the stored restore token, so this call is
     # silent and promptless as long as the user has picked a source once.
-    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portal_capture.py")
-    result = subprocess.run(
-        [sys.executable, script, "capture", output_path, scope],
-        capture_output=True, text=True,
-    )
+    #
+    # `sys.frozen` is set once this script itself is a PyInstaller sidecar
+    # binary (see .github/workflows/release.yml's build-sidecars step) —
+    # there, `sys.executable` is this same frozen exe, not a real Python
+    # interpreter, so `[sys.executable, "portal_capture.py"]` would just
+    # try to run this file as an argument to itself. The portal_capture
+    # sidecar sits alongside this one (both copied next to the main Tauri
+    # executable — see lib.rs's sidecar_path), so call it directly instead.
+    if getattr(sys, "frozen", False):
+        portal_bin = os.path.join(os.path.dirname(sys.executable), "portal_capture")
+        cmd = [portal_bin, "capture", output_path, scope]
+    else:
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portal_capture.py")
+        cmd = [sys.executable, script, "capture", output_path, scope]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"portal capture failed: {result.stderr.strip()}")
 
@@ -146,19 +156,12 @@ def main() -> None:
             print("Region must be \"x,y,width,height\"", file=sys.stderr)
             sys.exit(1)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ANTHROPIC_API_KEY not set — check your .env file.", file=sys.stderr)
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key)
-
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         screenshot_path = tmp.name
 
     try:
         capture_screen(screenshot_path, region, portal_scope)
-        box = locate_element(client, screenshot_path, target, context)
+        box = locate_element(screenshot_path, target, context)
         print(json.dumps(box))
     except Exception as exc:  # noqa: BLE001 — CLI boundary, report and exit non-zero
         print(f"live_step failed: {exc}", file=sys.stderr)

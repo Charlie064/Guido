@@ -117,6 +117,65 @@ fn vision_detect_dir() -> std::path::PathBuf {
         .join("vision-detect")
 }
 
+// The vision-detect scripts call the Worker's /api/vision proxy
+// (worker/vision.ts) instead of holding an Anthropic key locally — see
+// docs/features/vision.md — so every one of them needs the same session
+// token store_session_token/get_session_token already manage. Passed to
+// the subprocess as an env var (GUIDO_SESSION_TOKEN, read by
+// vision_client.py) rather than a CLI arg, so it never lands in a process
+// listing or gets echoed back into an error message that includes argv.
+fn vision_session_token() -> Result<String, String> {
+    match session_token_entry()?.get_password() {
+        Ok(token) => Ok(token),
+        Err(keyring::Error::NoEntry) => Err("Sign in to use this feature.".to_string()),
+        Err(e) => Err(format!("couldn't read the session token: {e}")),
+    }
+}
+
+// A packaged build has no `spikes/vision-detect/.venv` on the user's
+// machine — that directory only ever existed on a developer's own
+// checkout — so each vision-detect script is compiled by PyInstaller into
+// a standalone binary and shipped as a Tauri externalBin sidecar (see
+// tauri.conf.json's `bundle.externalBin` and
+// .github/workflows/release.yml's build-sidecars step). Tauri places
+// sidecars next to the main executable in the final bundle on every OS,
+// so `current_exe()`'s directory is where to look for one; falling back
+// to the dev `.venv` (per-OS layout: Scripts/python.exe on Windows,
+// bin/python3 elsewhere) when no sidecar is there keeps `cargo run`
+// working unchanged during development.
+fn sidecar_path(stem: &str) -> Option<std::path::PathBuf> {
+    let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    for name in [stem.to_string(), format!("{stem}.exe")] {
+        let candidate = dir.join(name);
+        // build.rs's ensure_sidecar_placeholders() writes a zero-byte
+        // stand-in wherever no real PyInstaller sidecar has been built
+        // (every local dev build) purely to satisfy tauri-build's
+        // externalBin existence check — treat that the same as "not
+        // there" so `tauri dev` keeps falling through to the real
+        // `.venv` scripts below, matching pre-sidecar behavior. A real
+        // sidecar is a multi-MB standalone binary; it is never empty.
+        match candidate.metadata() {
+            Ok(meta) if meta.is_file() && meta.len() > 0 => return Some(candidate),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn vision_command(dir: &std::path::Path, stem: &str) -> Command {
+    if let Some(sidecar) = sidecar_path(stem) {
+        return Command::new(sidecar);
+    }
+    let python = if cfg!(windows) {
+        dir.join(".venv").join("Scripts").join("python.exe")
+    } else {
+        dir.join(".venv").join("bin").join("python3")
+    };
+    let mut cmd = Command::new(python);
+    cmd.arg(dir.join(format!("{stem}.py")));
+    cmd
+}
+
 // sidebar is the only real (non-click-through) window now — but a screen
 // *capture* still shouldn't see it, since it'd otherwise show up in the
 // exact frame sent to the vision model. Hiding it here, right around the
@@ -282,11 +341,8 @@ fn run_verify(
     context: Option<&str>,
 ) -> Result<VerifyResult, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("verify_step.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(expected_outcome);
+    let mut cmd = vision_command(&dir, "verify_step");
+    cmd.arg(expected_outcome);
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -297,6 +353,7 @@ fn run_verify(
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run verify_step.py: {e}"))?;
@@ -390,11 +447,8 @@ fn run_answer(
     context: Option<&str>,
 ) -> Result<AnswerResult, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("answer_step.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(question);
+    let mut cmd = vision_command(&dir, "answer_step");
+    cmd.arg(question);
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -405,6 +459,7 @@ fn run_answer(
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run answer_step.py: {e}"))?;
@@ -479,11 +534,7 @@ fn identify_app_blocking(app: &tauri::AppHandle, scope: Option<CaptureScope>) ->
 
 fn run_identify_app(region: &Option<Region>, portal_scope: Option<&str>) -> Result<AppIdentity, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("identify_app.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script);
+    let mut cmd = vision_command(&dir, "identify_app");
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -491,6 +542,7 @@ fn run_identify_app(region: &Option<Region>, portal_scope: Option<&str>) -> Resu
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run identify_app.py: {e}"))?;
@@ -700,11 +752,7 @@ async fn pick_portal_source(app: tauri::AppHandle, scope: Option<String>) -> Res
 
 fn run_portal_pick(scope: &str) -> Result<PortalPick, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("portal_capture.py");
-
-    let output = Command::new(&python)
-        .arg(&script)
+    let output = vision_command(&dir, "portal_capture")
         .arg("pick")
         .arg(scope)
         .current_dir(&dir)
@@ -788,16 +836,14 @@ async fn save_skills_json(app: tauri::AppHandle, json: String) -> Result<(), Str
 
 fn run_research(goal: &str, app_name: Option<&str>) -> Result<ResearchResult, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("research.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(goal);
+    let mut cmd = vision_command(&dir, "research");
+    cmd.arg(goal);
     if let Some(app) = app_name {
         cmd.arg(app);
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run research.py: {e}"))?;
@@ -859,15 +905,12 @@ fn run_plan_step(
     step_watch_for: &str,
 ) -> Result<Vec<PlannedSubstep>, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("plan_step.py");
-
-    let output = Command::new(&python)
-        .arg(&script)
+    let output = vision_command(&dir, "plan_step")
         .arg(goal)
         .arg(step_title)
         .arg(step_brief)
         .arg(step_watch_for)
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run plan_step.py: {e}"))?;
@@ -892,11 +935,8 @@ fn run_locate(
     context: Option<&str>,
 ) -> Result<Box2D, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("live_step.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(target);
+    let mut cmd = vision_command(&dir, "live_step");
+    cmd.arg(target);
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -914,6 +954,7 @@ fn run_locate(
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run live_step.py: {e}"))?;
