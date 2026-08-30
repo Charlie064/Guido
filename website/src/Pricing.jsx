@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
+import { DownloadOverlay } from "./Download.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 import { currencyForCountry, formatMoney, localeCountry, proAmount } from "./currency.js";
@@ -58,6 +59,7 @@ function PricingCard({ tier, currency, onJoin }) {
 export default function Pricing() {
   const [currency, setCurrency] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
 
   useEffect(() => {
@@ -79,7 +81,11 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen text-[#0A0A0A] bg-white" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <SiteHeader current="pricing" onJoin={() => setWaitlistOpen(true)} />
+      <SiteHeader
+        current="pricing"
+        onJoin={() => setWaitlistOpen(true)}
+        onDownload={() => setDownloadOpen(true)}
+      />
 
       <section className="pricing-page">
         <div className="pricing-hero">
@@ -107,6 +113,8 @@ export default function Pricing() {
           Local prices are converted from €7.99 and rounded. Subject to change.
         </p>
       </section>
+
+      <DownloadOverlay open={downloadOpen} onClose={() => setDownloadOpen(false)} />
 
       <WaitlistOverlay
         open={waitlistOpen}

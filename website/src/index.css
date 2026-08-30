@@ -82,8 +82,120 @@ html, body {
   }
 }
 
-.waitlist-cta {
+.site-header-actions {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.download-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2a2a2a 0%, #0a0a0a 60%, #000000 100%);
+  border: 0;
+  box-shadow: 0 4px 0 0 #000, 0 10px 18px -10px rgba(0, 0, 0, 0.45);
+}
+
+.download-cta:hover {
+  filter: brightness(1.08);
+}
+
+.download-cta:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 3px;
+}
+
+.download-cta:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 0 #000, 0 2px 6px -2px rgba(0, 0, 0, 0.5);
+}
+
+.download-cta-lg {
+  padding: 13px 28px;
+  font-size: 15px;
+}
+
+.landing-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.download-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(10, 10, 14, 0.45);
+  backdrop-filter: blur(10px);
+}
+
+.download-shell {
+  width: min(40rem, 100%);
+}
+
+.download-card {
+  overflow: hidden;
+  border-radius: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.25);
+}
+
+.download-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  padding: 48px 28px;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.download-platforms {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 999px;
+  background: #efefef;
+}
+
+.download-platform {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b6b6b;
+  background: transparent;
+}
+
+.download-platform.is-on {
+  color: #ffffff;
+  background: #0a0a0a;
+}
+
+.waitlist-cta {
   display: inline-flex;
   align-items: center;
   justify-content: center;

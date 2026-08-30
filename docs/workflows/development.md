@@ -216,6 +216,21 @@ that specific call normally takes.
   Then open `/tmp/shot.png` — a blank or black image means the frame grab
   failed even though the portal handshake worked.
 
+## Releasing the desktop app
+
+Push a version tag; CI builds installers and attaches them to the GitHub
+Release under fixed names:
+
+```sh
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+`.github/workflows/release.yml` uploads `Guido_mac.dmg`,
+`Guido_windows.exe`, and `Guido_linux.AppImage`. Those names are
+load-bearing — `website/src/Download.jsx` links to
+`github.com/Charlie064/Guido/releases/latest/download/<name>`.
+
 ### 4. Website (Cloudflare Workers + D1)
 
 Scope owned by Pauline — see [website-v0.md](../planning/website-v0.md).
@@ -262,6 +277,8 @@ The live landing page is Pauline’s Guido Vite app in `website/src/`
 
 **Keep the waitlist working:** the header and bottom “Join the waitlist”
 buttons open the multi-step glass modal (`website/src/Waitlist.jsx`).
+**Download** (header + bottom) opens Charlie's platform modal
+(`website/src/Download.jsx`) and hits the latest GitHub Release assets.
 `/waitlist?ref=` opens the same overlay. `/pricing` is the same chrome
 plus Free and Guido Pro cards; those CTAs open the waitlist, not
 a download. Desktop Upgrade/Manage opens `/pricing.html` (Charlie's

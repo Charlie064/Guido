@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, MousePointer2 } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
+import { DownloadOverlay } from "./Download.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { FLASH_BLUE } from "./brand.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 
 const INTRO_MS = 4200;
 const INTRO_SEEN_KEY = "guido.introSeen";
-const LANDING_HASHES = new Set(["how-it-works", "works-with", "waitlist"]);
+const LANDING_HASHES = new Set(["how-it-works", "works-with", "waitlist", "download"]);
 
 function landingHash() {
   return window.location.hash.replace(/^#/, "");
@@ -125,6 +126,7 @@ function WorksWithMarquee() {
 export default function Landing({ startWaitlist = false }) {
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
   const [waitlistOpen, setWaitlistOpen] = useState(startWaitlist);
+  const [downloadOpen, setDownloadOpen] = useState(() => landingHash() === "download");
   const [introDone, setIntroDone] = useState(() => skipIntro());
   const [touchPointer] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
@@ -180,7 +182,7 @@ export default function Landing({ startWaitlist = false }) {
       ) : null}
 
       {/* Nav — links stay laptop-only (`site-nav`). Phone keeps logo + CTA. */}
-      <SiteHeader onJoin={() => setWaitlistOpen(true)} />
+      <SiteHeader onJoin={() => setWaitlistOpen(true)} onDownload={() => setDownloadOpen(true)} />
 
       {/* Hero — clean, editor-vibe */}
       <section>
@@ -278,14 +280,21 @@ export default function Landing({ startWaitlist = false }) {
           className="w-full max-w-sm sm:max-w-2xl mx-auto mb-8 sm:mb-10"
         />
 
-        <button
-          type="button"
-          onClick={() => setWaitlistOpen(true)}
-          className="waitlist-cta waitlist-cta-lg"
-        >
-          Join the waitlist
-        </button>
+        <div className="landing-ctas">
+          <button type="button" onClick={() => setDownloadOpen(true)} className="download-cta download-cta-lg">
+            Download
+          </button>
+          <button
+            type="button"
+            onClick={() => setWaitlistOpen(true)}
+            className="waitlist-cta waitlist-cta-lg"
+          >
+            Join the waitlist
+          </button>
+        </div>
       </section>
+
+      <DownloadOverlay open={downloadOpen} onClose={() => setDownloadOpen(false)} />
 
       <WaitlistOverlay
         open={waitlistOpen}

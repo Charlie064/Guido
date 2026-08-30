@@ -66,7 +66,10 @@ not uppercase. The header logo stays `guido-icon.png`.
 
 **Primary CTA ("keycap" button)** — black pill, hard bottom offset
 shadow (`0 5px 0 0 #000`) that collapses on press, white sheen on the
-top third. Used on desktop chrome, not the landing waitlist.
+top third. Header and bottom **Download** use this; it opens the
+platform modal (`Download.jsx`) which links to
+`github.com/Charlie064/Guido/releases/latest/download/`
+(`Guido_mac.dmg`, `Guido_windows.exe`, `Guido_linux.AppImage`).
 
 **Secondary/outline button** — white pill, thin black border, violet
 halo on hover. Landing header and bottom “Join the waitlist” use this.
@@ -75,7 +78,7 @@ halo on hover. Landing header and bottom “Join the waitlist” use this.
 Document title `Guido — Pricing`. Same
 header, waitlist overlay, plus-grid, and footer as the landing page. Two cards: quiet white **Free**, then
 elevated glass **Guido Pro** (how-it-works wash, Recommended chip,
-keycap CTA). Pro stacks first on the phone. No download button. Laptop
+keycap CTA). Pro stacks first on the phone. Laptop
 nav adds Pricing next to How it works and Usecases. Sticker amounts
 are marketing copy and may diverge from
 [business/pricing.md](../business/pricing.md) until billing ships.

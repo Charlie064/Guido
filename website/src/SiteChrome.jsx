@@ -1,6 +1,6 @@
 import { Logo } from "./brand.jsx";
 
-export function SiteHeader({ onJoin, current = "home" }) {
+export function SiteHeader({ onJoin, onDownload, current = "home" }) {
   return (
     <header className="site-header">
       <div className="site-header-inner">
@@ -18,9 +18,16 @@ export function SiteHeader({ onJoin, current = "home" }) {
             Pricing
           </a>
         </nav>
-        <button type="button" onClick={onJoin} className="waitlist-cta">
-          Join the waitlist
-        </button>
+        <div className="site-header-actions">
+          {onDownload ? (
+            <button type="button" onClick={onDownload} className="download-cta">
+              Download
+            </button>
+          ) : null}
+          <button type="button" onClick={onJoin} className="waitlist-cta">
+            Join the waitlist
+          </button>
+        </div>
       </div>
     </header>
   );
