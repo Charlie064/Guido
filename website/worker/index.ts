@@ -46,7 +46,20 @@ export default {
     // sign-out, session refresh. See worker/better-auth.ts.
     if (url.pathname.startsWith("/api/auth/")) {
       const auth = createAuth(env, url.origin);
-      return auth.handler(request);
+      const authRes = await auth.handler(request);
+      // Better Auth's own response carries no CORS headers — fine for a
+      // same-origin browser tab, but the desktop app's webview is a
+      // cross-origin caller (tauri://localhost) and its fetch() throws a
+      // generic "Load failed" without these, even though the request
+      // itself succeeded server-side (curl-only testing won't catch
+      // this, since curl doesn't enforce CORS). trustedOrigins already
+      // gates which origins Better Auth accepts; this just lets the
+      // browser hand the response back to that caller.
+      const headers = new Headers(authRes.headers);
+      for (const [key, value] of Object.entries(corsHeaders())) {
+        headers.set(key, value);
+      }
+      return new Response(authRes.body, { status: authRes.status, headers });
     }
 
     if (url.pathname === "/api/me" && request.method === "GET") {

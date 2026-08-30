@@ -24,7 +24,7 @@
     // add teammates here (docs/reference/team.md) rather than hand-editing
     // D1. Not a secret: plan tier isn't sensitive, and this only ever
     // grants owner to an email the person themselves signs up with.
-    "OWNER_EMAILS": "charlie.sandvall@gmail.com"
+    "OWNER_EMAILS": "charlie.sandvall@gmail.com,quentinfeinaeugle@gmail.com,pauline.mophou@protonmail.com,eleanore4444@icloud.com"
   },
   // Abuse guard on /api/voice/transcribe, which spends real Aqua Voice
   // money per call — same pattern as a vision-proxy rate limiter built on

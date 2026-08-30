@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Guido — Pricing</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600&display=swap" />
+  <style>
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: #0A0A0A;
+      font-family: Inter, system-ui, sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 64rem;
+      margin: 0 auto;
+      padding: 3rem 1.5rem 4rem;
+    }
+    h1, h2 {
+      font-family: "Space Grotesk", sans-serif;
+      letter-spacing: -0.02em;
+    }
+    .back { display: inline-block; margin-bottom: 2rem; font-size: 0.85rem; font-weight: 600; text-decoration: none; color: #0A0A0A; }
+    .back:hover { text-decoration: underline; }
+    .intro { text-align: center; max-width: 34rem; margin: 0 auto 3rem; }
+    h1 { font-size: 2.25rem; margin: 0 0 0.6rem; }
+    .intro p { color: #525252; margin: 0; }
+    .tiers {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(15.5rem, 1fr));
+      gap: 1.25rem;
+      align-items: stretch;
+    }
+    .tier {
+      border: 1.5px solid rgba(0,0,0,0.1);
+      border-radius: 1.25rem;
+      padding: 1.75rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      background: #fff;
+    }
+    .tier.highlighted {
+      border-color: #B6FF3E;
+      box-shadow: 0 0 0 4px rgba(182,255,62,0.25), 0 10px 24px -12px rgba(0,0,0,0.2);
+    }
+    .tier h2 { font-size: 1.1rem; margin: 0 0 0.35rem; }
+    .price { font-family: "Space Grotesk", sans-serif; font-size: 2rem; font-weight: 700; margin: 0 0 1.1rem; }
+    .price span { font-size: 0.95rem; font-weight: 500; color: #737373; font-family: Inter, sans-serif; }
+    .tier ul { list-style: none; margin: 0 0 1.5rem; padding: 0; flex: 1; }
+    .tier li {
+      font-size: 0.9rem;
+      color: #404040;
+      padding: 0.4rem 0 0.4rem 1.3rem;
+      position: relative;
+    }
+    .tier li::before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #0A0A0A;
+      font-weight: 700;
+    }
+    .cta {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.75rem 1rem;
+      text-decoration: none;
+      cursor: not-allowed;
+      color: #737373;
+      background: #f2f2f2;
+      border: 1.5px solid rgba(0,0,0,0.08);
+    }
+    .cta.primary {
+      color: #fff;
+      background: linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%);
+      box-shadow: 0 5px 0 0 #000, inset 0 1px 0 rgba(255,255,255,0.2);
+      opacity: 0.55;
+    }
+    .cta-note { font-size: 0.75rem; color: #a3a3a3; margin-top: 0.5rem; text-align: center; }
+    .footnote { text-align: center; color: #a3a3a3; font-size: 0.8rem; margin-top: 3rem; }
+    .footnote a { color: #737373; }
+  </style>
+</head>
+<body>
+  <main>
+    <a class="back" href="/">← Back to Guido</a>
+    <div class="intro">
+      <h1>Pricing</h1>
+      <p>Start free. Upgrade when you want more skills, or a saved library.</p>
+    </div>
+
+    <div class="tiers">
+      <div class="tier" data-plan="free">
+        <h2>Free</h2>
+        <div class="price">$0</div>
+        <ul>
+          <li>1 new skill, lifetime</li>
+          <li>No saved skills</li>
+        </ul>
+        <a class="cta" href="#" aria-disabled="true">Your current plan</a>
+      </div>
+
+      <div class="tier" data-plan="starter">
+        <h2>Starter</h2>
+        <div class="price">$12<span>/mo</span></div>
+        <ul>
+          <li>30 new skills / month</li>
+          <li>Then $0.25 / extra skill</li>
+          <li>No saved skills</li>
+        </ul>
+        <!-- Checkout is real (BL-016), but only reachable from inside the
+             desktop app — a bare browser tab here has no session to attach
+             a subscription to (see docs/features/auth.md: login is
+             desktop-only). The app calls POST /api/billing/checkout itself
+             and opens the returned Stripe URL; this page stays inert for a
+             direct visit rather than pretending it can start a charge. -->
+        <a class="cta primary" href="#" data-stripe-price="starter" aria-disabled="true">Open the app to upgrade</a>
+        <div class="cta-note">Checkout happens inside Guido, not here</div>
+      </div>
+
+      <div class="tier" data-plan="plus">
+        <h2>Plus</h2>
+        <div class="price">$24<span>/mo</span></div>
+        <ul>
+          <li>Everything in Starter</li>
+          <li>Save skills to replay later</li>
+        </ul>
+        <a class="cta primary" href="#" data-stripe-price="plus" aria-disabled="true">Open the app to upgrade</a>
+        <div class="cta-note">Checkout happens inside Guido, not here</div>
+      </div>
+    </div>
+
+    <p class="footnote">
+      Already on Starter or Plus? Manage your subscription from the
+      profile menu in the Guido app.
+    </p>
+  </main>
+  <script>
+    // Highlights the tier the desktop app's Upgrade button was already
+    // pointed at (?plan=starter|plus), per docs/planning/payment-page.md.
+    // Must degrade gracefully with no query param — someone just typing
+    // the URL, or a marketing link.
+    const plan = new URLSearchParams(location.search).get("plan");
+    if (plan) {
+      const el = document.querySelector(`.tier[data-plan="${CSS.escape(plan)}"]`);
+      if (el) el.classList.add("highlighted");
+    }
+  </script>
+</body>
+</html>
