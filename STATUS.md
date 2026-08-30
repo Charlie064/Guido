@@ -32,22 +32,38 @@ once this section and the actual release supersede it.
   one-line revert once a release is confirmed working end to end on all
   three platforms. **Committed only — the live site is unchanged** until
   someone runs `wrangler deploy` by hand.
-- **`/api/vision` checked at the routing/infra layer; not a full live
-  call.** `https://guidotutor.com/api/vision` is deployed and reachable
-  (`curl` gets a clean `401 {"error":"Unauthorized"}`, not a Cloudflare
-  bot-block or a 5xx); `wrangler secret list` against the `tutoria-website`
-  Worker confirms `ANTHROPIC_API_KEY` is set. Static review of every
-  `vision.ts` kind (`locate`/`verify`/`identify_app`/`plan_step`/`answer`/
-  `research`) found no bugs beyond what's already fixed in this branch's
-  history (`18b90ef`/`8e06eb0`'s research-timeout fix). **Gap: no
-  authenticated end-to-end call was made** — creating a throwaway test
-  account against the live `/api/auth/sign-up/email` endpoint, and
-  reading the OS keyring for an already-stored session token, were both
-  blocked by this session's own permission classifier as
-  production/credential-store actions too sensitive to take
-  unilaterally. Whoever picks this up next needs to either sign in
-  through the real app and hand over a `GUIDO_SESSION_TOKEN` to test
-  with, or explicitly approve a one-off test signup.
+- **`/api/vision` — all six kinds verified live, end to end, against the
+  real Claude API. Gap closed.** `https://guidotutor.com/api/vision` is
+  deployed and reachable (`curl` gets a clean `401 {"error":"Unauthorized"}`
+  for a bad token, not a Cloudflare bot-block or a 5xx); `wrangler secret
+  list` against the `tutoria-website` Worker confirms `ANTHROPIC_API_KEY`
+  is set. Static review of every `vision.ts` kind found no bugs beyond
+  what's already fixed in this branch's history (`18b90ef`/`8e06eb0`'s
+  research-timeout fix). A prior attempt at a full live call was blocked
+  (creating a test account against *production* auth, and reading the OS
+  keyring, are both actions this session's permission classifier
+  correctly treats as too sensitive to do unilaterally) — resolved
+  without touching production: ran `wrangler dev` locally (real
+  `ANTHROPIC_API_KEY` from the repo's own `website/.dev.vars`, D1 fully
+  local/simulated, `wrangler d1 migrations apply tutoria-waitlist
+  --local`), signed up a throwaway account against that **local** server
+  only, and called all six kinds for real:
+  - `research` — correct schema, sensible multi-step plan with real
+    caveats (toolbar wording variance, nested-bullet shape changes).
+  - `plan_step` — correct schema, valid `action` values, concrete
+    per-substep `expected_outcome`s.
+  - `answer` — correct schema, accurate answer with no screenshot
+    attached.
+  - `locate` — given a synthetic 400×200 PNG with a drawn blue rectangle
+    at (150,80)-(250,120), returned (150,88)-(250,112): correctly found
+    the target, tightened to the visible content within it.
+  - `verify` — correctly matched the same image against its accurate
+    expected-state description.
+  - `identify_app` — correctly returned `{app_name: null, window_title:
+    null}` for the synthetic image rather than guessing, per its prompt's
+    explicit "do not guess" instruction.
+  Local dev server stopped afterward; nothing touched production auth,
+  production D1, or spent against any real user's quota.
 
 ## What exists
 
