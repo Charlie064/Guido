@@ -12,6 +12,7 @@
 // pass on those is a separate, larger change. See substepBubbleHtml.
 import { SKILLS } from "./fake-skill.js";
 import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon } from "./icons.js";
+import { check as checkUpdate, relaunch } from "./vendor/tauri-updater.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -2122,8 +2123,29 @@ window.addEventListener("keydown", (e) => {
 listen("tutoria:quit", () => getCurrentWindow().close());
 
 
+// Checked once per launch, silently — no release yet, no network, or a
+// bad signature should never interrupt the app, just skip until next
+// launch. Installing relaunches the whole process, so this always runs
+// last among the startup calls below (nothing to lose: nothing here
+// persists anything an in-flight relaunch would drop).
+async function checkForUpdate() {
+  try {
+    const update = await checkUpdate();
+    if (!update?.available) return;
+    await withStatus(`Updating to ${update.version}`, () => update.downloadAndInstall(), {
+      slowAfter: 5,
+      stallAfter: 30,
+      stalledHint: "Downloading the update — this can take a minute on a slow connection.",
+    });
+    await relaunch();
+  } catch (err) {
+    console.error("Update check failed", err);
+  }
+}
+
 // Which pick gesture is possible depends on the session, so the setup view
 // can't be rendered correctly until this resolves.
 initCaptureBackend();
 loadPersistedSkills();
 restoreSession();
+checkForUpdate();

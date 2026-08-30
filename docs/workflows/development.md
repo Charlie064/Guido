@@ -241,6 +241,40 @@ Bump `version` in `spikes/tauri-overlay/src-tauri/tauri.conf.json` before
 tagging if you want the in-app version to match the release tag; the CI
 workflow doesn't enforce this.
 
+### Auto-update
+
+Installed apps check for updates once per launch (`checkForUpdate` at the
+bottom of `sidebar.js`) via Tauri's `updater` plugin. Every tagged release
+gets a second, silent artifact beyond the three installers: `latest.json`,
+assembled by the `publish-latest-json` job in `release.yml` from each
+platform's build (signature + download URL), and also served from
+`releases/latest/download/`. An installed app diffs its own version
+against that manifest, and if newer, downloads, verifies the signature,
+installs, and relaunches — no redownload from the website needed.
+
+This only applies going forward: **v0.1.1 and earlier predate the
+updater** and can't auto-update themselves to this or any later version —
+whoever has one of those installed has to redownload manually one more
+time. Every release from here on updates in place.
+
+Two things that make this possible and must not be lost:
+- **The signing keypair.** Its private half + password live only in this
+  repo's GitHub Actions secrets (`TAURI_SIGNING_PRIVATE_KEY`,
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) — not committed anywhere, not
+  recoverable if lost. The public half is committed in
+  `tauri.conf.json`'s `plugins.updater.pubkey`. If the private key is ever
+  lost, every installed copy of the app becomes permanently unable to
+  auto-update (a new keypair only verifies future releases, not past
+  installs) — the only fix is another one-time manual redownload for
+  everyone, same as this v0.1.1 gap.
+- **The JS updater shim.** `sidebar.js` imports `@tauri-apps/plugin-updater`
+  and `@tauri-apps/plugin-process` indirectly via
+  `src/vendor/tauri-updater.js`, a dependency-free bundle produced by
+  `npm run build:updater-shim` (esbuild) from `updater-shim-src.mjs` — the
+  spike has no frontend bundler, so this is committed rather than built in
+  CI. Re-run that script and commit the output after bumping either
+  package.
+
 ### 4. Website (Cloudflare Workers + D1)
 
 Scope owned by Pauline — see [website-v0.md](../planning/website-v0.md).

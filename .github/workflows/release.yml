@@ -1,8 +1,9 @@
 name: Release desktop app
 
 # Push a tag to cut a release: git tag vX.Y.Z && git push origin vX.Y.Z
-# Builds installers on all three OSes and uploads them to the GitHub
-# Release under fixed names — the website's download buttons link to
+# Builds installers on all three OSes, signs updater artifacts, and
+# uploads everything to the GitHub Release under fixed names — the
+# website's download buttons and the app's own updater both link to
 # releases/latest/download/<name>, so those names must never change.
 on:
   push:
@@ -22,12 +23,18 @@ jobs:
           - os: macos-latest
             asset_glob: src-tauri/target/release/bundle/dmg/*.dmg
             asset_name: Guido_mac.dmg
+            updater_platform: darwin-x86_64
+            updater_asset_name: Guido_mac.app.tar.gz
           - os: windows-latest
             asset_glob: src-tauri/target/release/bundle/nsis/*.exe
             asset_name: Guido_windows.exe
+            updater_platform: windows-x86_64
+            updater_asset_name: Guido_windows.exe
           - os: ubuntu-22.04
             asset_glob: src-tauri/target/release/bundle/appimage/*.AppImage
             asset_name: Guido_linux.AppImage
+            updater_platform: linux-x86_64
+            updater_asset_name: Guido_linux.AppImage
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -56,14 +63,92 @@ jobs:
       - run: npm install
 
       - run: npx tauri build
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Rename bundle to the fixed release asset name
         shell: bash
         run: cp ${{ matrix.asset_glob }} ${{ matrix.asset_name }}
 
-      - name: Upload to release
+      # macOS's updater payload (.app.tar.gz) is a separate file from the
+      # .dmg people download directly; Windows/Linux reuse the same
+      # installer for both, so only mac needs a second upload here.
+      - name: Copy macOS updater artifact to its fixed name
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: cp src-tauri/target/release/bundle/macos/*.app.tar.gz ${{ matrix.updater_asset_name }}
+
+      - name: Upload installer(s) to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          files: spikes/tauri-overlay/${{ matrix.asset_name }}
+          files: |
+            spikes/tauri-overlay/${{ matrix.asset_name }}
+            spikes/tauri-overlay/${{ matrix.updater_asset_name }}
+          fail_on_unmatched_files: true
+
+      # Collects this platform's {platform key, download url, .sig
+      # content} as a workflow artifact (not a release asset) so the
+      # publish-latest-json job below can assemble one latest.json out of
+      # all three, once every leg of this matrix has finished.
+      - name: Record updater signature for latest.json
+        shell: bash
+        run: |
+          sig_path="src-tauri/target/release/bundle"
+          case "${{ matrix.os }}" in
+            macos-latest) sig_path=$(find "$sig_path/macos" -name "*.app.tar.gz.sig") ;;
+            windows-latest) sig_path=$(find "$sig_path/nsis" -name "*.sig") ;;
+            ubuntu-22.04) sig_path=$(find "$sig_path/appimage" -name "*.sig") ;;
+          esac
+          mkdir -p updater-meta
+          node -e '
+            const fs = require("fs");
+            const signature = fs.readFileSync(process.argv[1], "utf8").trim();
+            const entry = {
+              platform: process.argv[2],
+              url: `https://github.com/${process.env.GITHUB_REPOSITORY}/releases/latest/download/${process.argv[3]}`,
+              signature,
+            };
+            fs.writeFileSync(process.argv[4], JSON.stringify(entry));
+          ' "$sig_path" "${{ matrix.updater_platform }}" "${{ matrix.updater_asset_name }}" "updater-meta/${{ matrix.os }}.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: updater-meta-${{ matrix.os }}
+          path: spikes/tauri-overlay/updater-meta/${{ matrix.os }}.json
+
+  publish-latest-json:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: updater-meta-*
+          path: updater-meta
+          merge-multiple: true
+
+      - name: Assemble latest.json
+        run: |
+          node -e '
+            const fs = require("fs");
+            const files = fs.readdirSync("updater-meta").filter((f) => f.endsWith(".json"));
+            const platforms = {};
+            for (const f of files) {
+              const { platform, url, signature } = JSON.parse(fs.readFileSync(`updater-meta/${f}`, "utf8"));
+              platforms[platform] = { url, signature };
+            }
+            const manifest = {
+              version: process.env.GITHUB_REF_NAME.replace(/^v/, ""),
+              notes: "",
+              pub_date: new Date().toISOString(),
+              platforms,
+            };
+            fs.writeFileSync("latest.json", JSON.stringify(manifest, null, 2));
+          '
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: latest.json
           fail_on_unmatched_files: true
