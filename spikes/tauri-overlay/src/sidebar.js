@@ -163,6 +163,26 @@ function currentCaptureScope() {
   return currentSkill?.captureScope ?? deriveScopeFromGlobals();
 }
 
+// On the portal backend, nothing can actually be captured until a source
+// has been picked once through the OS's own share dialog (see
+// formatWindowLabel's "Nothing chosen yet") — the normal new-goal flow
+// forces that pick before any live call happens (selectWindow above), but
+// a skill created outside that flow (a fixture, or one restored from an
+// older skills.json with no captureScope) has nothing to fall back on.
+// Passing that missing scope straight through to a live capture command
+// used to fail deep inside capture_screen (grim, which this kind of
+// GNOME/Wayland session can't actually use) instead of surfacing as the
+// "pick a source" step it really is — prompt for the pick here instead.
+async function ensureCaptureScope() {
+  const existing = currentCaptureScope();
+  if (existing) return existing;
+  if (captureBackend !== "portal") return null; // native "full screen" is a real default
+  await selectPortalSource();
+  const scope = deriveScopeFromGlobals();
+  if (currentSkill && scope) currentSkill.captureScope = scope;
+  return scope;
+}
+
 let currentSkill = null;
 let currentStep = null;
 // Single id, not a Set: the path view is a true accordion — expanding a
@@ -1061,6 +1081,7 @@ document.querySelector("#usage-upgrade-btn").addEventListener("click", () => {
 // icon file and that wins (see the appIcon call in renderAppsList).
 const APP_MARK_IMAGES = [
   [/\bexcel\b|xlsx?/i, "assets/excel.png"],
+  [/inkscape/i, "assets/inkscape.png"],
 ];
 
 // On startup, a previously-stored session token (OS keychain) skips
@@ -1981,7 +2002,7 @@ function renderChat() {
       try {
         sub.verifyResult = await invoke("verify_substep", {
           expectedOutcome: sub.expected_outcome,
-          scope: currentCaptureScope(),
+          scope: await ensureCaptureScope(),
           context: locateContext(sub),
         });
         await persistSkills();
@@ -2115,11 +2136,12 @@ async function sendChatMessage() {
   renderChat();
 
   try {
+    const scope = withScreenshot ? await ensureCaptureScope() : null;
     const result = await withStatus("Answering your question", () =>
       invoke("answer_question", {
         question,
         withScreenshot,
-        scope: withScreenshot ? currentCaptureScope() : null,
+        scope,
         context: answerContext(respondingToSub),
       }),
     { slowAfter: 4, stallAfter: 30 });

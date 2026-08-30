@@ -164,6 +164,33 @@ export const SKILLS = [
       },
     ],
   },
+  {
+    id: "inkscape-blue-circle",
+    title: "Create a blue circle in Inkscape",
+    goal: "I want to create a circle and fill it with blue",
+    appName: "Inkscape",
+    createdAt: "2026-08-30T12:00:00.000Z",
+    steps: [
+      {
+        id: "s1",
+        title: "Select the ellipse tool",
+        generated: false,
+        substeps: [],
+      },
+      {
+        id: "s2",
+        title: "Draw the circle",
+        generated: false,
+        substeps: [],
+      },
+      {
+        id: "s3",
+        title: "Fill it with blue",
+        generated: false,
+        substeps: [],
+      },
+    ],
+  },
 ];
 
 // Small pool of canned replies for substeps created live from the chat
