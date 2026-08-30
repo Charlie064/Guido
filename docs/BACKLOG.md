@@ -90,22 +90,12 @@ point — this file should never pose as a source of truth for what's done.
   `website/` on `claudev/quentin/google-login`, with waitlist + privacy
   wired to the Worker. Remaining: `npm run deploy` once Cloudflare
   membership is accepted, and any further design pass she still wants.
-- **BL-007 — Enforce membership quotas.** Tiers and Worker endpoints
-  (`GET /api/me`, `POST /api/skills/start`) are on
-  `claudev/quentin/google-login`. Remaining: desktop must call
-  `/api/skills/start` when a new goal starts and hide save unless
-  `can_save_skills` (Charlie pairs on the Tauri half). Stripe + Starter
-  overage charges are a later slice. See
-  [business/pricing.md](business/pricing.md).
 - **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
   currently runs on the free `workers.dev` subdomain
   (`tutoria-website.guidotutor.workers.dev`, see
   [reference/team.md](reference/team.md)/[STATUS.md](../STATUS.md)).
   Register/point a real domain at the Cloudflare account and wire it into
   `website/wrangler.jsonc` (custom domain / route), including DNS and TLS.
-  Needed before the login flow in
-  [planning/login-membership-plan.md](planning/login-membership-plan.md)
-  can use a stable OAuth redirect origin instead of a `workers.dev` URL.
 - **BL-009 — No app identity at all on Wayland.** **Largely done — read
   the identity off the pixels instead of asking the OS.** The premise
   still holds: the portal's only identifying output is
@@ -255,8 +245,9 @@ point — this file should never pose as a source of truth for what's done.
 - **BL-015 — Require email verification before an account is usable.**
   Login switched from Google OAuth to Better Auth email+password
   (`website/worker/better-auth.ts`, decided 2026-08-29 to avoid Google's
-  test-user allowlist blocking self-serve signup during the demo). As
-  configured, `emailAndPassword.requireEmailVerification` is `false` — an
+  test-user allowlist blocking self-serve signup during the demo — see
+  [ADR 0008](decisions/0008-better-auth-email-password.md) and
+  [features/auth.md](features/auth.md)). As configured, `emailAndPassword.requireEmailVerification` is `false` — an
   account is active the instant it's created, no proof the email address
   is real. Explicitly deferred for the hackathon demo, but flagged here so
   it isn't forgotten: **must be turned on before charging real users or

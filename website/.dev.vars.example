@@ -1,5 +1,5 @@
-# Copy to .dev.vars (gitignored) for `npm run dev`.
-# Create a Google OAuth client (Desktop app) and put the values here.
-# Redirect URI to register: http://localhost:8787/auth/google/callback
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
+# Copy to .dev.vars (gitignored) for `npm run dev:api` (wrangler dev).
+# Generate a value with `npx auth secret` or `openssl rand -base64 32` —
+# see the comment on `secret` in worker/better-auth.ts for why this can't
+# fall back to Better Auth's default on Workers.
+BETTER_AUTH_SECRET=

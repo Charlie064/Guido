@@ -85,7 +85,7 @@ before shipping beyond a demo.)
 | Adding a UI icon (check the pool first, don't redraw) | `spikes/tauri-overlay/src/icons.js`, gallery at `src/icons.html` |
 | Guido mascot (Tuto) states, cursor buddy | `docs/features/mascot.md` |
 | Website + desktop visual language | `docs/features/website-design-system.md` |
-| Login, Google account link, membership check (Quentin) | `docs/planning/login-membership-plan.md` |
+| Login, membership check, quotas | `docs/features/auth.md` |
 | Membership pricing, Anthropic API COGS | `docs/business/pricing.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first

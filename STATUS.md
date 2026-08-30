@@ -572,16 +572,23 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   app from `claudev/pauline/landing-page` lives in `website/` (`npm run
   dev`); Worker is `website/worker/` and serves `dist/` on deploy.
   Waitlist + `/privacy.html` are on the landing footer.
-- **Google login Worker + quotas (Quentin) — Worker half started.**
-  Branch `claudev/quentin/google-login`: D1 migration
-  `website/migrations/0002_create_auth_and_quotas.sql`, privacy page at
-  `/privacy.html`, routes `/auth/google/start`,
-  `/auth/google/callback`, `/api/me` (quota fields),
-  `POST /api/skills/start` (hard-caps `free` at 5 and
-  `starter`/`plus` at 30/month). Still needed: Google Cloud OAuth
-  client + `wrangler secret put GOOGLE_CLIENT_SECRET`, remote migrate,
-  and Charlie pairing on the Tauri keyring/loopback half. See
-  `docs/planning/login-membership-plan.md`.
+- **Login + quota paywall — built end to end, on `claudev/charlie/desktop-google-login`.**
+  Login switched from the originally-planned Google OAuth to Better Auth
+  email+password (`website/worker/better-auth.ts`) — see
+  [ADR 0008](docs/decisions/0008-better-auth-email-password.md). D1
+  migration `website/migrations/0002_create_auth_and_quotas.sql`, privacy
+  page at `/privacy.html`, `GET /api/me` and `POST /api/skills/start`
+  (`free` hard-capped at 1 lifetime skill, `starter`/`plus` at 30/month,
+  `owner` unlimited via the `OWNER_EMAILS` allowlist). Desktop side is
+  also done: `sidebar.js` calls `/api/skills/start` after Research
+  succeeds and gates save on `can_save_skills`; session tokens are stored
+  via `keyring` (`store_session_token`/`get_session_token`/
+  `clear_session_token` in `src-tauri/src/lib.rs`). Verified 2026-08-30:
+  `cargo check` clean, website `lint`/`build`/`wrangler deploy --dry-run`
+  all clean. Still needed before this is production-ready (not before
+  the demo): `wrangler secret put BETTER_AUTH_SECRET`, a remote D1
+  migrate, and BL-015 (email verification). See
+  [features/auth.md](docs/features/auth.md).
 - **App icons for picked windows — built, unverifiable on this machine.**
   `window_icon` (`src-tauri/src/lib.rs`) extracts the picked window's own
   `_NET_WM_ICON` on Linux X11, encodes it to PNG once, and caches it per
