@@ -68,19 +68,11 @@ function IntroAnimation() {
 }
 
 function DownloadButton({ className = "", onClick }) {
-  const [clicked, setClicked] = useState(false);
   const [pressed, setPressed] = useState(false);
   return (
     <button
       type="button"
-      onClick={() => {
-        if (onClick) {
-          onClick();
-          return;
-        }
-        setClicked(true);
-        setTimeout(() => setClicked(false), 1600);
-      }}
+      onClick={onClick}
       onPointerDown={() => setPressed(true)}
       onPointerUp={() => setPressed(false)}
       onPointerLeave={() => setPressed(false)}
@@ -98,14 +90,8 @@ function DownloadButton({ className = "", onClick }) {
         style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
       />
       <span className="relative flex items-center gap-2">
-        {clicked ? (
-          "Coming soon"
-        ) : (
-          <>
-            <Apple size={15} />
-            Download free
-          </>
-        )}
+        <Apple size={15} />
+        Download free
       </span>
     </button>
   );
@@ -140,15 +126,24 @@ function WindowChrome({ title, onDotClick, cream }) {
   );
 }
 
+const RELEASES_BASE = "https://github.com/Charlie064/Guido/releases/latest/download";
+
 const PLATFORMS = [
-  { id: "mac", label: "macOS", icon: Apple },
-  { id: "windows", label: "Windows", icon: MonitorSmartphone },
-  { id: "linux", label: "Linux", icon: Command },
+  { id: "mac", label: "macOS", icon: Apple, file: "Guido_mac.dmg" },
+  { id: "windows", label: "Windows", icon: MonitorSmartphone, file: "Guido_windows.exe" },
+  { id: "linux", label: "Linux", icon: Command, file: "Guido_linux.AppImage" },
 ];
 
+function detectPlatform() {
+  if (typeof navigator === "undefined") return "mac";
+  const ua = navigator.userAgent;
+  if (/Win/i.test(ua)) return "windows";
+  if (/Linux/i.test(ua) && !/Android/i.test(ua)) return "linux";
+  return "mac";
+}
+
 function DesktopDownloadWindow({ onClose }) {
-  const [platform, setPlatform] = useState("mac");
-  const [clicked, setClicked] = useState(false);
+  const [platform, setPlatform] = useState(detectPlatform);
   const current = PLATFORMS.find((p) => p.id === platform);
   const Icon = current.icon;
 
@@ -190,12 +185,8 @@ function DesktopDownloadWindow({ onClose }) {
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setClicked(true);
-            setTimeout(() => setClicked(false), 1600);
-          }}
+        <a
+          href={`${RELEASES_BASE}/${current.file}`}
           className="relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 px-7 py-3.5 text-[15px]"
           style={{
             background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
@@ -208,9 +199,9 @@ function DesktopDownloadWindow({ onClose }) {
           />
           <span className="relative flex items-center gap-2">
             <Icon size={15} />
-            {clicked ? "Coming soon" : `Download for ${current.label}`}
+            {`Download for ${current.label}`}
           </span>
-        </button>
+        </a>
       </div>
     </div>
   );

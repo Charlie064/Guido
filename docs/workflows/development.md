@@ -216,6 +216,31 @@ that specific call normally takes.
   Then open `/tmp/shot.png` — a blank or black image means the frame grab
   failed even though the portal handshake worked.
 
+## Releasing the desktop app
+
+Cutting a release is manual and tag-triggered — push a version tag, CI does
+the rest:
+
+```sh
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+`.github/workflows/release.yml` then builds installers on macOS, Windows,
+and Linux runners and attaches them to the GitHub Release for that tag
+under fixed names: `Guido_mac.dmg`, `Guido_windows.exe`,
+`Guido_linux.AppImage`. **Those names are load-bearing** — the website's
+download buttons (`website/src/Landing.jsx`) link to
+`github.com/Charlie064/Guido/releases/latest/download/<name>`, a URL that
+always resolves to the newest release, so the site never needs a redeploy
+when you cut a new version. If a bundle target or asset name ever changes
+in the workflow, update `RELEASES_BASE`/`PLATFORMS` in `Landing.jsx` in the
+same commit.
+
+Bump `version` in `spikes/tauri-overlay/src-tauri/tauri.conf.json` before
+tagging if you want the in-app version to match the release tag; the CI
+workflow doesn't enforce this.
+
 ### 4. Website (Cloudflare Workers + D1)
 
 Scope owned by Pauline — see [website-v0.md](../planning/website-v0.md).
