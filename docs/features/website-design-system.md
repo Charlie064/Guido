@@ -59,6 +59,8 @@ Hashed jumps (`/#works-with`, `/#how-it-works`) skip it and scroll
 straight to that section — used when leaving Pricing.
 Laptop header nav is **How it works** and **Usecases** (hidden on
 phone). Footer links are Sign in, Privacy policy, and Terms of service.
+The public site stays this waitlist chrome even when the same Worker
+also serves desktop Better Auth and voice routes.
 The hero headline is sentence-case Space Grotesk in flash pink,
 not uppercase. The header logo stays `guido-icon.png`.
 

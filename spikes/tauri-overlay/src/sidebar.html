@@ -21,6 +21,8 @@
         --muted: #525252;
         --bg: #ffffff;
         --panel-raised: #ffffff;
+        /* Recessed ground for the history half of home — see .home-bottom. */
+        --sunken: #E8E8E4;
         --border: rgba(0, 0, 0, 0.10);
         --halo: rgba(196, 181, 253, 0.15);
         --halo-bloom: rgba(196, 181, 253, 0.35);
@@ -84,17 +86,29 @@
         flex-shrink: 0;
       }
 
+      /* This bar is on every view, so an unclamped long title/subtitle
+         (a research-generated skill title, a long goal string) is the one
+         overflow bug that reproduces on every screen at a narrow width —
+         same missing-ellipsis pattern as .chat-row-title had. Its wrapper
+         already has flex:1;min-width:0 (inline style below), so this was
+         the only piece missing. */
       .bar-title {
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-weight: 600;
         font-size: 14px;
         letter-spacing: -0.02em;
         color: var(--ink);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .bar-subtitle {
         color: var(--muted);
         font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .bar-icon-btn {
@@ -189,8 +203,203 @@
         background: #f5f5f5;
       }
 
+      /* 40/60 split, and the two panes are deliberately two different
+         surfaces: the top one is raised (white, brand grid) and is where
+         a new chat is made; the bottom one is recessed (grey, flat, an
+         inset shadow under its top edge) and is history. That contrast is
+         what separates "new" from "old" — there's no rule between them,
+         the change of ground is the rule. */
+      .home-top {
+        flex: 0 0 40%;
+        /* The 40% is the intent, the min-height is the floor: below about
+           a 500px-tall panel the top pane's share stops fitting the ask
+           box and the picker, and it takes from the chats list rather
+           than clipping them. */
+        min-height: 196px;
+        display: flex;
+        flex-direction: column;
+        /* The two controls sit as one block in the middle of the pane's
+           own 40%, rather than hanging off its top edge. The research
+           block below them keeps its space even when idle (see its
+           [hidden] rule), so appearing doesn't shunt them upward. */
+        justify-content: center;
+        background: #ffffff;
+        background-image: var(--plus-grid);
+      }
+
+      .home-bottom {
+        flex: 1 1 60%;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--sunken);
+        border-top: 1px solid rgba(0, 0, 0, 0.14);
+        box-shadow: inset 0 10px 16px -12px rgba(0, 0, 0, 0.5);
+      }
+
+      /* The heading is pinned; only the rows below it scroll, so the
+         scrollbar belongs to the list itself rather than the pane. */
+      #apps-list {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding-top: 2px;
+      }
+
+      #apps-list::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      #apps-list::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.22);
+        border: 3px solid transparent;
+        background-clip: content-box;
+        border-radius: 999px;
+      }
+
+      #apps-list::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 0, 0, 0.38);
+        border: 3px solid transparent;
+        background-clip: content-box;
+      }
+
+      /* Wraps the goal input so the tick can sit inside the same pill,
+         behind a hairline separator, instead of on a checklist line of
+         its own. #home-region below is the same idea with a button after
+         the tick. */
+      .field {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        min-width: 0;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding-left: 14px;
+      }
+
+      .field:focus-within {
+        border-color: rgba(0, 0, 0, 0.28);
+        box-shadow: 0 0 0 4px var(--halo-bloom);
+      }
+
+      .field-sep {
+        flex-shrink: 0;
+        width: 1px;
+        height: 18px;
+        margin: 0 10px;
+        background: var(--border);
+      }
+
+      /* Empty until its step is done — an outlined dot that fills with the
+         brand green and a tick. No label: the control it sits in is the
+         label. */
+      .field-tick {
+        flex-shrink: 0;
+        width: 17px;
+        height: 17px;
+        border-radius: 999px;
+        border: 1.5px solid rgba(0, 0, 0, 0.18);
+        background: #ffffff;
+        transition: background 180ms ease, border-color 180ms ease;
+      }
+
+      .field-tick.done {
+        border-color: var(--brand);
+        background: var(--brand)
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%230A0A0A' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+          center / 12px 12px no-repeat;
+        animation: tick-pop 260ms ease-out;
+      }
+
+      @keyframes tick-pop {
+        0% { transform: scale(0.6); }
+        60% { transform: scale(1.18); }
+        100% { transform: scale(1); }
+      }
+
+      /* Research loader: three dots pulsing in sequence, plus a line of
+         text that swaps every couple of seconds (see RESEARCH_PHRASES in
+         sidebar.js) so a 30-60s call still reads as progress. */
+      #home-research {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 4px 20px 0;
+        flex-shrink: 0;
+      }
+
+      /* Holds its space when idle rather than collapsing: the pane's
+         contents are vertically centred, so a block appearing and
+         disappearing under them would jog the ask box up and down. */
+      #home-research {
+        min-height: 30px;
+      }
+
+      #home-research[hidden] {
+        visibility: hidden;
+      }
+
+      .research-orbit {
+        display: inline-flex;
+        gap: 4px;
+        flex-shrink: 0;
+      }
+
+      .research-orbit span {
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--ink);
+        animation: research-pulse 1.1s ease-in-out infinite;
+      }
+
+      .research-orbit span:nth-child(2) { animation-delay: 0.15s; }
+      .research-orbit span:nth-child(3) { animation-delay: 0.3s; }
+
+      @keyframes research-pulse {
+        0%, 100% { opacity: 0.2; transform: translateY(0); }
+        40% { opacity: 1; transform: translateY(-3px); }
+      }
+
+      .research-text {
+        font-size: 12px;
+        color: var(--muted);
+        min-width: 0;
+        animation: research-text-in 320ms ease-out;
+      }
+
+      @keyframes research-text-in {
+        from { opacity: 0; transform: translateY(3px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .research-skip {
+        /* Its own line under the message rather than trailing it: the
+           message is long enough to wrap on a narrow panel. */
+        flex-basis: 100%;
+        margin-left: 26px;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--muted);
+        font-size: 11px;
+        text-decoration: underline;
+      }
+
+      .research-skip[hidden] {
+        display: none;
+      }
+
+      .research-skip:hover {
+        color: var(--ink);
+      }
+
       .home-kicker {
-        margin: 8px 16px 10px;
+        flex-shrink: 0;
+        margin: 14px 20px 8px;
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-size: 11px;
         font-weight: 600;
@@ -199,43 +408,231 @@
         color: var(--muted);
       }
 
-      .app-group {
+      /* One button per app, opening that app's own page. It carries the
+         app's icon, its name, and the title of its newest chat, so the
+         list is scannable without opening anything. */
+      .chat-group {
         display: flex;
         align-items: center;
-        gap: 12px;
-        margin: 0 16px 16px;
-        padding: 12px;
+        gap: 11px;
         width: calc(100% - 32px);
+        margin: 0 16px 10px;
+        padding: 11px 13px;
         text-align: left;
+        color: inherit;
         background: #ffffff;
         border: 1px solid var(--border);
-        border-radius: 14px;
+        border-radius: 16px;
         box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
       }
 
-      .app-group:hover {
+      .chat-group:hover {
         box-shadow: 0 0 0 4px var(--halo-bloom), 0 8px 24px -18px rgba(0, 0, 0, 0.35);
       }
 
-      .app-group img {
-        width: 40px;
-        height: 40px;
-        border-radius: 10px;
+      /* The chevron points into the page the button opens. */
+      .chat-group > svg {
+        flex-shrink: 0;
+        color: #b0b0b0;
+        transform: rotate(-90deg);
+      }
+
+      .chat-group-icon,
+      .chat-group-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
         object-fit: cover;
         flex-shrink: 0;
       }
 
-      .app-group-title {
+      .chat-group-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .chat-group-title {
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
         font-size: 14px;
         font-weight: 600;
         letter-spacing: -0.02em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
-      .app-group-meta {
-        margin-top: 2px;
+      .chat-group-meta {
+        margin-top: 1px;
         color: var(--muted);
-        font-size: 12px;
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .chat-group-count {
+        flex-shrink: 0;
+        min-width: 22px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #F0F0EE;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 600;
+        text-align: center;
+      }
+
+      /* The group's own page: the same recessed grey ground as home's
+         history pane, so opening a group reads as going deeper into that
+         half of home rather than arriving somewhere unrelated. */
+      .group-body {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 10px 12px;
+        background: var(--sunken);
+      }
+
+      .group-body::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      .group-body::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.22);
+        border: 3px solid transparent;
+        background-clip: content-box;
+        border-radius: 999px;
+      }
+
+      .group-body .chat-row {
+        background: #ffffff;
+        border: 1px solid var(--border);
+        margin-bottom: 8px;
+        padding: 10px 12px;
+        border-radius: 13px;
+      }
+
+      /* A div, not a button: the delete control is a button and nesting one
+         inside another is invalid, so the row is a container holding a
+         full-width "open" button plus the delete button beside it. */
+      .chat-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 8px;
+        border-radius: 11px;
+      }
+
+      .chat-row:hover {
+        background: #F6F6F4;
+      }
+
+      .chat-row-main {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        padding: 0;
+        background: none;
+        border: none;
+        text-align: left;
+        color: inherit;
+      }
+
+      /* Every row in a group carries its group's icon — that shared mark is
+         what makes the card read as one app's shelf rather than a list that
+         happens to be indented. */
+      .chat-row-icon,
+      .chat-row-mark {
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+        object-fit: cover;
+        flex-shrink: 0;
+      }
+
+      .chat-row-mark,
+      .chat-group-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f2f2f2;
+        border: 1px solid var(--border);
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .chat-row-mark { font-size: 11px; }
+      .chat-group-mark { font-size: 14px; }
+
+      /* Author `display` on these classes otherwise beats the UA
+         [hidden]{display:none} rule, so the letter mark stayed visible
+         underneath the real icon once applyGroupIcon resolved one. */
+      .chat-row-mark[hidden],
+      .chat-group-mark[hidden] {
+        display: none;
+      }
+
+      /* A drawn mark brings its own shape and colour — drop the tile. */
+      .chat-row-mark.drawn,
+      .chat-group-mark.drawn {
+        background: none;
+        border: none;
+      }
+
+      .chat-row-mark svg,
+      .chat-row-mark img { display: block; border-radius: 7px; object-fit: contain; }
+      .chat-group-mark svg,
+      .chat-group-mark img { display: block; border-radius: 9px; object-fit: contain; }
+
+      .chat-row-delete {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        color: #a3a3a3;
+      }
+
+      .chat-row-delete:hover {
+        background: var(--pink-soft);
+        border-color: var(--pink-border);
+        color: var(--pink);
+      }
+
+      /* Missing on this wrapper (unlike .chat-group-text) let the row's
+         flex item grow to fit its content instead of clipping it — a long
+         goal string in .chat-row-meta pushed the whole row past the panel
+         edge instead of ellipsizing. */
+      .chat-row-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .chat-row-title {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .chat-row-meta {
+        margin-top: 1px;
+        color: var(--muted);
+        font-size: 11px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .view {
@@ -251,8 +648,19 @@
         display: flex;
       }
 
+      /* Added by showView() only when a caller asks for it (the hand-off
+         from a finished research call to the step list), so ordinary
+         back/forth navigation stays instant. */
+      .view.fade-in {
+        animation: view-fade-in 420ms ease-out;
+      }
+
+      @keyframes view-fade-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
       .btn-keycap,
-      .btn-google,
       .btn-primary,
       #setup-continue,
       #new-goal-send,
@@ -275,7 +683,6 @@
       }
 
       .btn-keycap:hover,
-      .btn-google:hover,
       .btn-primary:hover,
       #setup-continue:hover,
       #new-goal-send:hover,
@@ -284,7 +691,6 @@
       }
 
       .btn-keycap:active,
-      .btn-google:active,
       .btn-primary:active,
       #setup-continue:active,
       #new-goal-send:active,
@@ -293,22 +699,12 @@
         box-shadow: 0 1px 0 0 #000, 0 6px 12px -8px rgba(0, 0, 0, 0.4);
       }
 
-      .btn-google-shine,
       .btn-keycap::after,
       .btn-primary::after,
       #setup-continue::after,
       #new-goal-send::after,
       #chat-send::after {
         content: "";
-        position: absolute;
-        inset: 4px 4px auto;
-        height: 40%;
-        border-radius: 999px;
-        background: linear-gradient(180deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0));
-        pointer-events: none;
-      }
-
-      .btn-google-shine {
         position: absolute;
         inset: 4px 4px auto;
         height: 40%;
@@ -370,12 +766,34 @@
         margin: 8px 0 0;
       }
 
-      .btn-google {
+      #login-error {
+        color: #d1284a;
+      }
+
+      #login-form {
         width: 100%;
         max-width: 280px;
         margin-top: 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .login-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1.5px solid rgba(0, 0, 0, 0.12);
+        font-family: Inter, system-ui, sans-serif;
         font-size: 14px;
-        padding: 11px 16px;
+        background: #ffffff;
+        color: #0A0A0A;
+      }
+
+      .login-input:focus {
+        outline: none;
+        border-color: #0A0A0A;
       }
 
       .login-skip {
@@ -397,6 +815,198 @@
         margin-top: 8px;
       }
 
+      /* ---------- Plan badge (top bar) ---------- */
+      /* One-word tier readout next to the profile avatar — see docs/business/pricing.md
+         for what each tier means. Reads "Guest" while signed out
+         (applyMembership in sidebar.js); shown/hidden together with the
+         profile avatar itself, not gated on sign-in. */
+
+      .plan-badge {
+        flex-shrink: 0;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: var(--muted);
+        background: #f0f0f0;
+        border: 1px solid var(--border);
+      }
+
+      .plan-badge[data-plan="starter"],
+      .plan-badge[data-plan="plus"] {
+        color: #0A0A0A;
+        background: var(--halo-bloom);
+        border-color: var(--pink-border);
+      }
+
+      .plan-badge[data-plan="owner"] {
+        color: #ffffff;
+        background: #0A0A0A;
+        border-color: #0A0A0A;
+      }
+
+      /* ---------- Pay / upgrade ---------- */
+
+      .pay-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 18px;
+      }
+
+      .pay-status {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
+        margin-bottom: 14px;
+      }
+
+      .pay-status-plan {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: -0.01em;
+      }
+
+      .pay-status-meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .pay-reason {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--pink-soft);
+        border: 1px solid var(--pink-border);
+        color: #0A0A0A;
+        font-size: 12px;
+        line-height: 1.5;
+        margin-bottom: 16px;
+      }
+
+      .pay-reason[hidden] {
+        display: none;
+      }
+
+      .pay-tier {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        margin-bottom: 12px;
+      }
+
+      .pay-tier-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .pay-tier-name {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+      }
+
+      .pay-tier-price {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .pay-tier-desc {
+        margin: 6px 0 12px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .pay-tier button {
+        width: 100%;
+        margin-top: 0;
+      }
+
+      .pay-manage {
+        margin-top: 6px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px dashed var(--border);
+        text-align: center;
+      }
+
+      .pay-manage p {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .pay-manage button {
+        width: 100%;
+        margin-top: 0;
+        background: #ffffff;
+        color: var(--ink);
+        border: 1.5px solid rgba(0, 0, 0, 0.12);
+        box-shadow: none;
+      }
+
+      .pay-manage button:hover {
+        transform: none;
+        background: #f5f5f5;
+      }
+
+      .pay-manage button::after {
+        display: none;
+      }
+
+      /* ---------- Usage ---------- */
+      /* Same card language as .pay-status, one card per tracked thing
+         (skills, voice). Deliberately just counts + a bar, no cost
+         breakdown — see docs/features/voice.md for where the real spend
+         numbers this is approximating (AQUA_RATE_PER_HOUR_USD etc. in
+         sidebar.js) live. */
+
+      .usage-card {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
+        margin-bottom: 12px;
+      }
+
+      .usage-card-title {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+      }
+
+      .usage-card-meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .usage-bar {
+        margin-top: 10px;
+        height: 6px;
+        border-radius: 999px;
+        background: #eeeeee;
+        overflow: hidden;
+      }
+
+      .usage-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--blue);
+      }
+
       /* ---------- Setup ---------- */
 
       #view-setup {
@@ -410,7 +1020,10 @@
         margin: 0 0 14px;
       }
 
-      #setup-region {
+      /* One control, two mounts: the setup view's and the inlined one on
+         home. Same look, same handlers (see refreshWindowUi). */
+      #setup-region,
+      #home-region {
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -424,14 +1037,91 @@
         box-shadow: 0 0 0 4px var(--halo);
       }
 
-      #setup-region-label {
+      /* The setup view has its own page padding; the home pane doesn't.
+         padding-left matches .field's exactly so this row's tick and
+         separator sit on the same two vertical lines as the ask row's —
+         they read as one column, not two near-misses. */
+      #home-region {
+        margin: 12px 20px 0;
+        padding-left: 14px;
+        flex-shrink: 0;
+        /* The shared rule's gap + space-between would add 8px between the
+           tick and the separator that .field doesn't have, putting the two
+           separators 8px apart. Spacing is applied per-child below
+           instead, so the tick/separator pair is identical in both rows and
+           the label's flex:1 is what pushes the button right. */
+        gap: 0;
+        justify-content: flex-start;
+      }
+
+      #home-region-icon,
+      #home-region-mark {
+        margin-right: 9px;
+      }
+
+      #home-region-select {
+        margin-left: 8px;
+      }
+
+      /* The label is now the app's name rather than a "Capturing: ..."
+         sentence, so it reads as content, not as a caption. */
+      #home-region-label {
+        color: var(--ink);
+        font-weight: 500;
+      }
+
+      #setup-region-label,
+      #home-region-label {
         color: var(--muted);
+        flex: 1;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      #setup-region-select {
+      #setup-region-icon,
+      #home-region-icon,
+      .region-mark {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        border-radius: 5px;
+        object-fit: contain;
+      }
+
+      /* Same three-tier fallback as a chat row's icon (see setFallbackMark),
+         so the picker shows the app's mark even where no icon file exists. */
+      .region-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #f2f2f2;
+        border: 1px solid var(--border);
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      .region-mark.drawn {
+        background: none;
+        border: none;
+      }
+
+      .region-mark[hidden] {
+        display: none;
+      }
+
+      .region-mark svg,
+      .region-mark img {
+        display: block;
+        border-radius: 5px;
+        object-fit: contain;
+      }
+
+      #setup-region-select,
+      #home-region-select {
         background: #ffffff;
         color: var(--ink);
         border: 1px solid rgba(0, 0, 0, 0.15);
@@ -443,94 +1133,31 @@
         flex-shrink: 0;
       }
 
-      #setup-region-select:hover {
+      #setup-region-select:hover,
+      #home-region-select:hover {
         box-shadow: 0 0 0 4px var(--halo-bloom);
       }
 
 
-      /* ---------- Skills list ---------- */
-
-      .skills-body {
-        flex: 1;
-        overflow-y: auto;
-        padding: 14px 16px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-
-      .skill-card {
-        background: #ffffff;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 12px 14px;
-        cursor: pointer;
-        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
-      }
-
-      .skill-card:hover {
-        box-shadow: 0 0 0 4px var(--halo-bloom), 0 8px 24px -18px rgba(0, 0, 0, 0.35);
-      }
-
-      .skill-card h3 {
-        margin: 0 0 4px;
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 14px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-
-      /* app_name from the OS window pick (window_provider.rs) — lets
-         skills eventually group by app (BL-004's "Excel skills" style
-         page); today it's just a display tag. */
-      .skill-app-tag {
-        display: inline-block;
-        background: var(--blue-soft);
-        border: 1px solid var(--blue-border);
-        border-radius: 999px;
-        padding: 1px 7px;
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 10px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        vertical-align: middle;
-        margin-right: 4px;
-        color: var(--blue);
-      }
-
-      .skill-card p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 12px;
-        line-height: 1.4;
-      }
-
-      .skill-card-empty {
-        border-style: dashed;
-        color: var(--muted);
-        cursor: default;
-        text-align: center;
-        font-size: 12px;
-        box-shadow: none;
-      }
-
       .new-goal-row {
         display: flex;
+        align-items: center;
         gap: 8px;
-        padding: 16px 16px 0;
+        padding: 0 20px;
         flex-shrink: 0;
       }
 
+      /* Borderless: the surrounding .field pill draws the frame, so the
+         tick and separator sit inside it. */
       #new-goal-input {
         flex: 1;
-        background: #ffffff;
-        border: 1px solid var(--border);
-        color: var(--ink);
-        border-radius: 999px;
-        padding: 10px 14px;
-        font: inherit;
         min-width: 0;
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--ink);
+        padding: 11px 16px 11px 4px;
+        font: inherit;
       }
 
       #new-goal-input:disabled {
@@ -544,8 +1171,41 @@
         padding: 10px 16px;
       }
 
+      /* Same toggle-button shape as #chat-screenshot-toggle, but a
+         press-to-record/press-to-stop state (.recording) instead of a
+         per-send opt-in — this button drives a MediaRecorder session
+         (sidebar.js), not a one-shot flag. */
+      #new-goal-mic {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        margin: 0 4px 0 6px;
+        background: var(--blue);
+        border: none;
+        color: #ffffff;
+        border-radius: 999px;
+        padding: 0;
+      }
+
+      #new-goal-mic:hover {
+        background: #2f6fdb;
+      }
+
+      #new-goal-mic.recording {
+        background: var(--pink);
+        animation: mic-pulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes mic-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(228, 74, 74, 0.35); }
+        50% { box-shadow: 0 0 0 5px rgba(228, 74, 74, 0); }
+      }
+
       .new-goal-error {
-        padding: 6px 18px 0;
+        padding: 6px 22px 0;
         color: var(--pink);
         font-size: 12px;
         flex-shrink: 0;
@@ -591,6 +1251,28 @@
         border-color: var(--muted);
         background: transparent;
         border-style: dashed;
+      }
+
+      /* Same brand-green-and-tick language as .field-tick.done — green
+         means "the user moved past this step," not "every substep
+         verified" (Verify stays optional; see advanceToNextStep). */
+      .step-dot.completed {
+        border-color: var(--brand);
+        background: var(--brand)
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5' fill='none' stroke='%230A0A0A' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+          center / 9px 9px no-repeat;
+        box-shadow: 0 0 0 3px rgba(182, 255, 62, 0.25);
+      }
+
+      /* Guido stands in for the plain dot on whichever step is currently
+         expanded — the accordion has exactly one "current" step, so
+         there's never more than one mascot on screen. */
+      .step-mascot {
+        width: 20px;
+        height: 20px;
+        margin-top: -4px;
+        margin-left: -4px;
+        flex-shrink: 0;
       }
 
       .step-line {
@@ -647,7 +1329,11 @@
         margin-top: 4px;
       }
 
-      .step-watch-for {
+      /* Only for an actual failure (plan_step errored) — step.brief/
+         watch_for aren't rendered anywhere now (internal-only, see
+         locateContext in sidebar.js), so this is the sole use of the
+         "something's wrong" color left in a locked step's captions. */
+      .step-error {
         color: var(--pink);
       }
 
@@ -658,146 +1344,40 @@
         gap: 10px;
       }
 
-      /* Fake on-screen overlay — placeholder until a real Excel
-         callout is drawn over the target window. */
-      .overlay-ph {
-        cursor: pointer;
-      }
-
-      .overlay-stage {
-        position: relative;
-        aspect-ratio: 16 / 10;
-        background:
-          radial-gradient(ellipse 70% 60% at 50% 40%, #1c1c1f 0%, #0A0A0A 70%);
-        border-radius: 12px;
-        overflow: hidden;
-        border: 1px solid rgba(0, 0, 0, 0.12);
-        box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.45);
-      }
-
-      .overlay-chrome {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        padding: 6px 8px;
-        background: #141414;
-      }
-
-      .overlay-chrome i {
-        width: 7px;
-        height: 7px;
-        border-radius: 50%;
-        display: block;
-      }
-
-      .overlay-chrome i:nth-child(1) { background: #FF5F57; }
-      .overlay-chrome i:nth-child(2) { background: #FEBC2E; }
-      .overlay-chrome i:nth-child(3) { background: #28C840; }
-
-      .overlay-chrome em {
-        margin-left: 6px;
-        color: rgba(255, 255, 255, 0.55);
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 9px;
-        font-style: normal;
-        font-weight: 600;
-        letter-spacing: 0.02em;
-      }
-
-      .overlay-hit {
-        position: absolute;
-        border: 2px solid var(--pink);
-        background: rgba(255, 46, 154, 0.18);
-        border-radius: 4px;
-        box-shadow: 0 0 0 4px rgba(255, 46, 154, 0.12);
-        pointer-events: none;
-      }
-
-      .overlay-ph.compact .overlay-stage {
-        aspect-ratio: 16 / 7;
-      }
-
-      .overlay-ph.compact .overlay-callout-text {
-        font-size: 11px;
-      }
-
-      .overlay-ph:hover .overlay-stage {
-        box-shadow: 0 0 0 4px var(--halo);
-      }
-
-      .overlay-callout {
-        position: absolute;
-        left: 10px;
-        right: 10px;
-        padding: 8px 10px;
-        background: #ffffff;
-        border: 1px solid var(--blue-border);
-        border-radius: 12px;
-        box-shadow: 0 10px 24px -14px rgba(0, 0, 0, 0.5);
-      }
-
-      .overlay-callout.callout-bottom {
-        bottom: 10px;
-      }
-
-      .overlay-callout.callout-top {
-        top: 30px;
-      }
-
-      .overlay-ph.origin-user .overlay-callout {
-        border-color: var(--pink-border);
-        background: #fff7fb;
-      }
-
-      .overlay-callout-kicker {
-        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
-        font-size: 9px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: var(--blue);
-        margin-bottom: 3px;
-      }
-
-      .overlay-ph.origin-user .overlay-callout-kicker {
-        color: var(--pink);
-      }
-
-      .overlay-callout-text {
-        font-size: 12px;
-        line-height: 1.4;
-        color: var(--ink);
-      }
-
-      .overlay-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-top: 8px;
-      }
-
       .substep-row {
         display: flex;
         align-items: flex-start;
-        gap: 6px;
-        padding: 8px 10px;
-        border-radius: 10px;
+        gap: 8px;
+        padding: 9px 11px;
+        border-radius: 12px;
         border: 1px solid var(--border);
         background: #ffffff;
         cursor: pointer;
         font-size: 12px;
+        line-height: 1.45;
+        transition: background 120ms ease, box-shadow 120ms ease;
       }
 
       .substep-row:hover {
-        box-shadow: 0 0 0 4px var(--halo);
+        background: var(--sunken);
       }
 
       .substep-row.origin-ai {
-        border-left: 3px solid var(--blue);
+        background: var(--blue-soft);
+        border-color: var(--blue-border);
+      }
+
+      .substep-row.origin-ai:hover {
+        box-shadow: 0 0 0 3px var(--halo);
       }
 
       .substep-row.origin-user {
-        border-left: 3px solid var(--pink);
+        background: var(--pink-soft);
+        border-color: var(--pink-border);
+      }
+
+      .substep-row.origin-user:hover {
+        box-shadow: 0 0 0 3px var(--pink-soft);
       }
 
       .substep-dot {
@@ -870,7 +1450,6 @@
         padding: 10px 12px;
       }
 
-      .overlay-card,
       .bubble-user-block {
         align-self: stretch;
         display: flex;
@@ -896,25 +1475,26 @@
         font-size: 12px;
       }
 
-      .bubble-target {
-        color: var(--muted);
-        font-size: 9px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        margin-bottom: 3px;
-      }
-
       .bubble-instruction {
         font-size: 12px;
         line-height: 1.45;
       }
 
-      .bubble-show,
-      .bubble-locate {
-        margin-top: 8px;
-        background: #ffffff;
-        border: 1px solid rgba(0, 0, 0, 0.15);
-        color: var(--ink);
+      @keyframes bubble-btn-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 1; }
+      }
+
+      /* "Check my work" — costs an API call and changes what's shown
+         below it, so it's a labeled pill rather than a bare icon. */
+      .bubble-verify-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        margin-top: 7px;
+        background: none;
+        border: 1px solid var(--blue-border);
+        color: var(--blue);
         border-radius: 999px;
         padding: 4px 10px;
         font-family: "Space Grotesk", Inter, system-ui, sans-serif;
@@ -922,53 +1502,110 @@
         font-weight: 600;
       }
 
-      .bubble-locate {
-        margin-left: 4px;
+      .bubble-verify-btn:hover {
+        background: var(--blue-soft);
       }
 
-      .bubble-show:hover,
-      .bubble-locate:hover {
-        box-shadow: 0 0 0 4px var(--halo-bloom);
-      }
-
-      .bubble-locate:disabled {
+      .bubble-verify-btn:disabled {
         opacity: 0.6;
         cursor: default;
       }
 
-      /* Schematic preview: NOT a real window drawn over the target app —
-         a small proportional diagram, rendered entirely inside this
-         panel, of roughly where the element sits. See sidebar.js's
-         renderSchematic — this replaces the old main.js overlay window
-         entirely. */
-      .schematic {
-        position: relative;
-        width: 100%;
-        margin-top: 8px;
-        background: repeating-linear-gradient(
-          45deg,
-          rgba(10, 10, 10, 0.04),
-          rgba(10, 10, 10, 0.04) 6px,
-          transparent 6px,
-          transparent 12px
-        );
-        background-color: #fafafa;
-        border: 1px solid var(--border);
+      .bubble-verify-btn.busy {
+        animation: bubble-btn-pulse 1s ease-in-out infinite;
+      }
+
+      /* Expected-vs-observed result, shown after a verify — the ✓/✗ carries
+         the same red/green split as substep origin colors elsewhere, but
+         the mismatch case leads with "Ask for help" rather than just a
+         bare failure state, since that's the actual next action. */
+      .verify-result {
+        margin-top: 7px;
+        padding: 8px 10px;
         border-radius: 10px;
-        overflow: hidden;
+        font-size: 11px;
+        line-height: 1.45;
       }
 
-      .schematic-box {
-        position: absolute;
-        border: 2px solid var(--pink);
-        background: rgba(255, 46, 154, 0.16);
-        border-radius: 2px;
+      .verify-result.match {
+        background: rgba(40, 200, 130, 0.08);
+        border: 1px solid rgba(40, 200, 130, 0.3);
       }
 
-      .schematic-caption {
-        margin-top: 4px;
-        font-size: 10px;
+      .verify-result.mismatch {
+        background: var(--pink-soft);
+        border: 1px solid var(--pink-border);
+      }
+
+      .verify-result-verdict {
+        font-weight: 600;
+      }
+
+      .verify-result.match .verify-result-verdict {
+        color: #1f9e63;
+      }
+
+      .verify-result.mismatch .verify-result-verdict {
+        color: var(--pink);
+      }
+
+      /* The expected/observed detail behind the verdict — one line of
+         reasoning right underneath it, not two separate labeled rows
+         ahead of it. Muted so the verdict itself still reads first. */
+      .verify-result-reasoning {
+        margin-top: 3px;
         color: var(--muted);
+      }
+
+      .verify-ask-help {
+        display: inline-flex;
+        margin-top: 6px;
+        background: none;
+        border: 1px solid var(--pink-border);
+        color: var(--pink);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 11px;
+        font-weight: 600;
+      }
+
+      .verify-ask-help:hover {
+        background: var(--pink-soft);
+      }
+
+      /* Bottom-of-step advance bar — separate from chat-footer's
+         ask-a-question input, since "I'm done with this step" and "let
+         me ask something" are different intents that shouldn't compete
+         for the same row. */
+      .step-advance-bar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding: 8px 16px;
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+
+      .step-advance-btn {
+        background: linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%);
+        color: #ffffff;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 16px;
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .step-advance-btn:hover {
+        box-shadow: 0 0 0 4px var(--halo-bloom);
+      }
+
+      .step-advance-btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+        box-shadow: none;
       }
 
       .chat-footer {
@@ -997,6 +1634,104 @@
         margin-top: 0;
         padding: 10px 16px;
       }
+
+      /* Per-question opt-in, not a sticky mode — resets after every send
+         (see sidebar.js) so a screenshot is always a deliberate choice
+         for *this* question, never something left on and forgotten. */
+      #chat-screenshot-toggle {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 999px;
+        padding: 0;
+      }
+
+      #chat-screenshot-toggle:hover {
+        color: var(--text);
+        border-color: var(--blue-border);
+      }
+
+      #chat-screenshot-toggle.active {
+        background: var(--blue-soft);
+        border-color: var(--blue-border);
+        color: var(--blue);
+      }
+
+      /* The substep a follow-up will attach to (see focusedSubstepId in
+         sidebar.js) — a click on any AI substep bubble sets this, and
+         "Ask for help" sets it explicitly. Subtle, since it's picked
+         automatically far more often than a user will deliberately look
+         for it. */
+      .bubble-ai.focused {
+        box-shadow: 0 0 0 2px var(--blue-border);
+      }
+
+      /* A reactive substep nested under the AI substep it's responding
+         to, rather than a separate top-level bubble in the list. */
+      .bubble-reply {
+        margin-top: 8px;
+        margin-left: 10px;
+        padding-left: 10px;
+        border-left: 2px solid var(--pink-border);
+      }
+
+      /* Persistent status strip — outside every view, so an in-flight AI
+         call (research/plan/locate/portal pick) stays visible no matter
+         which screen the user is on, instead of the old approach of
+         repurposing one input field's placeholder text (which only
+         showed up if you happened to be looking at that exact input, and
+         gave no signal at all once the input regained focus/was
+         replaced). Hidden entirely when nothing is running. */
+      #status-bar {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 11px;
+        color: var(--muted);
+        background: #1c222c;
+        border-top: 1px solid #2a3241;
+        flex-shrink: 0;
+      }
+
+      #status-bar.active {
+        display: flex;
+      }
+
+      #status-bar.stalled {
+        color: var(--pink);
+      }
+
+      #status-spinner {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        border: 2px solid #3a4354;
+        border-top-color: var(--blue);
+        flex-shrink: 0;
+        animation: status-spin 0.8s linear infinite;
+      }
+
+      #status-bar.stalled #status-spinner {
+        border-top-color: var(--pink);
+        animation-duration: 1.6s;
+      }
+
+      @keyframes status-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      #status-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex: 1;
+      }
     </style>
   </head>
   <body>
@@ -1008,72 +1743,208 @@
           <div class="bar-title" id="bar-title">Guido</div>
           <div class="bar-subtitle" id="bar-subtitle"></div>
         </div>
+        <!-- Tier readout, next to the avatar whenever it's visible —
+             reads "Guest" signed-out, the real plan signed-in — text/color
+             set by applyMembership() in sidebar.js (data-plan drives the
+             color variants above). -->
+        <span class="plan-badge" id="plan-badge" hidden></span>
         <div class="bar-profile-wrap" id="bar-profile-wrap" hidden>
           <button class="bar-profile" id="bar-profile" type="button" aria-label="Profile" aria-expanded="false">G</button>
           <div class="profile-menu" id="profile-menu" role="menu">
             <div class="profile-menu-who">Guest</div>
             <div class="profile-menu-meta">Not signed in</div>
-            <button type="button" id="profile-signin">Sign in with Google</button>
-            <button type="button" id="profile-attach">Use Excel window</button>
+            <button type="button" id="profile-signin">Sign in</button>
+            <button type="button" id="profile-signout" hidden>Sign out</button>
+            <!-- Label ("Upgrade plan" / "Manage subscription") set by
+                 applyMembership() — same #view-pay screen either way, see
+                 openPayView("menu") in sidebar.js. Shown for guests too,
+                 not just signed-in users. -->
+            <button type="button" id="profile-upgrade" hidden>Upgrade plan</button>
+            <!-- Available to guests too — skills usage shows "sign in to
+                 see" if signed out, voice usage is tracked per-device and
+                 works regardless of sign-in (see #view-usage). -->
+            <button type="button" id="profile-usage">Usage</button>
           </div>
         </div>
       </div>
 
-      <!-- Placeholder auth — no validation, just a gate to the rest of
-           the demo. See docs/decisions/0004-cloudflare-infrastructure-proposal.md
-           for the (still-proposed) real account story this stands in for. -->
+      <!-- Email+password login (docs/planning/login-membership-plan.md):
+           a plain form posting straight to the website Worker's Better
+           Auth routes (/api/auth/sign-in/email, /api/auth/sign-up/email)
+           — no browser round trip, since there's no cookie jar or OAuth
+           consent screen to hand off to. The returned bearer token is
+           stashed in the OS keychain (lib.rs). "Continue without signing
+           in" is still the demo bypass — no membership check gates it. -->
       <section id="view-login" class="view active">
         <img class="login-mark" src="assets/guido-icon.png" alt="Guido" />
         <div class="login-wordmark">Guido</div>
-        <div class="login-kicker">Sign in to continue</div>
-        <p>Use the same Google account the website uses.</p>
-        <button class="btn-google" id="login-google" type="button">
-          <span class="btn-google-shine"></span>
-          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-          </svg>
-          Sign in with Google
-        </button>
+        <div class="login-kicker" id="login-mode-label">Sign in to continue</div>
+        <p id="login-error" hidden></p>
+        <form id="login-form">
+          <input class="login-input" id="login-email" type="email" placeholder="Email" autocomplete="email" required />
+          <input class="login-input" id="login-password" type="password" placeholder="Password" autocomplete="current-password" required minlength="8" />
+          <button class="btn-primary" id="login-submit" type="submit">Sign in</button>
+        </form>
+        <button class="login-skip" id="login-toggle-mode" type="button">Need an account? Sign up</button>
         <button class="login-skip" id="login-continue" type="button">Continue without signing in</button>
       </section>
 
       <section id="view-setup" class="view">
-        <p>
+        <!-- Two variants, one per capture backend (see
+             window_provider::backend): click-to-pick where windows can be
+             enumerated, the compositor's own picker on Wayland where they
+             can't. setup.js picks which paragraph to show. -->
+        <p id="setup-blurb-native">
           Optional: pick the application window this skill is about.
           Vision calls only capture that window, and it re-checks the
           window's current size each time — so the overlay never goes
           stale if you resize or move it. Otherwise the full screen is
           used. This is a one-time setup step, not per-question.
         </p>
+        <p id="setup-blurb-portal" hidden>
+          Pick what this skill should watch. Your desktop asks you to
+          choose a screen or a window and to confirm — that prompt is
+          one-time, and every later capture is silent. Sharing a whole
+          screen also lets the highlight be drawn directly on it; with a
+          single window Wayland won't say where it is, so guidance falls
+          back to a diagram. The app you're learning never needs to be
+          fullscreen or focused.
+        </p>
         <div id="setup-region">
-          <span id="setup-region-label">Window: full screen</span>
+          <img id="setup-region-icon" alt="" hidden />
+          <span class="region-mark" id="setup-region-mark" hidden></span>
+          <span id="setup-region-label">Full screen</span>
           <button id="setup-region-select" type="button">Select window</button>
         </div>
         <button class="btn-primary" id="setup-continue" type="button">Continue</button>
       </section>
 
 
+      <!-- Two fixed panes, 40/60. The top one is where a new chat is
+           made and is on the raised white ground; the bottom one is
+           history and is recessed onto grey, so "new" and "old" read as
+           two different surfaces rather than one long column. Each of the
+           two things a new chat needs carries its own tick *inside* its
+           control, behind a hairline separator — there's no separate
+           checklist, because the control itself is the label. -->
       <section id="view-home" class="view">
-        <div class="new-goal-row">
-          <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
-          <button id="new-goal-send" type="button">Ask</button>
-        </div>
-        <div class="new-goal-error" id="new-goal-error"></div>
-        <div class="home-kicker">Apps</div>
-        <button class="app-group" id="excel-chats" type="button">
-          <img src="assets/excel.png" alt="" />
-          <div>
-            <div class="app-group-title">Excel chats</div>
-            <div class="app-group-meta">1 demo · make a chart</div>
+        <div class="home-top">
+          <div class="new-goal-row">
+            <div class="field">
+              <span class="field-tick" id="home-step-goal"></span>
+              <span class="field-sep"></span>
+              <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
+              <button id="new-goal-mic" type="button" title="Speak your goal" aria-pressed="false"></button>
+            </div>
+            <button id="new-goal-send" type="button">Ask</button>
           </div>
-        </button>
+          <div class="new-goal-error" id="new-goal-error"></div>
+
+          <!-- Same control as the setup view's, inlined here so the
+               window is chosen right where the question is asked. Both
+               are driven by selectWindow()/setRegionLabel() in
+               sidebar.js so they can never disagree. -->
+          <div id="home-region">
+            <span class="field-tick" id="home-step-window"></span>
+            <span class="field-sep"></span>
+            <img id="home-region-icon" alt="" hidden />
+            <span class="region-mark" id="home-region-mark" hidden></span>
+            <span id="home-region-label">Full screen</span>
+            <button id="home-region-select" type="button">Select window</button>
+          </div>
+
+          <!-- Shown while research is in flight and, after it lands, while
+               waiting on the window pick. -->
+          <div id="home-research" hidden>
+            <div class="research-orbit"><span></span><span></span><span></span></div>
+            <div class="research-text" id="home-research-text">Researching…</div>
+            <button class="research-skip" id="home-research-skip" type="button" hidden>
+              Use the full screen instead
+            </button>
+          </div>
+        </div>
+
+        <div class="home-bottom">
+          <div class="home-kicker" id="apps-kicker" hidden>Previous chats</div>
+          <!-- Populated by renderAppsList() in sidebar.js, one row per
+               SKILLS entry — real generated skills used to be reachable
+               only in the instant right after asking (openSkill at the end
+               of submitNewGoal); leaving that view orphaned them, since
+               this used to be one hardcoded button that only ever opened
+               the fixture demo skill. Each row shows its app's real icon
+               where one could be extracted (window_icon in lib.rs, keyed
+               by the skill's appName), falling back to a built-in mark for
+               apps we ship fixtures for (Excel) and to a letter avatar
+               otherwise — a Wayland portal pick names the source but
+               exposes no icon (BL-009). -->
+          <div id="apps-list"></div>
+        </div>
       </section>
 
-      <section id="view-skills" class="view">
-        <div class="skills-body" id="skills-list"></div>
+
+      <!-- One app's chats, newest first. Reached from a group button on
+           home; the title bar's back arrow returns there (see viewMeta). -->
+      <section id="view-group" class="view">
+        <div class="group-body" id="group-body"></div>
+      </section>
+
+      <!-- Reached three ways: hitting the free-tier quota on a new ask,
+           a single ask costing more than what's left (docs/business/pricing.md's
+           flat 1-per-skill charge — see openPayView in sidebar.js), or the
+           profile menu's Upgrade/Manage item. Same screen every time; only
+           #pay-reason's text changes. No real billing — Stripe is a later
+           slice (docs/planning/login-membership-plan.md's "Open / deferred"). -->
+      <section id="view-pay" class="view">
+        <div class="pay-body">
+          <div class="pay-status">
+            <div class="pay-status-plan" id="pay-status-plan">Free plan</div>
+            <div class="pay-status-meta" id="pay-status-meta"></div>
+          </div>
+
+          <p class="pay-reason" id="pay-reason" hidden></p>
+
+          <div class="pay-tier">
+            <div class="pay-tier-head">
+              <span class="pay-tier-name">Starter</span>
+              <span class="pay-tier-price">$12/mo</span>
+            </div>
+            <p class="pay-tier-desc">30 new skills a month, then $0.25 per extra skill.</p>
+            <button type="button" class="btn-primary" data-plan-target="starter">Upgrade to Starter</button>
+          </div>
+
+          <div class="pay-tier">
+            <div class="pay-tier-head">
+              <span class="pay-tier-name">Plus</span>
+              <span class="pay-tier-price">$24/mo</span>
+            </div>
+            <p class="pay-tier-desc">Everything in Starter, plus saving skills to replay later.</p>
+            <button type="button" class="btn-primary" data-plan-target="plus">Upgrade to Plus</button>
+          </div>
+
+          <div class="pay-manage">
+            <p>Already on a paid plan? Manage billing, change tier, or cancel.</p>
+            <button type="button" class="btn-primary" id="pay-manage-btn">Manage subscription</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Counts only, no cost breakdown — reads membership (skills,
+           already in memory from /api/me) and the local voice-usage
+           tracker (sidebar.js's loadVoiceUsage/voiceUsageCapSeconds,
+           per-device not per-account, so this works for guests too). -->
+      <section id="view-usage" class="view">
+        <div class="pay-body">
+          <div class="usage-card">
+            <div class="usage-card-title">New skills</div>
+            <div class="usage-card-meta" id="usage-skills-meta"></div>
+            <div class="usage-bar" id="usage-skills-bar" hidden><div class="usage-bar-fill" id="usage-skills-fill"></div></div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-card-title">Voice</div>
+            <div class="usage-card-meta" id="usage-voice-meta"></div>
+            <div class="usage-bar"><div class="usage-bar-fill" id="usage-voice-fill"></div></div>
+          </div>
+        </div>
       </section>
 
       <section id="view-path" class="view">
@@ -1086,11 +1957,20 @@
           The box here is a schematic, not drawn on Excel.
         </div>
         <div class="chat-body" id="chat-body"></div>
+        <div class="step-advance-bar">
+          <button class="step-advance-btn" id="step-advance" type="button">Next step</button>
+        </div>
         <div class="chat-footer">
           <input id="chat-input" type="text" placeholder="Ask a question…" />
+          <button id="chat-screenshot-toggle" type="button" title="Include a screenshot with this question" aria-pressed="false"></button>
           <button id="chat-send" type="button">Send</button>
         </div>
       </section>
+
+      <div id="status-bar">
+        <div id="status-spinner"></div>
+        <div id="status-text"></div>
+      </div>
     </div>
 
     <script type="module" src="sidebar.js"></script>

@@ -274,8 +274,247 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
     last text block was parsed instead of all of them joined.
   - Branch: `claudev/charlie/step-substep-generation`, not yet merged.
 
+- **Real on-screen overlay restored, plus a shared icon pool — built,
+  unverifiable on this machine.** See
+  `docs/decisions/0006-restore-real-on-screen-overlay.md` (supersedes the
+  "no overlay at all" position in `docs/architecture/overview.md`).
+  - **New third window** `overlay` (`src/overlay.html`/`overlay.js`):
+    transparent, always-on-top, and **permanently click-through — set once
+    in Rust at startup, never toggled from JS.** That's the whole safety
+    argument: the original overlay was cut because a *toggled* passthrough
+    got stuck interactive and trapped the screen; with nothing flipping it
+    there's no stuck state to reach. `pointer-events: none` everywhere is a
+    second layer under the OS passthrough.
+  - **Substep UI is now three icon-only actions** (`actionsHtml` in
+    `sidebar.js`), replacing the two emoji text buttons: **eye** toggles
+    the real on-screen overlay (highlight box + the instruction as a
+    positioned text callout over the target app), **target** re-runs
+    `locate_element` live, **note** toggles the old in-panel schematic.
+    Only one substep can be overlaid at a time, and leaving the chat view
+    drops it so a box can't outlive the UI pointing at it.
+  - **The schematic is kept as a first-class peer, not legacy** — it's the
+    required fallback wherever no live window rect exists.
+  - **Coordinate handling — the two real bugs this had to avoid**: (1)
+    nothing is drawn from a cached rect; the stored fraction is
+    re-multiplied by the anchor frame's *current* geometry, re-queried
+    every 200 ms via `refresh_window_rect`, which is what makes a resize or
+    move survivable. Polling rather than native move/resize hooks is
+    deliberate (ADR 0005 deferred those backends; ~5 cheap queries/sec buys
+    the same behavior with no new platform code, costing a frame or two of
+    lag while dragging). (2) physical screen px are converted to CSS px by
+    dividing by the monitor's `scaleFactor` — without it everything is
+    silently offset on any HiDPI/fractional-scaling display but looks
+    perfect at 1.0 scale.
+  - **Refuses to draw for a Wayland portal capture**: the portal hands over
+    frames but never discloses the source's screen position, so there's no
+    correct place for the box — it says so and stops rather than drawing
+    somewhere plausible-looking.
+  - **Answered a question about the fixture coordinates**: they already
+    carried a reference frame (`REF_W`/`REF_H` = 1920×1080 in
+    `fake-skill.js`) and every consumer already divided by it, so no new
+    "screen size parameter" was needed — the two numbers are only a
+    denominator, not a tie to any display. Documented that in place, since
+    it wasn't obvious from reading the fixture.
+  - **New shared icon pool** `src/icons.js` (38 icons) ported from the
+    brainroot project's own pool — hand-drawn, no third-party icon set, so
+    no license question. Ported to plain functions returning SVG *strings*
+    (this app is vanilla JS, not React, and every call site builds markup
+    with template strings). `src/icons.html` is a gallery page that
+    enumerates the pool so the "check before drawing a new one" rule is
+    actually checkable; noted in `CLAUDE.md`'s load map.
+  - **Startup-abort bug found by running it, fixed.** First launch died
+    with `panic in a function that cannot unwind` / `thread caused
+    non-unwinding panic. aborting.` — an abort, not a catchable error.
+    Cause: `set_ignore_cursor_events(true)` on a window that has never been
+    shown. tao implements it as
+    `window.window().unwrap().input_shape_combine_region(..)`
+    (`linux/event_loop.rs`, `WindowRequest::CursorIgnoreEvents`), and
+    `gtk_widget_get_window` returns NULL until the widget is *realized* —
+    so the unwrap panicked inside a glib dispatch callback that can't
+    unwind, which escalates a panic to an immediate abort. `overlay` starts
+    `"visible": false` and has to stay invisible, so it was never realized.
+    Fix: `gtk_window().realize()` first — that creates the GdkWindow
+    without mapping it, so the window stays invisible but the input-shape
+    call has something to act on. Must run *after* `init_layer_shell`,
+    which requires init before realization.
+  - **Verified**: `cargo check` clean; all five JS files parse; all 38
+    icons validated as XML *and* rasterized with `rsvg-convert`, then
+    reviewed as a montage — none malformed, all legible. **App now
+    launches and stays running** (6s+ alive, clean exit on signal), with
+    only the pre-existing, documented-as-harmless GNOME "compositor does
+    not support the Layer Shell protocol" warning.
+  - **Not verified, and not verifiable here**: the overlay itself. This dev
+    box is GNOME/**Wayland**, where a toplevel can't position itself
+    absolutely and no window rect is available — so the one feature this
+    change is about is the one thing that can't run on this machine. Needs
+    an X11 session, a Mac, or a Windows box. The eye's failure path (the
+    "can't draw for a portal capture" notice) is the only branch this
+    machine can actually exercise.
+  - Note: a parallel workstream added the Wayland portal capture path
+    (`portal_capture.py`, `FrameAnchor::Portal`, `capture_backend`) to the
+    same tree while this was in progress; the two integrate but were
+    written separately.
+
+- **Wayland window/screen capture — built and verified live on this
+  machine.** GNOME Wayland gave neither a window list (X11's
+  `_NET_CLIENT_LIST_STACKING` comes back empty — every app here is
+  Wayland-native) nor working screenshots (`grim` needs `wlr-screencopy`,
+  which GNOME/KDE don't implement); both are now routed through the XDG
+  desktop portal instead. See
+  `docs/decisions/0007-portal-capture-backend-wayland.md` (amends ADR
+  0005's "Wayland is out of scope"). `window_provider::backend()` picks
+  `Native` (macOS/Windows/X11, unchanged) vs. `Portal` (Linux/Wayland) at
+  runtime. Confirmed end to end: picked a window and a screen through
+  GNOME's own share dialog, captured silently afterward with no further
+  prompt (`portal_capture.py capture` reusing a stored `restore_token`),
+  and ran a real `locate_element` vision call against a portal-captured
+  frame. Screen-scoped picks let the real overlay draw (portal reports
+  `position` for monitors, not windows); window-scoped picks fall back to
+  the in-panel schematic, which the setup label now states up front.
+  Two environment traps worth knowing, both documented in
+  `docs/workflows/development.md`: a stale `xdg-desktop-portal` process
+  left over from a different compositor routes ScreenCast to the wrong
+  backend and fails with a confusing D-Bus error; PyGObject isn't
+  pip-installable into the project venv, so `portal_capture.py` re-execs
+  into a system Python that has it.
+
+- **Skill persistence to disk — built, compiles, not yet exercised live.**
+  Every skill/step/substep now round-trips through one JSON file
+  (`save_skills_json`/`load_skills_json` in `lib.rs`, `persistSkills`/
+  `loadPersistedSkills` in `sidebar.js`) instead of living only in the
+  in-memory `SKILLS` array for the session — see the new "Storage" section
+  in `docs/features/skills.md`. Rust treats the file as an opaque JSON
+  blob (no typed mirror of the skill shape) and rewrites it whole on every
+  mutation. Loaded once at startup, replacing the `fake-skill.js` fixture
+  data in place if a save exists. A locked step's substep section also now
+  always shows a placeholder ("Substeps not generated yet — click to
+  generate.") instead of only when the step has no `brief` — a real
+  Research step always has one, so the placeholder previously never
+  appeared for real data, only for fixtures.
+  - **Not yet verified live**: the actual goal→steps call this all hangs
+    off is currently blocked by the project's Anthropic API key being out
+    of credit (`research.py` returns "Your credit balance is too low").
+    Add credits, then confirm a fresh goal survives an app restart by
+    checking `~/.local/share/com.charlie.tauri-overlay/skills.json`.
+
+- **Fixed: every Tauri command that shelled out or hit disk was blocking
+  the main event loop.** They were plain synchronous `fn`s, which Tauri
+  runs inline on the invoke-handler thread — the same thread pumping the
+  window's event loop — so a `research.py` call (30-60s) or a portal pick
+  (up to 5 minutes, waiting on the user) froze the whole window; GNOME
+  reported it as "Not Responding," a genuine hang, not a glitch. All of
+  them (`locate_element`, `research_goal`, `plan_step`,
+  `pick_portal_source`, `list_windows`, `refresh_window_rect`,
+  `window_at_point`, `load_skills_json`, `save_skills_json`) are now
+  `async fn` wrapping their blocking body in
+  `tauri::async_runtime::spawn_blocking`. See
+  `docs/workflows/development.md`'s new "Writing a new Tauri command"
+  section — this pattern is required for any future command that isn't
+  instant.
+- **Added a persistent status bar** (`#status-bar` in `sidebar.html`,
+  `withStatus`/`beginStatus` in `sidebar.js`) for the three calls that can
+  genuinely run long: researching a goal, planning a step's substeps, and
+  the portal source pick. Shows an elapsed counter and, past a
+  per-call threshold, an explicit "still going, here's why that's
+  probably OK" message — replacing the old approach of ticking one
+  input field's placeholder text, which was invisible the moment that
+  input lost focus or was replaced by another view.
+
+- **Guide → Do → Verify UI wired** (2026-08-29, later than the backend
+  entry above): a "Check my work" button per AI substep
+  (`verifyHtml`/`data-verify` in `sidebar.js`) calls `verify_substep`,
+  shows expected-vs-observed inline, and offers "Ask for help" on a
+  mismatch (prefills the chat input, hands off to the existing reactive-
+  substep mechanism). A separate "Next step" button (`#step-advance`) is
+  the plain self-confirm advance, deliberately not gated on any verify
+  having run. Fixed in passing: `generateStepSubsteps` never copied
+  `expected_outcome` from `plan_step`'s response onto the stored substep,
+  so the button would have had nothing to check — caught before shipping.
+  Relative/before-after checks ("exposure increased from before") are
+  deliberately out of this pass — Charlie caught that they need a
+  before-state screenshot, which conflicts with Verify's premise that a
+  screenshot only happens on a manual press; split out as
+  [BL-011](docs/BACKLOG.md). **Not yet click-tested in a running app** —
+  no way to drive the GUI from this environment; verified by build/
+  syntax checks and re-reading the wiring only.
+
+- **Reactive follow-up questions now get real AI answers** (2026-08-29,
+  later than the entries above): `sendChatMessage` in `sidebar.js` no
+  longer calls `nextCannedReply()`'s fixture — it calls a new
+  `answer_question` command (`answer.py`/`answer_step.py`, `lib.rs`).
+  No web search (predictable latency/cost per question, unlike
+  Research). Text-only by default; a screenshot only via a separate
+  toggle button next to Send that resets after every send, keeping the
+  "screenshot only on a deliberate, named action" rule intact. Each
+  question is tied to the specific AI substep it's about
+  (`respondingTo`) and renders nested under it instead of appended at
+  the step's end — resolved via whichever substep bubble was last
+  clicked, or the "Ask for help" button on a failed Verify, falling back
+  to the step's last AI substep if neither happened. No cap on questions
+  per step, deliberately, with the cost-model gap flagged (same
+  unbudgeted-cost note as before, now doubly true since this path is
+  real). Verified live via direct `answer_step.py` calls (text-only and
+  with-screenshot, both real API calls) — **not yet click-tested in the
+  running app itself**, same limitation as the Verify UI above.
+
 ## What's next
 
+- **Guide → Do → Verify — backend built and tested, no UI yet.**
+  Deliberately prioritized over on-screen highlight/callout work per
+  Charlie's direction: checking the user's work is more central to the
+  product than where a box is drawn, and turned out to be the cheaper
+  build too. `plan_step` now generates an `expected_outcome` per substep;
+  a new `verify_substep` call (`verify.py`/`verify_step.py`, `lib.rs`)
+  checks a screenshot against it and returns `{matches, observed}`.
+  Verified live with real API calls, including a value-reading test (did
+  the model correctly read an exact clock time off a screenshot and
+  match/reject against two different expected values — yes, both times).
+  Design: manual confirm per substep, AI verify optional at that point
+  (not automatic/polling — same trigger model as today's locate button);
+  a mismatch shows expected-vs-observed and offers "ask for help," which
+  becomes a normal reactive (pink) substep rather than a dead end;
+  advancing to the next top-level step is gated on the current one being
+  confirmed, and the *next* step's `plan_step` call reuses the last
+  verify's screenshot as vision input instead of capturing separately.
+  Full design: `docs/planning/vision-driven-substep-loop.md`. Not wired
+  to the UI yet — see the collision note below.
+- **Note: a second Claude Code session (`tutoria-b4`) is concurrently
+  editing `sidebar.js`/`sidebar.html`/`icons.js` tonight** — a two-step
+  home gate (goal + window pick, either order), a research-progress
+  ticker, app icons for picked windows, deletable chats (landed in
+  `7bb1555`, with more uncommitted on top as of this entry). This session
+  deliberately avoided those three files after catching a live collision
+  mid-edit (briefly saw an undefined `refreshHomeSteps()` call). The
+  `currentCaptureScope()`/`deriveScopeFromGlobals()` split from the
+  per-skill-capture-scope work below did land in `sidebar.js` and appears
+  compatible with what `tutoria-b4` independently converged on, but
+  wasn't coordinated — worth a deliberate re-read of `sidebar.js` before
+  either session's next edit there, not just another silent merge.
+- **Per-skill capture scope — paused mid-build**, superseded in priority
+  by Verify per the collision above. `currentCaptureScope()` now prefers
+  `currentSkill?.captureScope` over the global pick if a skill has its
+  own (falls back to the global for older skills/pre-goal-creation);
+  nothing yet sets `captureScope` on a skill, and the picker hasn't moved
+  into goal creation. See the planning doc's "Suggested build order."
+- **Add credits to the project's Anthropic API key** — `research.py`
+  (goal→steps) and `plan_step.py` (per-step substep generation) both fail
+  with "Your credit balance is too low to access the Anthropic API."
+  Blocks live end-to-end testing of both the chat-to-steps flow and the
+  new disk persistence (below) until resolved.
+  **Resolved** (2026-08-29, later the same night) — both now succeed
+  live; verified with multiple real goals and a real substep-planning
+  call.
+- **Verify skill persistence end-to-end** once credits are restored: ask a
+  real goal, confirm `~/.local/share/com.charlie.tauri-overlay/skills.json`
+  is written, restart the app, confirm the skill reloads instead of
+  falling back to the fixture demo data.
+- **Verify the real on-screen overlay on X11, macOS, or Windows** — it
+  cannot run on this GNOME/Wayland dev box at all (see ADR 0006). Check in
+  particular: that the box lands on the right element, that dragging the
+  target window moves it (the 200 ms poll), and that it's genuinely
+  click-through — try clicking *through* the highlight box into the app
+  underneath. A HiDPI/fractional-scaling display is the case most likely
+  to expose a coordinate bug.
 - **Verify window-pick capture on a real macOS and Windows machine** —
   `window_provider.rs`'s backends for both are unverified (this dev
   environment can't build either target). Also needs a real display to
@@ -333,13 +572,95 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   app from `claudev/pauline/landing-page` lives in `website/` (`npm run
   dev`); Worker is `website/worker/` and serves `dist/` on deploy.
   Waitlist + `/privacy.html` are on the landing footer.
-- **Google login Worker + quotas (Quentin) — Worker half started.**
-  Branch `claudev/quentin/google-login`: D1 migration
-  `website/migrations/0002_create_auth_and_quotas.sql`, privacy page at
-  `/privacy.html`, routes `/auth/google/start`,
-  `/auth/google/callback`, `/api/me` (quota fields),
-  `POST /api/skills/start` (hard-caps `free` at 5 and
-  `starter`/`plus` at 30/month). Still needed: Google Cloud OAuth
-  client + `wrangler secret put GOOGLE_CLIENT_SECRET`, remote migrate,
-  and Charlie pairing on the Tauri keyring/loopback half. See
-  `docs/planning/login-membership-plan.md`.
+- **Login + quota paywall — built end to end, on `claudev/charlie/desktop-google-login`.**
+  Login switched from the originally-planned Google OAuth to Better Auth
+  email+password (`website/worker/better-auth.ts`) — see
+  [ADR 0008](docs/decisions/0008-better-auth-email-password.md). D1
+  migration `website/migrations/0002_create_auth_and_quotas.sql`, privacy
+  page at `/privacy.html`, `GET /api/me` and `POST /api/skills/start`
+  (`free` hard-capped at 1 lifetime skill, `starter`/`plus` at 30/month,
+  `owner` unlimited via the `OWNER_EMAILS` allowlist). Desktop side is
+  also done: `sidebar.js` calls `/api/skills/start` after Research
+  succeeds and gates save on `can_save_skills`; session tokens are stored
+  via `keyring` (`store_session_token`/`get_session_token`/
+  `clear_session_token` in `src-tauri/src/lib.rs`). Verified 2026-08-30:
+  `cargo check` clean, website `lint`/`build`/`wrangler deploy --dry-run`
+  all clean. Still needed before this is production-ready (not before
+  the demo): `wrangler secret put BETTER_AUTH_SECRET`, a remote D1
+  migrate, and BL-015 (email verification). See
+  [features/auth.md](docs/features/auth.md).
+- **App icons for picked windows — built, unverifiable on this machine.**
+  `window_icon` (`src-tauri/src/lib.rs`) extracts the picked window's own
+  `_NET_WM_ICON` on Linux X11, encodes it to PNG once, and caches it per
+  *app* under `<app_data>/app-icons/<slug>.png` — keyed by app name, not
+  window, so a saved chat still shows its icon after the window is gone
+  (the cache is read with no window id at all). Shown on the setup label
+  and on every chat row. The decode has unit tests but has never run on
+  real pixels: this is a GNOME Wayland machine, Mutter publishes no
+  `_NET_CLIENT_LIST`, and a walk of the entire X11 tree finds zero
+  windows carrying an icon even with `GDK_BACKEND=x11`. Needs an X11
+  session to confirm; macOS/Windows backends are still unwritten and
+  return "no icon". See `BL-004`.
+- **App identity is entirely missing on Wayland — new `BL-009`.** Not a
+  regression, just now measured: on the portal backend a chat saves
+  `appName: null`, so Research gets no app to scope to and no icon can be
+  looked up. The portal only ever reports `"window (1920x1080)"`. BL-004
+  assumed manual entry as the fallback here; it was never built.
+- **Chats can be deleted.** Trash button per row in the chat list
+  (`renderAppsList`/`deleteSkill` in `sidebar.js`); deleting the chat
+  currently open returns to home rather than leaving a view onto a
+  deleted skill. With zero chats the whole section, heading included, is
+  hidden. Not yet exercised in the running app.
+- **Home view reworked into a fixed 40/60 split.** Top pane: the ask box
+  and the window picker — the same control as the setup view's, now
+  mounted in both places and driven by one set of handlers. Each carries
+  its own tick *inside* the control, behind a hairline separator, rather
+  than on a separate checklist: the control is the label. The two panes
+  are two surfaces rather than two sections — the top is raised (white,
+  brand grid) and is where a new chat is made, the bottom is recessed
+  (grey, flat, inset shadow) and holds `Previous chats` (was `Apps`),
+  whose list scrolls under a pinned heading with its own scrollbar. The
+  panel is wider (420px) to fit the inline ticks. Research runs the moment a goal is
+  submitted rather than waiting on a window pick, and shows an animated
+  loader with rotating copy in place of a static line; the step list
+  opens once both ticks land, fading in. Whichever of the two happens
+  last decides the timing: if the window is picked after research
+  finished, the open is held 1s so the tick it just earned is visible.
+  A new chat is persisted and listed under `Previous chats` before the
+  step list opens, so it survives never being opened.
+- **Chats are grouped by app, one page per group.** Home lists one button
+  per app — icon, "<App> chats", the newest chat's title, a count — and
+  opening one goes to that app's own page (the new `group` view), which
+  lists its chats under the group's shared icon with a back arrow to home.
+  Every group expanded on one page was fine at two apps and stops being
+  fine at ten. Ranked by recency twice over — chats newest-first inside a
+  group, groups by their own newest chat — off a new `createdAt` on each
+  skill (chats saved before it existed fall back to save order). Group
+  keys normalise case, punctuation and the vendor word, so `Excel` and
+  `Microsoft Excel` are one group rather than two; the fixtures
+  deliberately use both names to exercise that. Where no icon can be
+  extracted or resolved, a shipped logo stands in (`assets/excel.png`, via
+  `APP_MARK_IMAGES` in `sidebar.js`), then the app's initial.
+- **The window picker shows the app, not a sentence.** Once identified it
+  reads as an icon plus the app's name alone; `Capturing: …` / `Window: …`
+  are gone, and with them the "on-screen box vs diagram only" note that
+  used to trail the portal label. Verified by rendering `sidebar.html` in
+  WebKitGTK (the same engine Tauri uses) with a stubbed `__TAURI__`
+  bridge, across the idle / researching / waiting-on-pick states; the
+  running app boots clean but couldn't be screenshotted (grim needs
+  wlr-screencopy, this is Mutter).
+- **App identity now works on Wayland — `BL-009` largely closed.** One
+  vision call reads the app's name off the captured frame right after a
+  pick (`spikes/vision-detect/identify_app.py`, the `identify_app`
+  command in `lib.rs`), which is the only source of identity the portal
+  leaves available. That name scopes Research, labels the picker, and is
+  backfilled onto a chat created before the pick landed. The icon then
+  comes from a freedesktop desktop-entry + icon-theme lookup keyed on the
+  name alone (`window_provider::icon_for_app_name`), so it needs no live
+  window — which is what makes it work both on Wayland and for a chat
+  whose window is long gone; `window_icon` falls back to it whenever
+  extraction from a window isn't possible. Verified in pieces, not end to
+  end: the prompt against `samples/vscode-welcome.png` (answered "Visual
+  Studio Code" / "Welcome"), the icon lookup by unit test against this
+  machine's real icon themes (Firefox, VS Code, Nautilus, GNOME Settings
+  all resolve). **Not yet run through a real portal pick.**

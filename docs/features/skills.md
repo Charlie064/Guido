@@ -7,21 +7,25 @@
   flagged undecided in [STATUS.md](../../STATUS.md).
 - **What's built**: the UI shape (steps/substeps, blue-vs-pink origin,
   expandable path, per-step chat) in `spikes/tauri-overlay/src/sidebar.js`,
-  originally driven by fixture data in `src/fake-skill.js`. Demo
-  substeps render as a fake overlay — a mini Excel window with a
-  highlight box and a step textbox — placeholder for the real
-  on-screen callout (see Visual overlay in
-  [architecture/overview.md](../architecture/overview.md)). Also
+  originally driven by fixture data in `src/fake-skill.js`. A substep now
+  draws a real highlight box on screen (not just a fake in-panel diagram)
+  — see Visual overlay in
+  [architecture/overview.md](../architecture/overview.md) and
+  [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md). Also
   built: the Research call (`spikes/vision-detect/research.py`,
-  invoked via the `research_goal` Tauri command in `lib.rs`); and
-  the first real per-step AI-planned substep generation (`plan_step`
-  command → `spikes/vision-detect/plan_step.py`, invoked lazily from
-  `generateStepSubsteps` in `sidebar.js` — see "Per-step loop" below).
-  **What isn't**: reactive user-question substeps, user-editable path,
-  and any persistence — a chat's substeps still live only in memory for
-  that session. App grouping (BL-004) is **faked** on the home screen:
-  one “Excel chats” row opens the fixture skill; detection/icons from
-  the OS are not wired.
+  invoked via the `research_goal` Tauri command in `lib.rs`); the first
+  real per-step AI-planned substep generation (`plan_step` command →
+  `spikes/vision-detect/plan_step.py`, invoked lazily from
+  `generateStepSubsteps` in `sidebar.js` — see "Per-step loop" below);
+  and, as of this pass, disk persistence of the whole skills/steps/
+  substeps tree — see "Storage" below.
+  **What isn't**: reactive user-question substeps are stored (persisted
+  alongside AI substeps, same as any other substep) but not yet
+  distinguished for quality signal, and the path itself isn't
+  user-editable. App grouping (BL-004) is also still **faked** on the
+  home screen: one “Excel chats” row opens the fixture skill;
+  detection/icons from the OS are not wired. The Verify step (below,
+  under "Per-step loop") has its backend built and tested but no UI yet.
 - Implements the per-step mechanics of the
   Goal → Research → See → Guide → Do → Verify → Learn loop from
   [philosophy/vision.md](../philosophy/vision.md), inside the four-layer
@@ -55,11 +59,23 @@
    knows the goal — so its output is deliberately limited to goal-scoped
    facts (true regardless of what the user's screen looks like when they
    get there), not screen-specific detail like exact click targets.
-   Produces an ordered list of coarse top-level steps, each with:
+   Produces a `title` for the whole chat — a short, AI-written
+   description of the goal, the same idea as ChatGPT auto-titling a
+   conversation (2026-08-29) — plus an ordered list of coarse top-level
+   steps, each with:
    - `title` — short step name
    - `brief` — one sentence on what the step accomplishes and why
    - `watch_for` — a UI-version caveat or pitfall worth flagging up
      front (e.g. "the ribbon may be collapsed"), or `""` if none
+
+   The chat-level `title` is what's shown everywhere a skill is listed
+   (the home screen's chat rows, the path view's title bar) — the raw
+   goal text (`skill.goal`) is often typed as a run-on question and
+   doesn't read well as a label, so it stays around as the subtitle/AI
+   input instead. Generated in this same call, not a separate one — the
+   model already has the goal in context while writing `steps`, so a
+   second "summarize this" call would just re-derive a fact this one
+   already has.
 
    Uses Claude's own `web_search_20260209` server tool rather than a
    separate search provider — this is what fills the "Web research"
@@ -110,12 +126,82 @@ When the user reaches a top-level step:
   question becomes a **reactive substep**, created only because the user
   asked — the AI never generates these speculatively. These render in
   **pink**.
+  - **Built** (2026-08-29): `sendChatMessage` in `sidebar.js` now calls a
+    real `answer_question` command (`answer.py`/`answer_step.py`,
+    `lib.rs`) instead of `nextCannedReply()`'s fixture. No web search —
+    unlike Research, a question is answered from context already
+    gathered, not something to look up fresh, which keeps every
+    question's latency/cost predictable.
+  - **Tied to the specific AI substep it's asked from**, not appended
+    free-floating at the end of the step's substep list the way it used
+    to render. Carries a `respondingTo: subId` field
+    (`resolveRespondingTo`/`renderChatParts` in `sidebar.js`) and renders
+    nested directly under that substep (`.bubble-reply`), matching the
+    "Ask for help" button on a failed Verify, which explicitly sets it.
+    Which substep is targeted when a question is just typed (not via Ask
+    for help): whichever bubble was last clicked (`focusedSubstepId`,
+    highlighted with a blue ring), falling back to the last AI substep in
+    the step if none was ever clicked. A reply with no resolvable target
+    (a legacy substep predating this, or one whose target substep is
+    gone) falls back to rendering at the end, same as the old behavior.
+  - **No cap on how many can be asked per step**, deliberately — a
+    genuinely stuck user may need several in a row, and a hard wall on
+    the *Guide* half of the product reads as punitive. This is a
+    deliberate no-decision, not an oversight: there is currently no
+    quota/cost model at all for reactive Q&A now that it's answering for
+    real (`business/pricing.md` only budgets *locates*, 5/step — each
+    real answer call is a new, unbudgeted cost line). Revisit once real
+    usage data exists on how many questions people actually ask.
+  - **Text-only by default; a screenshot only via a separate toggle
+    button** (`#chat-screenshot-toggle`, a camera icon next to Send) —
+    not automatic just because a message was sent. The toggle resets
+    after every send, so including a screenshot is a deliberate choice
+    for *that* question, never a lingering mode left on and forgotten.
+    Keeps the rule established for Verify/plan_step (a screenshot only
+    ever happens on a manual, named action) intact for this path too.
+  - **Never reshapes the plan.** A follow-up's answer has no side effect
+    on the substeps still ahead in the step — `plan_step`'s output for
+    that step is never revised or added to in response to a Q&A. Keeps
+    per-step planning one clean, deterministic call rather than an
+    open-ended loop that reconsiders its own plan mid-step.
+  - Not yet click-tested in a running app — no way to drive the GUI from
+    this environment; verified by real CLI calls to `answer_step.py`
+    (text-only and with-screenshot, both live) and by re-reading the
+    wiring, not an actual click-through.
 - A screenshot is **manually triggered** by the user pressing a button
   when they want the AI to look at the current screen — not fired
   automatically per substep.
-- Advancing to the next top-level step is **manual** — the user decides
-  they're done, not an automatic screen-diff/verify (that's roadmap P1
-  item 12, not built here).
+- Advancing to the next top-level step is **manual, via a "Next step"
+  button** (`#step-advance`, bottom of the chat view) — the user decides
+  they're done. Deliberately not gated on anything having been AI-verified
+  first: pressing it always advances, and if no substep in the step was
+  ever verified, the next step's `plan_step` call just stays text-only
+  (no screenshot is derived from nowhere to force it) — see "Per-step
+  loop," below.
+- **Guide → Do → Verify, built** (2026-08-29): each AI substep with an
+  `expected_outcome` (see "Per-step loop") gets its own **"Check my
+  work"** button (`verifyHtml`/`data-verify` in `sidebar.js`) — a manual,
+  per-substep AI check, not automatic/polling. It calls `verify_substep`
+  (`verify.py`/`verify_step.py`, `lib.rs`), which screenshots the current
+  capture scope and asks whether it matches `expected_outcome`, returning
+  `{matches, observed}`. Both are shown — expected side by side with
+  observed — so a wrong-but-specific answer is more useful for fixing the
+  problem than a bare pass/fail. On a mismatch, an **"Ask for help"**
+  button prefills the chat input with the observed state as a starting
+  question, ties it to the failed substep (`respondingTo`, see above),
+  and — as of the same pass that made reactive substeps real — gets a
+  genuine AI answer, not a fixture. This replaces trusting a "Done"
+  click with the actual Guide → Do →
+  Verify step named in
+  [philosophy/vision.md](../philosophy/vision.md), and was deliberately
+  prioritized over on-screen highlight/callout polish per Charlie's
+  direction. **Absolute checks only** ("Exposure ≈ +0.5") — a relative/
+  before-after check ("exposure increased from before") would need a
+  screenshot at the substep's *start*, which conflicts with Verify's
+  premise that a screenshot only happens on this button press; deferred
+  whole to [BL-011](../BACKLOG.md) rather than resolved here. See
+  [planning/vision-driven-substep-loop.md](../planning/vision-driven-substep-loop.md)
+  for the full design history.
 - The resulting blue/pink sequence is **user-editable**: steps judged
   unnecessary can be deleted before/after the fact. This pruning is what
   turns a raw Q&A trace into a clean, reusable skill — the step-by-step
@@ -165,6 +251,35 @@ window's *current* rect instead of going stale. Not built yet — refresh
   signal — surface it as "navigate to \<X\> first" (often already implied
   by the substep's own `instruction_text`), rather than silently drawing a
   stale or wrong box.
+
+## Storage
+
+Every skill a user has researched — its steps, and any substeps reached
+so far — is written to one JSON file in this app's OS-managed data
+directory: `save_skills_json`/`load_skills_json` in
+`spikes/tauri-overlay/src-tauri/src/lib.rs`, called from `persistSkills`/
+`loadPersistedSkills` in `sidebar.js`. On this Linux build (identifier
+`com.charlie.tauri-overlay`) that resolves to
+`~/.local/share/com.charlie.tauri-overlay/skills.json`; open it directly
+to inspect what's been saved, or to clear it and start fresh.
+
+- **Rust doesn't know the shape.** `save_skills_json`/`load_skills_json`
+  take/return an opaque JSON string — they read and write bytes, nothing
+  more. The skill/step/substep shape (this doc, `last_known_bbox`'s
+  `Box2D`/`FrameAnchor` fields, per-origin substep fields) lives entirely
+  in `sidebar.js`/`fake-skill.js` and is still actively changing there; a
+  second, typed copy on the Rust side would just be a second place to
+  update every time the UI's data model does.
+- **Whole-file rewrite on every mutation**, not incremental: a new goal
+  researched, a step's substeps generated, or a chat follow-up asked all
+  trigger a full `JSON.stringify(SKILLS)` write. The file is small enough
+  (a working set of skills, not a database) that this is simpler than
+  reasoning about partial writes, at the cost of a write per interaction.
+- **Loaded once at startup**, replacing the fixture demo data
+  (`fake-skill.js`) in place if a save exists; the fixture stays as the
+  first-run experience otherwise, same as before persistence existed.
+- No screenshots are written here either — same scope limit as
+  `last_known_bbox` above, for the same reason.
 
 ## Open / deferred
 

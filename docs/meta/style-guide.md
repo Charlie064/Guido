@@ -54,6 +54,6 @@ are for judgment (why, how-to-reason); generated docs are for facts
 ## Graduating a guide
 
 When an implementation guide's work ships: move durable behavior into a
-`features/` doc, capture decisions as ADRs, and move the guide to `_archive/`
-with a **SUPERSEDED** banner. Never let a stale plan masquerade as current
+`features/` doc, capture decisions as ADRs, and delete the guide. Git history
+keeps it if anyone ever needs it. Never let a stale plan masquerade as current
 truth.

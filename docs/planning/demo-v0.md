@@ -7,7 +7,7 @@
   reliably locate a specific UI element on screen — before investing in
   anything else.
 - A plan, not a source of truth — graduates into `features/` docs + ADRs as
-  pieces get built, then gets archived per
+  pieces get built, then gets deleted per
   [meta/style-guide.md](../meta/style-guide.md). Check
   [STATUS.md](../../STATUS.md) for current status.
 

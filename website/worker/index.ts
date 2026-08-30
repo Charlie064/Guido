@@ -6,11 +6,10 @@ import {
   includedFor,
   json,
   membershipFromBearer,
-  parseLoopback,
-  randomUrlToken,
+  monthlyVoiceSecondsUsed,
   remainingFor,
-  sha256Base64Url,
 } from "./auth";
+import { createAuth } from "./better-auth";
 import {
   accessEmailLabel,
   csvResponse,
@@ -20,13 +19,20 @@ import {
   waitlistCsv,
   waitlistHtml,
 } from "./internal-waitlist";
+import { handleVoiceTranscribe, MONTHLY_CAP_SECONDS } from "./voice";
 
 export type { Env };
 
-function loginRedirect(origin: string, error: string): Response {
-  const dest = new URL("/login", origin);
-  dest.searchParams.set("error", error);
-  return Response.redirect(dest.toString(), 302);
+function bytesToBase64Url(buf: Uint8Array): string {
+  let binary = "";
+  for (const byte of buf) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomUrlToken(byteCount = 32): string {
+  const buf = new Uint8Array(byteCount);
+  crypto.getRandomValues(buf);
+  return bytesToBase64Url(buf);
 }
 
 export default {
@@ -46,17 +52,52 @@ export default {
       const country = request.cf?.country ?? "";
       return json({ country });
     }
-    if (url.pathname === "/auth/google/start" && request.method === "GET") {
-      return handleGoogleStart(env, url);
+
+    // Better Auth signs/encrypts session tokens with this secret — refuse
+    // to run any auth-touching route rather than let Better Auth silently
+    // fall back to its publicly-known default (see the comment on
+    // `secret` in worker/better-auth.ts for why its own production check
+    // doesn't catch this on Workers).
+    if (
+      url.pathname.startsWith("/api/auth/") ||
+      url.pathname === "/api/me" ||
+      url.pathname === "/api/skills/start" ||
+      url.pathname === "/api/voice/transcribe"
+    ) {
+      if (!env.BETTER_AUTH_SECRET) {
+        return json({ error: "Auth is not configured on this Worker" }, 500);
+      }
     }
-    if (url.pathname === "/auth/google/callback" && request.method === "GET") {
-      return handleGoogleCallback(env, url);
+
+    // Better Auth owns everything under /api/auth/* — sign-up, sign-in,
+    // sign-out, session refresh. See worker/better-auth.ts.
+    if (url.pathname.startsWith("/api/auth/")) {
+      const auth = createAuth(env, url.origin);
+      const authRes = await auth.handler(request);
+      // Better Auth's own response carries no CORS headers — fine for a
+      // same-origin browser tab, but the desktop app's webview is a
+      // cross-origin caller (tauri://localhost) and its fetch() throws a
+      // generic "Load failed" without these, even though the request
+      // itself succeeded server-side (curl-only testing won't catch
+      // this, since curl doesn't enforce CORS). trustedOrigins already
+      // gates which origins Better Auth accepts; this just lets the
+      // browser hand the response back to that caller.
+      const headers = new Headers(authRes.headers);
+      for (const [key, value] of Object.entries(corsHeaders())) {
+        headers.set(key, value);
+      }
+      return new Response(authRes.body, { status: authRes.status, headers });
     }
+
     if (url.pathname === "/api/me" && request.method === "GET") {
       return handleMe(request, env);
     }
     if (url.pathname === "/api/skills/start" && request.method === "POST") {
       return handleSkillStart(request, env);
+    }
+    if (url.pathname === "/api/voice/transcribe" && request.method === "POST") {
+      const auth = createAuth(env, url.origin);
+      return handleVoiceTranscribe(request, env, auth);
     }
 
     // Internal waitlist admin. Localhost is open. On a public hostname
@@ -214,142 +255,17 @@ async function handleWaitlistSignup(request: Request, env: Env): Promise<Respons
   }
 }
 
-async function handleGoogleStart(env: Env, url: URL): Promise<Response> {
-  const clientId = env.GOOGLE_CLIENT_ID;
-  if (!clientId) {
-    return loginRedirect(url.origin, "not_configured");
-  }
-
-  const loopback = parseLoopback(url.searchParams.get("loopback"));
-  if (!loopback) {
-    return loginRedirect(url.origin, "desktop_only");
-  }
-
-  const state = randomUrlToken(24);
-  const codeVerifier = randomUrlToken(32);
-  const codeChallenge = await sha256Base64Url(codeVerifier);
-
-  await env.DB.prepare(
-    "INSERT INTO oauth_pending (state, code_verifier, loopback_url, expires_at) VALUES (?, ?, ?, datetime('now', '+10 minutes'))",
-  )
-    .bind(state, codeVerifier, loopback)
-    .run();
-
-  const redirectUri = `${url.origin}/auth/google/callback`;
-  const google = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-  google.searchParams.set("client_id", clientId);
-  google.searchParams.set("redirect_uri", redirectUri);
-  google.searchParams.set("response_type", "code");
-  google.searchParams.set("scope", "openid email");
-  google.searchParams.set("state", state);
-  google.searchParams.set("code_challenge", codeChallenge);
-  google.searchParams.set("code_challenge_method", "S256");
-
-  return Response.redirect(google.toString(), 302);
-}
-
-async function handleGoogleCallback(env: Env, url: URL): Promise<Response> {
-  const clientId = env.GOOGLE_CLIENT_ID;
-  const clientSecret = env.GOOGLE_CLIENT_SECRET;
-  if (!clientId || !clientSecret) {
-    return loginRedirect(url.origin, "not_configured");
-  }
-
-  const error = url.searchParams.get("error");
-  if (error) {
-    return loginRedirect(url.origin, "google");
-  }
-
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  if (!code || !state) {
-    return loginRedirect(url.origin, "missing_code");
-  }
-
-  const pending = await env.DB.prepare(
-    "SELECT code_verifier, loopback_url FROM oauth_pending WHERE state = ? AND expires_at > datetime('now')",
-  )
-    .bind(state)
-    .first<{ code_verifier: string; loopback_url: string }>();
-
-  if (!pending) {
-    return loginRedirect(url.origin, "expired");
-  }
-
-  await env.DB.prepare("DELETE FROM oauth_pending WHERE state = ?").bind(state).run();
-
-  const redirectUri = `${url.origin}/auth/google/callback`;
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId,
-      client_secret: clientSecret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
-      code_verifier: pending.code_verifier,
-    }),
-  });
-
-  if (!tokenRes.ok) {
-    return loginRedirect(url.origin, "token");
-  }
-
-  const tokens = await tokenRes.json<{ access_token?: string }>();
-  if (!tokens.access_token) {
-    return loginRedirect(url.origin, "token");
-  }
-
-  const userRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-    headers: { Authorization: `Bearer ${tokens.access_token}` },
-  });
-  if (!userRes.ok) {
-    return loginRedirect(url.origin, "profile");
-  }
-
-  const profile = await userRes.json<{ sub?: string; email?: string }>();
-  if (!profile.sub || !profile.email) {
-    return loginRedirect(url.origin, "profile");
-  }
-
-  const existing = await env.DB.prepare("SELECT id FROM users WHERE google_sub = ?")
-    .bind(profile.sub)
-    .first<{ id: number }>();
-
-  let userId: number;
-  if (existing) {
-    userId = existing.id;
-    await env.DB.prepare("UPDATE users SET email = ? WHERE id = ?").bind(profile.email, userId).run();
-  } else {
-    const inserted = await env.DB.prepare("INSERT INTO users (google_sub, email) VALUES (?, ?)")
-      .bind(profile.sub, profile.email)
-      .run();
-    userId = Number(inserted.meta.last_row_id);
-    await env.DB.prepare("INSERT INTO memberships (user_id, plan, status) VALUES (?, 'free', 'active')")
-      .bind(userId)
-      .run();
-  }
-
-  const sessionToken = randomUrlToken(32);
-  await env.DB.prepare(
-    "INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, datetime('now', '+30 days'))",
-  )
-    .bind(sessionToken, userId)
-    .run();
-
-  const dest = new URL(pending.loopback_url);
-  dest.searchParams.set("token", sessionToken);
-  return Response.redirect(dest.toString(), 302);
-}
-
 async function handleMe(request: Request, env: Env): Promise<Response> {
-  const member = await membershipFromBearer(request, env.DB);
+  const auth = createAuth(env, new URL(request.url).origin);
+  const member = await membershipFromBearer(auth, request, env.DB);
   if (!member) {
     return json({ error: "Unauthorized" }, 401);
   }
 
   const used = await countSkillRuns(env.DB, member.user_id, member.plan);
+  // Same flat cap for every plan (voice.ts) — not a per-plan allowance
+  // like skills, so no includedFor-style lookup needed here.
+  const voiceSecondsUsed = await monthlyVoiceSecondsUsed(env.DB, member.user_id);
   return json({
     email: member.email,
     plan: member.plan,
@@ -357,6 +273,8 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     skills_remaining: remainingFor(member.plan, used),
     skills_included: includedFor(member.plan),
     can_save_skills: canSaveSkills(member.plan),
+    voice_seconds_used: voiceSecondsUsed,
+    voice_seconds_included: MONTHLY_CAP_SECONDS,
   });
 }
 
@@ -391,18 +309,33 @@ async function handleInternalWaitlistExport(env: Env): Promise<Response> {
 }
 
 async function handleSkillStart(request: Request, env: Env): Promise<Response> {
-  const member = await membershipFromBearer(request, env.DB);
+  const auth = createAuth(env, new URL(request.url).origin);
+  const member = await membershipFromBearer(auth, request, env.DB);
   if (!member) {
     return json({ error: "Unauthorized" }, 401);
   }
 
+  // Defaults to 1 (pricing.md's flat per-skill charge) — see the `cost`
+  // comment on skill_runs (worker/db/schema.ts). Clamped to a sane range
+  // so a malformed/malicious body can't zero out or blow up a user's
+  // quota in one call.
+  let cost = 1;
+  try {
+    const body = await request.json<{ cost?: number }>();
+    if (typeof body.cost === "number" && Number.isInteger(body.cost) && body.cost > 0) {
+      cost = Math.min(body.cost, 1000);
+    }
+  } catch {
+    // No body / not JSON — fine, cost stays 1.
+  }
+
   const used = await countSkillRuns(env.DB, member.user_id, member.plan);
   const remaining = remainingFor(member.plan, used);
-  if (remaining === 0) {
+  if (remaining !== null && cost > remaining) {
     return json(
       {
         error: "Skill quota reached",
-        skills_remaining: 0,
+        skills_remaining: remaining,
         skills_included: includedFor(member.plan),
         can_save_skills: canSaveSkills(member.plan),
       },
@@ -410,8 +343,10 @@ async function handleSkillStart(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  await env.DB.prepare("INSERT INTO skill_runs (user_id) VALUES (?)").bind(member.user_id).run();
-  const nextUsed = used + 1;
+  await env.DB.prepare("INSERT INTO skill_runs (user_id, cost) VALUES (?, ?)")
+    .bind(member.user_id, cost)
+    .run();
+  const nextUsed = used + cost;
   return json({
     ok: true,
     plan: member.plan,

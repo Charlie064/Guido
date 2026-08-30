@@ -4,6 +4,10 @@
   "account_id": "06e757ca8ed84a9c592f859886811b41",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
+  // Better Auth's password hashing and internal async-hooks usage need
+  // Node built-ins (node:crypto, node:async_hooks) that Workers only
+  // provides behind this flag.
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "assets": {
     "directory": "./dist",
@@ -16,8 +20,26 @@
     { "pattern": "www.guidotutor.com", "custom_domain": true }
   ],
   "vars": {
-    "GOOGLE_CLIENT_ID": ""
+    // Comma-separated emails that land on `owner` instead of `free` at
+    // signup (see the databaseHooks comment in worker/better-auth.ts) —
+    // add teammates here (docs/reference/team.md) rather than hand-editing
+    // D1. Not a secret: plan tier isn't sensitive, and this only ever
+    // grants owner to an email the person themselves signs up with.
+    "OWNER_EMAILS": "charlie.sandvall@gmail.com,quentinfeinaeugle@gmail.com,pauline.mophou@protonmail.com,eleanore4444@icloud.com"
   },
+  // Abuse guard on /api/voice/transcribe, which spends real Aqua Voice
+  // money per call — same pattern as a vision-proxy rate limiter built on
+  // another branch (see docs/features/voice.md). Keyed per user, not per
+  // IP. `namespace_id` is any string unique within this Worker — there is
+  // nothing to create in the Cloudflare dashboard. `period` accepts only
+  // 10 or 60.
+  "ratelimits": [
+    {
+      "name": "VOICE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

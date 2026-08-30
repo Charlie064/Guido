@@ -13,15 +13,31 @@ from PIL import Image
 MODEL = "claude-sonnet-5"
 
 
-def locate_element(client: anthropic.Anthropic, image_path: str, target: str) -> dict:
+def locate_element(
+    client: anthropic.Anthropic,
+    image_path: str,
+    target: str,
+    context: str | None = None,
+) -> dict:
     with open(image_path, "rb") as f:
         image_b64 = base64.standard_b64encode(f.read()).decode("utf-8")
 
     with Image.open(image_path) as img:
         width, height = img.size
 
+    # `context` is everything Research/plan_step already know about the
+    # step this target belongs to (goal, brief, watch_for, substeps
+    # already covered this step) — assembled by sidebar.js's
+    # locateContext, opaque to everything between there and here. Kept
+    # clearly separated from the element-finding instruction below (its
+    # own paragraph, labelled) rather than interpolated into that
+    # sentence, so the model reads it as background, not as another
+    # target description to search for.
+    context_block = f"Context on what this step is trying to accomplish:\n{context}\n\n" if context else ""
+
     prompt = (
-        f"This screenshot is {width}x{height} pixels. "
+        f"This screenshot is {width}x{height} pixels.\n\n"
+        f"{context_block}"
         f"Find this UI element: \"{target}\". "
         "Respond with ONLY a JSON object (no other text) in this exact shape: "
         '{"x0": int, "y0": int, "x1": int, "y1": int}, '

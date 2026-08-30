@@ -41,7 +41,6 @@ docs/
   workflows/                run/test/branch/commit recipes; coding standards
   reference/                lookups: config, conventions, glossary
   decisions/                ADRs, numbered, append-only
-  _archive/                 frozen superseded plans, marked SUPERSEDED, never edited
   BACKLOG.md                parking lot with stable BL-NNN ids; stubs graduate then delete
 ```
 
@@ -61,8 +60,9 @@ anything that churns.
 Guides vs. features, the subtle distinction: an **implementation guide** is a
 plan for work not yet done (imperative, disposable); a **feature doc**
 describes a subsystem as it is (descriptive, durable). When a guide's work
-merges, durable content graduates into a feature doc + ADRs and the guide
-moves to `_archive/`.
+merges, durable content graduates into a feature doc + ADRs and the guide is
+deleted. Git history is the archive — a superseded plan kept in the tree
+just competes with the real docs for attention.
 
 ## Maintenance
 
@@ -75,7 +75,7 @@ moves to `_archive/`.
   feature docs plus `STATUS.md`; never sprinkled into philosophy or
   architecture, which must stay status-agnostic.
 - **Graduation, not accumulation.** Plans and backlog stubs are disposable;
-  archive or delete them when the work lands.
+  delete them when the work lands.
 - **Generated docs for facts, hand-written for judgment.** Mechanical surfaces
   (endpoint tables, type mirrors) should be generated or carry a
   `[SYNC-REQUIRED]` banner so their trust level is explicit.
