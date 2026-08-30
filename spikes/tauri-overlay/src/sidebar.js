@@ -697,12 +697,32 @@ homeEls.goalInput.addEventListener("input", refreshHomeSteps);
 
 // ---------- Login ----------
 //
-// See docs/planning/login-membership-plan.md. The session token itself is
-// held in the OS keychain (Rust side, lib.rs's store/get/clear_session_token
-// — see docs.rs/keyring), never in localStorage/a file this app controls;
-// this module only ever holds the decoded /api/me response in memory.
+// See docs/features/auth.md. The session token itself is held in the OS
+// keychain (Rust side, lib.rs's store/get/clear_session_token — see
+// docs.rs/keyring), never in localStorage/a file this app controls; this
+// module only ever holds the decoded /api/me response in memory.
 
 const WEBSITE_BASE_URL = "https://guidotutor.com";
+
+// Opens a website URL in the system's default browser — used for
+// anything this app deliberately doesn't do itself (checkout, billing
+// management: see openPayView below and docs/planning/payment-page.md).
+// Tries the Tauri opener plugin first (registered in lib.rs, granted via
+// capabilities/default.json's "opener:default"; invoke() is the one
+// entry point guaranteed to exist per the window.__TAURI__.core pattern
+// used everywhere else in this file, so this doesn't depend on whether
+// the plugin's JS convenience wrapper happens to be exposed globally).
+// Falls back to window.open for the rare case this file is ever loaded
+// outside a Tauri webview (a plain browser during local UI iteration).
+async function openWebsite(path) {
+  const url = `${WEBSITE_BASE_URL}${path}`;
+  try {
+    await invoke("plugin:opener|open_url", { url });
+  } catch (err) {
+    console.error("opener plugin failed, falling back to window.open", err);
+    window.open(url, "_blank");
+  }
+}
 
 // null = signed out (or /api/me hasn't resolved yet). Shape:
 // { email, plan, status, skills_remaining, skills_included, can_save_skills }
@@ -910,17 +930,24 @@ document.querySelector("#profile-attach").addEventListener("click", () => {
   showView("setup");
 });
 
-// No Stripe yet (docs/planning/login-membership-plan.md's "Open /
-// deferred") — these are placeholders so the upgrade path has somewhere
-// to go without pretending to charge anyone. Real checkout replaces the
-// alert with whatever Stripe flow gets built.
+// No in-app checkout, by design — the desktop app never touches payment
+// (docs/planning/payment-page.md). Both buttons hand off to the website's
+// /pricing page in the system browser; the query param lets that page
+// preselect/highlight the tier the user was already looking at. Real
+// checkout isn't wired yet (no Stripe account), so today /pricing itself
+// is the honest destination — it shows the tiers without pretending to
+// charge anyone, same spirit as the alert() it replaces, just a page
+// instead of a dialog.
 document.querySelectorAll("[data-plan-target]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    alert(`Checkout for ${btn.dataset.planTarget} isn't wired up yet — ask Charlie to flip your plan in D1 for now.`);
+    openWebsite(`/pricing?plan=${btn.dataset.planTarget}`);
   });
 });
 document.querySelector("#pay-manage-btn").addEventListener("click", () => {
-  alert("Subscription management is coming soon.");
+  // No Stripe Billing Portal yet either — same page for now. Once one
+  // exists this becomes a POST to a Worker route that creates a portal
+  // session and redirects there, not a static URL (see the plan doc).
+  openWebsite("/pricing");
 });
 
 // Logos we ship, for apps whose icon can't be extracted from a live

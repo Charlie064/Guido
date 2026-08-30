@@ -1687,7 +1687,7 @@
         </div>
       </div>
 
-      <!-- Email+password login (docs/planning/login-membership-plan.md):
+      <!-- Email+password login (docs/features/auth.md):
            a plain form posting straight to the website Worker's Better
            Auth routes (/api/auth/sign-in/email, /api/auth/sign-up/email)
            — no browser round trip, since there's no cookie jar or OAuth
@@ -1810,8 +1810,11 @@
            a single ask costing more than what's left (docs/business/pricing.md's
            flat 1-per-skill charge — see openPayView in sidebar.js), or the
            profile menu's Upgrade/Manage item. Same screen every time; only
-           #pay-reason's text changes. No real billing — Stripe is a later
-           slice (docs/planning/login-membership-plan.md's "Open / deferred"). -->
+           #pay-reason's text changes. Tier buttons and "Manage subscription"
+           open the website's /pricing page in the system browser — no
+           in-app checkout, by design. See docs/planning/payment-page.md
+           for that page's spec (for whoever builds it) and why real
+           billing isn't wired here yet. -->
       <section id="view-pay" class="view">
         <div class="pay-body">
           <div class="pay-status">

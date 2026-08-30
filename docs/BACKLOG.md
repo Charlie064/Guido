@@ -257,3 +257,17 @@ point — this file should never pose as a source of truth for what's done.
   (`sendVerificationEmail` in the `emailAndPassword` or
   `emailVerification` config), no schema changes required since
   `user.emailVerified` already exists in the generated table.
+- **BL-016 — Wire real Stripe checkout and a billing portal to
+  `/pricing`.** The desktop app's paywall now links out to
+  `https://guidotutor.com/pricing` for both "Upgrade to Starter/Plus"
+  and "Manage subscription" (`sidebar.js`'s `openWebsite`, see
+  [planning/payment-page.md](planning/payment-page.md)), but that page
+  itself doesn't exist yet and, once it does, won't charge anyone —
+  there's no Stripe account for this project. Two separate pieces once
+  one exists: **checkout** (a Worker route that creates a Stripe
+  Checkout session for the chosen plan and redirects there) and
+  **billing management** (a Worker route that creates a Stripe Customer
+  Portal session and redirects there — `#pay-manage-btn` currently
+  points at the same static `/pricing` page as a stand-in). Needs
+  Stripe test-mode API keys to start; doesn't block building
+  `/pricing`'s static content first.

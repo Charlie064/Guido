@@ -87,6 +87,7 @@ before shipping beyond a demo.)
 | Website + desktop visual language | `docs/features/website-design-system.md` |
 | Login, membership check, quotas | `docs/features/auth.md` |
 | Membership pricing, Anthropic API COGS | `docs/business/pricing.md` |
+| Website `/pricing` page spec (build target for whoever builds it) | `docs/planning/payment-page.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first
 real content.

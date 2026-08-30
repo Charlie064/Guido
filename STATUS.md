@@ -664,3 +664,16 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   Studio Code" / "Welcome"), the icon lookup by unit test against this
   machine's real icon themes (Firefox, VS Code, Nautilus, GNOME Settings
   all resolve). **Not yet run through a real portal pick.**
+- **Desktop paywall now links out to a real website URL** instead of the
+  placeholder `alert()`s. The paywall itself (drop to 1 free skill,
+  three trigger points, profile-menu entry) already shipped in
+  `14424ee`; this closes the one remaining gap — "Upgrade to
+  Starter/Plus" and "Manage subscription" now open
+  `https://guidotutor.com/pricing?plan=<tier>` in the system browser via
+  the Tauri opener plugin (registered but previously unused;
+  `plugin:opener|open_url` invoke shape verified against the plugin's
+  own source, not assumed). The page itself doesn't exist on the website
+  yet — spec'd as a handoff in `docs/planning/payment-page.md` for
+  whoever builds it, with the tier copy locked to `pricing.md` and real
+  Stripe checkout tracked separately as `BL-016` since there's no Stripe
+  account for this project yet.

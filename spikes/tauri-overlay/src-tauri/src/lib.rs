@@ -931,7 +931,7 @@ fn run_locate(
         .map_err(|e| format!("failed to parse live_step.py output ({stdout}): {e}"))
 }
 
-// Session-token storage (docs/planning/login-membership-plan.md): sign-in
+// Session-token storage (docs/features/auth.md): sign-in
 // itself is a plain fetch() from sidebar.js straight to the Worker's
 // Better Auth routes (email+password, no browser round trip needed) — the
 // only piece that has to live in Rust is holding onto the token it gets
