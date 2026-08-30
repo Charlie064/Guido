@@ -132,10 +132,17 @@ jobs:
         shell: bash
         run: cp src-tauri/target/release/bundle/macos/*.app.tar.gz ${{ matrix.updater_asset_name }}
 
+      # A tag with a hyphen (v0.1.5-rc1) is a test build: marking it a
+      # GitHub prerelease keeps it off releases/latest/download/* (the
+      # exact URL both the website's download buttons and every existing
+      # install's updater hit), so a still-unverified build can be tried
+      # for real without pushing it to anyone until a plain vX.Y.Z tag
+      # promotes it.
       - name: Upload installer(s) to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             spikes/tauri-overlay/${{ matrix.asset_name }}
             spikes/tauri-overlay/${{ matrix.updater_asset_name }}
@@ -203,5 +210,6 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: latest.json
           fail_on_unmatched_files: true
