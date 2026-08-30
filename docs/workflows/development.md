@@ -47,6 +47,37 @@ render), per [demo-v0.md](../planning/demo-v0.md).
   macOS/Windows use their own native window backends (`window_provider.rs`)
   and `mss` capture; both are implemented but not yet verified on real
   hardware.
+
+  **Testing the Windows backend without a physical machine:** a local KVM
+  VM works well — `window_provider.rs`'s Windows path (`EnumWindows` +
+  DWM extended frame bounds) runs for real, not emulated, so this is a
+  genuine test of that backend, not just the download button. On Arch:
+  `sudo pacman -S qemu-full virt-manager libvirt virtio-win dnsmasq`,
+  then build a VM in virt-manager from a Microsoft Windows 11 evaluation
+  ISO (free, 90-day, no key needed) with a virtio disk (qcow2,
+  thin-provisioned — actual usage is ~20-25GB, not the allocated size)
+  and virtio-win drivers attached. Take a snapshot right after installing
+  the app so repeat test/record runs can revert to a clean state instead
+  of reinstalling. Install OBS *inside* the VM if you're screen-recording
+  a demo — recording the guest's own desktop (rather than the host's
+  virt-viewer window) avoids VM chrome and cursor artifacts in the
+  output.
+
+  **The macOS backend can't be tested this way.** Apple's EULA prohibits
+  running macOS on non-Apple hardware, so there's no legitimate local-VM
+  equivalent (a Hackintosh/OSX-KVM setup would also be more fragile:
+  spoofed SMBIOS, kext/SIP issues). Testing `window_provider.rs`'s macOS
+  path (`CGWindowListCopyWindowInfo`) for real needs either physical Mac
+  hardware or an hourly cloud Mac rental (MacStadium, Scaleway, AWS EC2
+  Mac instances) — record with QuickTime's built-in screen recorder over
+  the remote session.
+
+  A Windows-only test does **not** cover the macOS backend or vice versa
+  — they're separate `cfg(target_os = ...)` implementations in
+  `window_provider.rs` with no shared code path. If you only need to
+  verify the *website* download button (OS detection → installer link),
+  neither VM is necessary — that logic doesn't touch native window code
+  at all.
 - **Python 3.10+**
 - **Node.js + npm**
 - **Rust** (via [rustup](https://rustup.rs)) plus Tauri v2's own Linux
@@ -55,19 +86,24 @@ render), per [demo-v0.md](../planning/demo-v0.md).
   Linux you'll also need the `gtk-layer-shell` system library for the
   always-on-top overlay to render above status bars (see
   `src-tauri/Cargo.toml`'s comment on `gtk-layer-shell`).
-- An Anthropic API key — Claude vision is the screen-understanding
-  provider (see [ADR 0001](../decisions/0001-ai-tutor-not-computer-use-agent.md)).
-
-### 1. Clone and set the API key
+### 1. Clone and sign in
 
 ```sh
 git clone <this repo> && cd tutoria
-cp .env.example .env
-# edit .env, set ANTHROPIC_API_KEY=sk-...
 ```
 
-Keep `.env` at the repo root — the Python side loads it via `python-dotenv`,
-which walks up from its own working directory until it finds one.
+No local Anthropic/Aqua Voice key needed. The desktop app never holds one —
+every screen-reading and transcription call goes through the deployed
+Worker's `/api/vision` / `/api/voice/transcribe`, authenticated with a
+session token from signing in (stored via `keyring`, see
+`GUIDO_SESSION_TOKEN` in `spikes/vision-detect/vision_client.py`). Sign in
+through the running desktop app once and you're testing against the real
+production Worker, which already has the real keys set
+(`docs/features/vision.md`, `docs/features/voice.md`).
+
+You only need `ANTHROPIC_API_KEY`/`AQUA_VOICE_API_KEY` locally if you're
+running the Worker itself with `wrangler dev` — see step 4's
+`website/.dev.vars`.
 
 ### 2. Vision-detect (Python)
 
