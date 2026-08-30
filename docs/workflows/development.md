@@ -226,7 +226,8 @@ git tag v0.1.1
 git push origin v0.1.1
 ```
 
-`.github/workflows/release.yml` uploads `Guido_mac.dmg`,
+Release CI lives on `claudev/charlie/website-download-button`
+(`.github/workflows/release.yml`) and uploads `Guido_mac.dmg`,
 `Guido_windows.exe`, and `Guido_linux.AppImage`. Those names are
 load-bearing — `website/src/Download.jsx` links to
 `github.com/Charlie064/Guido/releases/latest/download/<name>`.
