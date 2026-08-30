@@ -595,10 +595,12 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   via `keyring` (`store_session_token`/`get_session_token`/
   `clear_session_token` in `src-tauri/src/lib.rs`). Verified 2026-08-30:
   `cargo check` clean, website `lint`/`build`/`wrangler deploy --dry-run`
-  all clean. Still needed before this is production-ready (not before
-  the demo): `wrangler secret put BETTER_AUTH_SECRET`, a remote D1
-  migrate, and BL-015 (email verification). See
-  [features/auth.md](docs/features/auth.md).
+  all clean. `wrangler secret put BETTER_AUTH_SECRET` and the remote D1
+  migrate are done (confirmed 2026-08-30: `wrangler secret list` shows
+  `BETTER_AUTH_SECRET`/`ANTHROPIC_API_KEY`/`AQUA_VOICE_API_KEY`/
+  `STRIPE_SECRET_KEY` all set; `wrangler d1 migrations list --remote`
+  reports none pending). Still needed before production-ready: BL-015
+  (email verification). See [features/auth.md](docs/features/auth.md).
 - **App icons for picked windows — built, unverifiable on this machine.**
   `window_icon` (`src-tauri/src/lib.rs`) extracts the picked window's own
   `_NET_WM_ICON` on Linux X11, encodes it to PNG once, and caches it per

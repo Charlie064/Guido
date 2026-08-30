@@ -3,3 +3,10 @@
 # see the comment on `secret` in worker/better-auth.ts for why this can't
 # fall back to Better Auth's default on Workers.
 BETTER_AUTH_SECRET=
+
+# Only needed if you're exercising /api/vision or /api/voice/transcribe
+# against a locally-run Worker (`wrangler dev`) — see docs/features/vision.md
+# and docs/features/voice.md. Not needed to run the desktop app itself: it
+# talks to the deployed Worker by default, which already has real keys set.
+ANTHROPIC_API_KEY=
+AQUA_VOICE_API_KEY=
