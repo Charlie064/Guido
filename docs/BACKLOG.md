@@ -272,3 +272,12 @@ point — this file should never pose as a source of truth for what's done.
   arbitration/class-action-waiver clause before relying on it — that
   clause's enforceability is jurisdiction- and notice-dependent in ways
   a template can't guarantee.
+  - **Gate added 2026-08-30**: `claudev/charlie/stripe-billing` must stay
+    on Stripe **test-mode keys only** (`sk_test_...`/`pk_test_...`) —
+    don't switch to live keys or take a real charge from anyone outside
+    the team — until Charlie has registered as a sole trader (enskild
+    näringsidkare) with Skatteverket. An individual can legally accept
+    payments in Sweden without an AB, but running live billing with zero
+    registration crosses from "should register" into non-compliant once
+    it's real recurring revenue from real users, not a demo. Hackathon
+    demos of the payment flow should run in test mode regardless.
