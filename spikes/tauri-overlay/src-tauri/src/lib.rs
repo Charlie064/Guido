@@ -1023,56 +1023,44 @@ async fn clear_session_token() -> Result<(), String> {
     .map_err(|e| format!("clear_session_token task panicked: {e}"))?
 }
 
-// region-select only, not sidebar (see run() below): a plain alwaysOnTop
-// toplevel on a tiling Wayland compositor (Sway, Hyprland) can get tiled
-// into the current workspace's layout instead of floating full-screen
-// above everything, which would make a region drag unusable. Promoting it
-// to a layer-shell surface at the Overlay layer avoids that — layer-shell
+// Shared by region-select/overlay (fill_screen, Overlay layer, see below)
+// and sidebar (BL-013, Top layer — see init_layer_shell_sidebar): a plain
+// alwaysOnTop toplevel on a tiling Wayland compositor (Sway, Hyprland) can
+// get tiled into the current workspace's layout instead of floating above
+// everything. Promoting to a layer-shell surface avoids that — layer-shell
 // surfaces are never subject to tiling by protocol design. X11 sessions
 // (no layer-shell protocol) and macOS/Windows just rely on alwaysOnTop
 // instead, via the is_supported() check below; GNOME's Mutter also falls
 // through this path, since it never advertises wlr-layer-shell at all
 // (confirmed by capturing this app's own WAYLAND_DEBUG=1 registry dump —
 // no zwlr_* globals present, not a version gap) — a plain floating
-// full-screen toplevel is what it gets there, which GNOME (a non-tiling
-// WM) handles fine anyway.
-//
-// sidebar itself is deliberately NOT promoted to layer-shell, and (see
-// tauri.conf.json) is no longer undecorated/always-on-top either — it's
-// now a plain decorated toplevel, exactly like any other application
-// window. Two custom drag mechanisms were tried first — the layer-shell
-// margin-rewrite IPC command, then Tauri's startDragging() (an
-// interactive xdg_toplevel move) on a plain-but-undecorated toplevel —
-// and neither proved reliable here in practice. A real titlebar sidesteps
-// the question entirely: the window manager owns dragging, the same way
-// it does for every other window, with zero app-side drag code. Trade-off,
-// accepted: sidebar is no longer forced above other windows, and (Hyprland/
-// Sway) can be auto-tiled into the workspace layout instead of floating.
+// toplevel is what it gets there, which GNOME (a non-tiling WM) handles
+// fine anyway.
 //
 // Must run before the window is first shown: gtk-layer-shell requires the
 // underlying GtkWindow to not be mapped yet (it asserts on this), which is
-// why "region-select" starts with "visible": false in tauri.conf.json and
-// this runs ahead of its explicit show() in run() below.
+// why "region-select"/"overlay"/"sidebar" all start with "visible": false
+// in tauri.conf.json and this runs ahead of each one's explicit show().
 #[cfg(target_os = "linux")]
-fn init_layer_shell(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+fn init_layer_shell(
+    window: &tauri::WebviewWindow,
+    layer: gtk_layer_shell::Layer,
+    anchors: &[gtk_layer_shell::Edge],
+) -> tauri::Result<()> {
     use gtk_layer_shell::LayerShell;
 
     let gtk_window = window.gtk_window()?;
 
     if gtk_layer_shell::is_supported() {
         gtk_window.init_layer_shell();
-        gtk_window.set_layer(gtk_layer_shell::Layer::Overlay);
-        for edge in [
-            gtk_layer_shell::Edge::Top,
-            gtk_layer_shell::Edge::Bottom,
-            gtk_layer_shell::Edge::Left,
-            gtk_layer_shell::Edge::Right,
-        ] {
-            gtk_window.set_anchor(edge, true);
+        gtk_window.set_layer(layer);
+        for edge in anchors {
+            gtk_window.set_anchor(*edge, true);
         }
         // Layer-shell surfaces get no keyboard focus by default (unlike
         // regular toplevels) — OnDemand lets the compositor still route
-        // region-select's keydown handlers to it.
+        // keydown/text-input to whichever of these actually wants it
+        // (region-select's keydown handler, sidebar's login/chat inputs).
         gtk_window.set_keyboard_mode(gtk_layer_shell::KeyboardMode::OnDemand);
     }
 
@@ -1098,6 +1086,46 @@ fn init_media_permissions(window: &tauri::WebviewWindow) -> tauri::Result<()> {
             true
         });
     })
+}
+
+#[cfg(target_os = "linux")]
+const FILL_SCREEN: [gtk_layer_shell::Edge; 4] = [
+    gtk_layer_shell::Edge::Top,
+    gtk_layer_shell::Edge::Bottom,
+    gtk_layer_shell::Edge::Left,
+    gtk_layer_shell::Edge::Right,
+];
+
+// BL-013: promote sidebar to layer-shell Top (not Overlay, which
+// region-select/overlay use — Top still lets other apps' menus/tooltips
+// draw above the sidebar) only where gtk_layer_shell::is_supported()
+// (Sway, Hyprland, KDE's wlroots-based session — never GNOME). Anchored
+// to the top-right corner only (not all four edges like fill_screen)
+// so the surface keeps its own configured width/height instead of being
+// stretched full-screen; falls back to today's plain centered toplevel
+// everywhere is_supported() is false.
+//
+// UNVERIFIED beyond cargo check — see BL-013 in docs/BACKLOG.md. This
+// dev machine is GNOME/Mutter, which never advertises wlr-layer-shell, so
+// is_supported() is false here and this whole branch never executes
+// locally. Two real risks this needs a Sway/Hyprland/KDE session to
+// answer, not guessed at: (1) whether window-manager-driven dragging
+// still works — the plain-toplevel-with-real-titlebar design this
+// replaces was chosen specifically because two earlier drag mechanisms on
+// a layer-shell/undecorated surface weren't reliable (see the removed
+// comment this replaced, still in git history), and the layer-shell
+// protocol itself has no interactive-move request the way xdg_toplevel
+// does, so compositor-drawn dragging may simply not exist here at all;
+// (2) whether "decorations": true in tauri.conf.json even renders
+// anything on a layer-shell surface, since compositors don't apply
+// xdg-decoration to layer surfaces.
+#[cfg(target_os = "linux")]
+fn init_layer_shell_sidebar(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    init_layer_shell(
+        window,
+        gtk_layer_shell::Layer::Top,
+        &[gtk_layer_shell::Edge::Top, gtk_layer_shell::Edge::Right],
+    )
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1140,6 +1168,14 @@ pub fn run() {
                 .get_webview_window("sidebar")
                 .unwrap_or_else(|| panic!("\"sidebar\" window declared in tauri.conf.json must exist"));
 
+            // BL-013 — see init_layer_shell_sidebar's comment for what's
+            // unverified here. Must run before show() (gtk-layer-shell
+            // asserts the surface isn't mapped yet), which is why this
+            // comes before sidebar.show() below rather than after it like
+            // the pre-BL-013 code had.
+            #[cfg(target_os = "linux")]
+            init_layer_shell_sidebar(&sidebar)?;
+
             sidebar.show()?;
 
             // getUserMedia (the mic button — see startVoiceRecording in
@@ -1148,16 +1184,17 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             init_media_permissions(&sidebar)?;
 
-            // "region-select" gets layer-shell too (fill_screen — see
-            // init_layer_shell), so it floats above everything (including
-            // on a tiling compositor) rather than relying on plain
-            // alwaysOnTop. It stays hidden until its own JS shows it for
-            // an active drag (see src/region-select.js) — deliberately
-            // not shown here.
+            // "region-select" gets layer-shell too (fill_screen, Overlay
+            // layer), so it floats above everything (including on a
+            // tiling compositor) rather than relying on plain alwaysOnTop.
+            // It stays hidden until its own JS shows it for an active drag
+            // (see src/region-select.js) — deliberately not shown here.
             #[cfg(target_os = "linux")]
             init_layer_shell(
                 &app.get_webview_window("region-select")
                     .expect("\"region-select\" window declared in tauri.conf.json must exist"),
+                gtk_layer_shell::Layer::Overlay,
+                &FILL_SCREEN,
             )?;
 
             // The real on-screen overlay — restored after having been cut
@@ -1181,7 +1218,7 @@ pub fn run() {
                 .get_webview_window("overlay")
                 .expect("\"overlay\" window declared in tauri.conf.json must exist");
             #[cfg(target_os = "linux")]
-            init_layer_shell(&overlay)?;
+            init_layer_shell(&overlay, gtk_layer_shell::Layer::Overlay, &FILL_SCREEN)?;
             // GTK: set_ignore_cursor_events on a window that has never
             // been shown aborts the process. tao implements it as
             // `window.window().unwrap().input_shape_combine_region(..)`

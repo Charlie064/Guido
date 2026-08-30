@@ -211,24 +211,35 @@ point — this file should never pose as a source of truth for what's done.
     leave no baseline, so `plan_step` needs to know not to generate a
     relative `expected_outcome` there and fall back to an absolute one.
 - **BL-013 — Always-on-top sidebar on layer-shell-capable Linux
-  compositors.** The sidebar window was deliberately made a plain,
-  non-layer-shell toplevel (`sidebar` is NOT promoted in
-  `init_layer_shell`, see the trade-off comment at
-  `spikes/tauri-overlay/src-tauri/src/lib.rs:948-958`): two custom-drag
-  workarounds on a layer-shell/undecorated window weren't reliable, so a
-  real OS titlebar was chosen instead, trading away forced-on-top in
-  exchange for the window manager owning dragging normally. GNOME
-  (Mutter) doesn't implement `wlr-layer-shell` at all, confirmed via a
-  `WAYLAND_DEBUG=1` registry dump (no `zwlr_*` globals) — so this is out
-  of reach there regardless. Sway, Hyprland, and KDE do implement it, the
-  same path `region-select`/`overlay` already use
-  (`gtk_layer_shell::is_supported()`). Scope: promote the sidebar to
-  `gtk_layer_shell::Layer::Top` (not `Overlay`, which region-select/
-  overlay use — Top still lets other apps' menus/tooltips draw above it)
-  only on compositors where it's supported, falling back to today's plain
-  toplevel everywhere else (GNOME included) — needs re-verifying that
-  window-manager dragging still works once layer-shell is back on, since
-  that's exactly what broke last time.
+  compositors.** **Attempted on `claudev/charlie/layer-shell-sidebar`
+  (branched off `main`, kept isolated since this was unsure to work),
+  not merged.** `init_layer_shell` (`lib.rs`) is now parameterized on
+  layer + anchors instead of hardcoding `Overlay`/fill-screen, and a new
+  `init_layer_shell_sidebar` promotes the sidebar to `Layer::Top`,
+  anchored to the top-right corner only (so it keeps its own
+  480×720 size instead of stretching full-screen), gated on the same
+  `gtk_layer_shell::is_supported()` check `region-select`/`overlay`
+  already use. `cargo check` is clean and `npx tauri dev` runs
+  end-to-end on this GNOME/Mutter dev machine with the code taking the
+  unsupported-compositor fallback path exactly as before (GTK logs "your
+  Wayland compositor does not support the Layer Shell protocol" and the
+  sidebar behaves like the pre-BL-013 plain toplevel) — a real regression
+  check on the fallback branch, not a pass on the feature itself.
+  **The actual Sway/Hyprland/KDE path is unverified** — no such
+  compositor is available on this machine. Two real risks flagged in
+  code comments at the new `init_layer_shell_sidebar`, genuinely
+  unresolved, not just untested: (1) the layer-shell protocol has no
+  interactive-move request the way `xdg_toplevel` does, so
+  window-manager-driven dragging — the whole reason a plain toplevel
+  with a real titlebar was chosen over layer-shell in the first place —
+  may not exist for a layer surface at all, not just be "less reliable";
+  (2) `"decorations": true` in `tauri.conf.json` may render nothing on a
+  layer-shell surface, since compositors don't apply xdg-decoration to
+  layer surfaces. Needs a real Sway/Hyprland/KDE (wlroots) session before
+  this can be called working, and a product decision if dragging turns
+  out to be genuinely gone: accept a fixed corner position, or design a
+  new in-app drag mechanism (distinct from the two already tried and
+  rejected).
 - **BL-014 — Native capture-exclusion + always-on-top on macOS/Windows.**
   **Linux/Wayland part superseded — see
   [ADR 0009](decisions/0009-window-scoped-capture-excludes-sidebar.md).**
