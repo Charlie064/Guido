@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight, MousePointer2, Video } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
-import { FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
+import { FLASH_BLUE, Logo } from "./brand.jsx";
 
 const INTRO_MS = 4200;
 
@@ -84,7 +84,7 @@ function WorksWithMarquee() {
       <div className="flex gap-6 w-max px-2" style={{ animation: "marquee-x 22s linear infinite" }}>
         {items.map((app, i) => {
           const Icon = app.icon;
-          const tilt = i % 2 === 0 ? -4 : 4;
+          const tilt = i % 2 === 0 ? -2 : 2;
           return (
             <div key={i} className="flex flex-col items-center gap-2 shrink-0 w-32">
               <div
@@ -154,21 +154,18 @@ export default function Landing({ startWaitlist = false }) {
         />
       ) : null}
 
-      {/* Nav */}
-      <header className="sticky top-0 z-30 backdrop-blur-md bg-white/85 border-b border-black/[0.06]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      {/* Nav — links stay laptop-only (`site-nav`). Phone keeps logo + CTA. */}
+      <header className="site-header">
+        <div className="site-header-inner">
           <Logo />
-          <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-600">
-            <a href="#how-it-works" className="hover:text-black transition-colors">How it works</a>
-            <a href="#works-with" className="hover:text-black transition-colors">Usecases</a>
+          <nav className="site-nav" aria-label="Primary">
+            <a href="#how-it-works">How it works</a>
+            <a href="#works-with">Usecases</a>
           </nav>
           <button
             type="button"
             onClick={() => setWaitlistOpen(true)}
-            className="shrink-0 inline-flex items-center gap-2 rounded-full font-semibold px-3.5 py-1.5 text-[13px] sm:px-5 sm:py-2 sm:text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-            style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
-            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+            className="waitlist-cta"
           >
             Join the waitlist
           </button>
@@ -194,23 +191,18 @@ export default function Landing({ startWaitlist = false }) {
                 WebkitMaskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
               }}
             >
-              <div className="hero-mark-bob">
-                <video
-                  ref={heroVideoRef}
-                  src="/assets/hero-demo.mp4"
-                  className="w-full h-auto block"
-                  muted
-                  playsInline
-                  preload="auto"
-                />
-              </div>
+              <video
+                ref={heroVideoRef}
+                src="/assets/hero-demo.mp4"
+                className="w-full h-auto block"
+                muted
+                playsInline
+                preload="auto"
+              />
               <span ref={heroGuidoRef} className="hero-guido-rest" aria-hidden="true" />
             </div>
 
-            <h2
-              className="uppercase font-extrabold tracking-wide text-2xl sm:text-3xl mb-6 leading-tight"
-              style={{ fontFamily: "'Space Grotesk', sans-serif", color: FLASH_PINK }}
-            >
+            <h2 className="hero-headline">
               Your step-by-step guide for learning any software
             </h2>
 
@@ -227,24 +219,13 @@ export default function Landing({ startWaitlist = false }) {
           </div>
         </div>
 
-        <div className="max-w-3xl mx-auto px-6 pt-6 pb-10 sm:pt-10 sm:pb-16 text-center">
-          <div className="flex items-center justify-center gap-3 sm:gap-6 flex-wrap">
-            {["Ask", "Learn", "Master"].map((word, i) => {
-              const weight = i === 0 ? 400 : i === 1 ? 600 : 800;
-              const col = i === 0 ? "#a0a0a0" : i === 1 ? `${FLASH_PINK}99` : FLASH_PINK;
-              return (
-                <div key={word} className="flex items-center gap-3 sm:gap-6">
-                  <span
-                    className="text-base sm:text-lg tracking-tight"
-                    style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: weight, color: col }}
-                  >
-                    {word}
-                  </span>
-                  {i < 2 && <ArrowRight size={16} className="text-neutral-300" />}
-                </div>
-              );
-            })}
-          </div>
+        <div className="hero-path" aria-hidden="true">
+          {["Ask", "Learn", "Master"].map((word, i) => (
+            <span key={word} className="hero-path-item">
+              {i > 0 ? <ArrowRight size={14} strokeWidth={2.2} /> : null}
+              <span data-step={i}>{word}</span>
+            </span>
+          ))}
         </div>
       </section>
 
@@ -290,10 +271,7 @@ export default function Landing({ startWaitlist = false }) {
         <button
           type="button"
           onClick={() => setWaitlistOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-          style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 36px 8px rgba(196,181,253,0.35)")}
-          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+          className="waitlist-cta waitlist-cta-lg"
         >
           Join the waitlist
         </button>
@@ -311,17 +289,13 @@ export default function Landing({ startWaitlist = false }) {
       />
 
       {/* Footer */}
-      <footer className="border-t border-black/[0.06]">
-        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="site-footer">
+        <div className="site-footer-inner">
           <Logo />
-          <div className="flex items-center flex-wrap justify-center gap-4">
-            <p className="text-xs text-neutral-400">© Guido team</p>
-            <a href="/login" className="text-xs text-neutral-400 hover:text-neutral-700">
-              Sign in
-            </a>
-            <a href="/privacy.html" className="text-xs text-neutral-400 hover:text-neutral-700">
-              Privacy policy
-            </a>
+          <div className="site-footer-links">
+            <p>© Guido team</p>
+            <a href="/login">Sign in</a>
+            <a href="/privacy.html">Privacy policy</a>
           </div>
         </div>
       </footer>

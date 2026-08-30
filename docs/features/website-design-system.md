@@ -53,9 +53,10 @@ border plus the violet halo ring. This is the canonical brand mark
 not swap it for the glass SVG mascot; that buddy is a separate
 cursor-follow helper (see [mascot.md](mascot.md)). The landing intro
 is a circular pointer, a center click, then a slow fade-in of the
-glass mascot. After that the hero holds a still of the Guido mark and the
-pink and blue glass arrows breathe 3px up and down — no orbit.
-The header logo stays `guido-icon.png`.
+glass mascot. After that the hero holds a still of the Guido mark.
+Laptop header nav is **How it works** and **Usecases** (hidden on
+phone). The hero headline is sentence-case Space Grotesk in flash pink,
+not uppercase. The header logo stays `guido-icon.png`.
 
 **Primary CTA ("keycap" button)** — black pill, hard bottom offset
 shadow (`0 5px 0 0 #000`) that collapses on press, white sheen on the
