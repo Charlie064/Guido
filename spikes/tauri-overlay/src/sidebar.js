@@ -997,14 +997,27 @@ document.querySelector("#profile-usage").addEventListener("click", () => {
 });
 
 // No Stripe yet (docs/planning/login-membership-plan.md's "Open /
-// deferred") — these are placeholders so the upgrade path has somewhere
-// to go without pretending to charge anyone. Real checkout replaces the
-// alert with whatever Stripe flow gets built.
+// deferred") — the website's /pricing page (website/public/pricing.html)
+// is where a plan/billing action actually goes: the account's email rides
+// along in the query string so the page (and whoever reads the resulting
+// "upgrade me" email, today Charlie flipping D1 by hand) knows which
+// account to apply the change to, since there's no Stripe session to
+// attach it to yet. Opens in the system browser via the opener plugin,
+// not the sidebar's own webview, both because a subscription/checkout
+// flow shouldn't run inside a click-through-adjacent panel and because
+// the sidebar's webview holds no cookies for guidotutor.com anyway.
 //
 // A guest can see this page (openPayView renders fine with membership ===
 // null), but a plan/billing action needs an account to attach to — send
 // them to sign in first, then land back on #view-pay (not home) once
 // they're in, via loginReturnView below.
+function openWebsitePricing(plan) {
+  const params = new URLSearchParams();
+  if (plan) params.set("plan", plan);
+  if (membership?.email) params.set("email", membership.email);
+  const query = params.toString();
+  window.__TAURI__.opener.openUrl(`${WEBSITE_BASE_URL}/pricing${query ? `?${query}` : ""}`);
+}
 document.querySelectorAll("[data-plan-target]").forEach((btn) => {
   btn.addEventListener("click", () => {
     if (!membership) {
@@ -1012,7 +1025,7 @@ document.querySelectorAll("[data-plan-target]").forEach((btn) => {
       showView("login");
       return;
     }
-    alert(`Checkout for ${btn.dataset.planTarget} isn't wired up yet — ask Charlie to flip your plan in D1 for now.`);
+    openWebsitePricing(btn.dataset.planTarget);
   });
 });
 document.querySelector("#pay-manage-btn").addEventListener("click", () => {
@@ -1021,7 +1034,7 @@ document.querySelector("#pay-manage-btn").addEventListener("click", () => {
     showView("login");
     return;
   }
-  alert("Subscription management is coming soon.");
+  openWebsitePricing(membership.plan);
 });
 
 // Logos we ship, for apps whose icon can't be extracted from a live

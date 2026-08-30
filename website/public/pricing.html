@@ -116,13 +116,13 @@
           <li>Then $0.25 / extra skill</li>
           <li>No saved skills</li>
         </ul>
-        <!-- Checkout is real (BL-016), but only reachable from inside the
-             desktop app — a bare browser tab here has no session to attach
-             a subscription to (see docs/features/auth.md: login is
-             desktop-only). The app calls POST /api/billing/checkout itself
-             and opens the returned Stripe URL; this page stays inert for a
-             direct visit rather than pretending it can start a charge. -->
-        <a class="cta primary" href="#" data-stripe-price="starter" aria-disabled="true">Open the app to upgrade</a>
+        <!-- No Stripe checkout yet (BL-016) — plans are flipped by hand in
+             D1 for now. This mailtos the account email (passed as ?email=
+             by the desktop app's "Upgrade to Starter"/"Manage subscription"
+             buttons, sidebar.js's openWebsitePricing) so the request is
+             tied to an actual account rather than a name typed from
+             memory. Swap for a real Stripe Checkout link once that lands. -->
+        <a class="cta primary" data-tier="starter" href="#">Open the app to upgrade</a>
         <div class="cta-note">Checkout happens inside Guido, not here</div>
       </div>
 
@@ -133,25 +133,41 @@
           <li>Everything in Starter</li>
           <li>Save skills to replay later</li>
         </ul>
-        <a class="cta primary" href="#" data-stripe-price="plus" aria-disabled="true">Open the app to upgrade</a>
+        <a class="cta primary" data-tier="plus" href="#">Open the app to upgrade</a>
         <div class="cta-note">Checkout happens inside Guido, not here</div>
       </div>
     </div>
 
-    <p class="footnote">
+    <p class="footnote" id="pricing-footnote">
       Already on Starter or Plus? Manage your subscription from the
       profile menu in the Guido app.
     </p>
   </main>
   <script>
     // Highlights the tier the desktop app's Upgrade button was already
-    // pointed at (?plan=starter|plus), per docs/planning/payment-page.md.
-    // Must degrade gracefully with no query param — someone just typing
-    // the URL, or a marketing link.
-    const plan = new URLSearchParams(location.search).get("plan");
+    // pointed at (?plan=starter|plus), and, when the app also sent
+    // ?email=, wires each paid tier's CTA to a mailto so clicking it
+    // actually requests the upgrade against a specific account instead of
+    // sitting permanently disabled. Both params are optional — this page
+    // still renders fine for a direct visit or a marketing link with
+    // neither set.
+    const params = new URLSearchParams(location.search);
+    const plan = params.get("plan");
     if (plan) {
       const el = document.querySelector(`.tier[data-plan="${CSS.escape(plan)}"]`);
       if (el) el.classList.add("highlighted");
+    }
+    const email = params.get("email");
+    if (email) {
+      document.querySelectorAll("[data-tier]").forEach((cta) => {
+        const tierName = cta.dataset.tier === "starter" ? "Starter" : "Plus";
+        const subject = encodeURIComponent(`Upgrade to ${tierName}`);
+        const body = encodeURIComponent(`Account email: ${email}\nPlan requested: ${tierName}`);
+        cta.href = `mailto:quentinfeinaeugle@gmail.com?subject=${subject}&body=${body}`;
+        cta.textContent = `Request ${tierName} for ${email}`;
+      });
+      document.querySelector("#pricing-footnote").textContent =
+        `Signed in as ${email}. Manage billing the same way — email us from your account.`;
     }
   </script>
 </body>
