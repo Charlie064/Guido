@@ -24,7 +24,12 @@
     // add teammates here (docs/reference/team.md) rather than hand-editing
     // D1. Not a secret: plan tier isn't sensitive, and this only ever
     // grants owner to an email the person themselves signs up with.
-    "OWNER_EMAILS": "charlie.sandvall@gmail.com"
+    "OWNER_EMAILS": "charlie.sandvall@gmail.com,quentinfeinaeugle@gmail.com,pauline.mophou@protonmail.com,eleanore4444@icloud.com",
+    // Not secret — a price ID only identifies a subscription tier, it
+    // can't be used to charge anything on its own. STRIPE_SECRET_KEY and
+    // STRIPE_WEBHOOK_SECRET stay as `wrangler secret put` values instead.
+    "STRIPE_PRICE_STARTER": "price_1UA34vPkkhUMaYx0GKqi6ZlY",
+    "STRIPE_PRICE_PLUS": "price_1UA35hPkkhUMaYx0PLG8Vh8s"
   },
   "d1_databases": [
     {
