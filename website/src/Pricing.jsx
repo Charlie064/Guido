@@ -2,13 +2,12 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
-import { currencyForCountry, formatMoney, localeCountry } from "./currency.js";
+import { currencyForCountry, formatMoney, localeCountry, proAmount } from "./currency.js";
 
 const TIERS = [
   {
     id: "pro",
     name: "Guido Pro",
-    amount: 7.99,
     period: "/ month",
     tagline: "Keep going, and keep what you learn.",
     features: [
@@ -21,7 +20,6 @@ const TIERS = [
   {
     id: "free",
     name: "Free",
-    amount: 0,
     period: "",
     tagline: "Try the whole loop on your own screen.",
     features: ["1 new skill", "Teach, Show, and Do", "No saved skills"],
@@ -35,7 +33,7 @@ function PricingCard({ tier, currency, onJoin }) {
       <h3 className="pricing-name">{tier.name}</h3>
       <p className="pricing-tagline">{tier.tagline}</p>
       <p className={`pricing-amount${currency ? "" : " is-pending"}`}>
-        <span>{currency ? formatMoney(tier.amount, currency) : "\u00a0"}</span>
+        <span>{currency ? formatMoney(tier.featured ? proAmount(currency) : 0, currency) : "\u00a0"}</span>
         {tier.period ? <span className="pricing-period">{tier.period}</span> : null}
       </p>
       <ul className="pricing-features">
@@ -90,7 +88,7 @@ export default function Pricing() {
             Start free. Go further with Guido Pro.
           </h1>
           <p className="pricing-lead">
-            Same three modes on every plan. Prices show in your local currency.
+            Same three modes on every plan. Guido Pro is €7.99 a month, shown in your currency.
           </p>
         </div>
 
@@ -106,7 +104,7 @@ export default function Pricing() {
         </div>
 
         <p className="pricing-note">
-          Guido Pro's price and included skills are subject to change.
+          Local prices are converted from €7.99 and rounded. Subject to change.
         </p>
       </section>
 

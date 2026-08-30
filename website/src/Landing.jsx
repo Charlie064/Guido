@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, MousePointer2, Video } from "lucide-react";
+import { ArrowRight, MousePointer2 } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { FLASH_BLUE } from "./brand.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 
 const INTRO_MS = 4200;
+const LANDING_HASHES = new Set(["how-it-works", "works-with", "waitlist"]);
+
+function landingHash() {
+  return window.location.hash.replace(/^#/, "");
+}
+
+function skipIntro() {
+  return LANDING_HASHES.has(landingHash());
+}
 
 function IntroAnimation({ onDone }) {
   const [visible, setVisible] = useState(true);
@@ -72,43 +81,25 @@ const WORKS_WITH = [
   { name: "Video editor", img: "/assets/video-editor.png" },
   { name: "VS Code", img: "/assets/vscode.png" },
   { name: "Blender", img: "/assets/blender.png" },
-  { name: "DaVinci Resolve", icon: Video, bg: "#1B1B3A", fg: "#ffffff" },
+  { name: "DaVinci Resolve", img: "/assets/davinci-resolve.svg" },
 ];
 
 function WorksWithMarquee() {
   const items = [...WORKS_WITH, ...WORKS_WITH];
   return (
     <div
-      className="relative overflow-hidden py-2"
+      className="works-marquee"
       style={{ maskImage: "linear-gradient(to right, transparent, black 8%, black 92%, transparent)" }}
     >
-      <div className="flex gap-6 w-max px-2" style={{ animation: "marquee-x 22s linear infinite" }}>
-        {items.map((app, i) => {
-          const Icon = app.icon;
-          const tilt = i % 2 === 0 ? -2 : 2;
-          return (
-            <div key={i} className="flex flex-col items-center gap-2 shrink-0 w-32">
-              <div
-                className="w-28 h-28 rounded-2xl flex items-center justify-center transition-transform duration-200 hover:-translate-y-1"
-                style={{
-                  background: app.img ? "#ffffff" : `linear-gradient(160deg, ${app.bg}, ${app.bg}dd)`,
-                  boxShadow: app.img
-                    ? "0 5px 0 0 rgba(0,0,0,0.1), inset 0 1px 0 rgba(255,255,255,0.9), 0 16px 26px -12px rgba(0,0,0,0.25)"
-                    : "0 5px 0 0 rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.35), 0 16px 26px -12px rgba(0,0,0,0.4)",
-                  border: app.img ? "1px solid rgba(0,0,0,0.06)" : "none",
-                  transform: `rotate(${tilt}deg)`,
-                }}
-              >
-                {app.img ? (
-                  <img src={app.img} alt={app.name} className="w-24 h-24 object-contain" />
-                ) : (
-                  <Icon size={48} color={app.fg} strokeWidth={1.6} />
-                )}
-              </div>
-              <span className="text-xs font-semibold text-neutral-500 text-center">{app.name}</span>
+      <div className="works-track">
+        {items.map((app, i) => (
+          <div key={i} className="works-item">
+            <div className="works-tile">
+              <img src={app.img} alt="" className="works-logo" />
             </div>
-          );
-        })}
+            <span className="works-label">{app.name}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -117,12 +108,21 @@ function WorksWithMarquee() {
 export default function Landing({ startWaitlist = false }) {
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
   const [waitlistOpen, setWaitlistOpen] = useState(startWaitlist);
-  const [introDone, setIntroDone] = useState(false);
+  const [introDone, setIntroDone] = useState(() => skipIntro());
   const [touchPointer] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   );
   const heroGuidoRef = useRef(null);
   const heroVideoRef = useRef(null);
+
+  useEffect(() => {
+    const id = landingHash();
+    if (!LANDING_HASHES.has(id)) return;
+    const jump = () => document.getElementById(id)?.scrollIntoView();
+    jump();
+    const raf = requestAnimationFrame(jump);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   useEffect(() => {
     const video = heroVideoRef.current;
@@ -145,7 +145,7 @@ export default function Landing({ startWaitlist = false }) {
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
-      <IntroAnimation onDone={setIntroDone} />
+      {introDone ? null : <IntroAnimation onDone={setIntroDone} />}
       {introDone ? (
         <GlassMascotCursor
           disabled={touchPointer}

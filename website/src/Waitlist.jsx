@@ -7,7 +7,7 @@ const APPS = [
   { id: "word", label: "Word" },
   { id: "notion", label: "Notion", img: "/assets/notion.png" },
   { id: "adobe", label: "Adobe" },
-  { id: "davinci", label: "DaVinci Resolve", img: "/assets/video-editor.png" },
+  { id: "davinci", label: "DaVinci Resolve", img: "/assets/davinci-resolve.svg" },
   { id: "cad", label: "CAD / CAM" },
   { id: "blender", label: "Blender", img: "/assets/blender.png" },
 ];

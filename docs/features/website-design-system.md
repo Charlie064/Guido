@@ -54,6 +54,8 @@ not swap it for the glass SVG mascot; that buddy is a separate
 cursor-follow helper (see [mascot.md](mascot.md)). The landing intro
 is a circular pointer, a center click, then a slow fade-in of the
 glass mascot. After that the hero holds a still of the Guido mark.
+Hashed jumps (`/#works-with`, `/#how-it-works`) skip the intro and
+scroll straight to that section — used when leaving Pricing.
 Laptop header nav is **How it works** and **Usecases** (hidden on
 phone). The hero headline is sentence-case Space Grotesk in flash pink,
 not uppercase. The header logo stays `guido-icon.png`.
@@ -73,8 +75,9 @@ nav adds Pricing next to How it works and Usecases. Sticker amounts
 are marketing copy and may diverge from
 [business/pricing.md](../business/pricing.md) until billing ships.
 Currency follows Cloudflare `request.cf.country` via `GET /api/geo`
-(locale region if that call fails) — same number, local ISO code, not
-a live FX rate.
+(locale region if that call fails). Guido Pro is **€7.99**; other
+countries see a charm-rounded equivalent (Sweden **79 kr**), not the
+same 7.99 with a swapped symbol. Static EUR rates, not a live FX tick.
 
 **Waitlist modal** — same pink–blue glass tile as how-it-works, as a
 large overlay (also at `/waitlist` for referral links). Clicking Join
@@ -127,5 +130,6 @@ a desktop view needs them.
 - `website/public/assets/guido-icon.png` — brand mark (copied to
   `spikes/tauri-overlay/src/assets/guido-icon.png` and the Tauri
   bundle icons).
-- `get-guido.png`, `hero-demo.mp4`, and the "works with" logos are
-  website-only.
+- `get-guido.png`, `hero-demo.mp4`, and the "works with" logos
+  (including `davinci-resolve.svg`) are website-only. Marquee tiles
+  are a shared 72–80px square with a 38–42px contained mark.
