@@ -46,20 +46,21 @@ export function createAuth(
     // WebView2 on Windows, WKWebView on macOS) and per Tauri version, so
     // this lists every variant rather than picking one.
     //
-    // `http://127.0.0.1:1431` is `tauri dev`-only: with no `devUrl` set
-    // in tauri.conf.json, Tauri serves the frontend off its own local
-    // HTTP server rather than the packaged app's tauri:// scheme (likely
-    // so navigator.mediaDevices.getUserMedia — the voice mic — gets a
+    // `http://127.0.0.1:*` is `tauri dev`-only: with no `devUrl` set in
+    // tauri.conf.json, Tauri serves the frontend off its own local HTTP
+    // server rather than the packaged app's tauri:// scheme (likely so
+    // navigator.mediaDevices.getUserMedia — the voice mic — gets a
     // secure context WebKitGTK actually honors). Confirmed live via
-    // `wrangler tail` against a real sign-in attempt, not guessed — the
-    // port looked stable across a run but isn't config-pinned anywhere,
-    // so if a future `tauri dev` picks a different one, re-check tail
-    // logs for "Invalid origin: ..." and update this entry to match.
+    // `wrangler tail` against real sign-in attempts — first port 1431,
+    // then 1430 after an app restart, so it's picked per-launch rather
+    // than fixed. Wildcarded rather than chasing individual ports; a
+    // packaged release build (real devUrl-less production bundle) still
+    // only ever presents tauri://localhost, which this doesn't affect.
     trustedOrigins: [
       "tauri://localhost",
       "http://tauri.localhost",
       "https://tauri.localhost",
-      "http://127.0.0.1:1431",
+      "http://127.0.0.1:*",
     ],
     // Bearer, not cookies: the desktop app has no cookie jar and calls the
     // Worker directly from a native login form (no browser round trip) —
