@@ -36,62 +36,99 @@
   <main>
     <a class="back" href="/">← Back to Guido</a>
     <h1>Privacy policy</h1>
-    <p class="meta">Last updated: 29 August 2026</p>
+    <p class="meta">Last updated: 30 August 2026</p>
     <p>
       Guido (project name Tutoria) is a desktop assistant that guides you
       through software on your own screen. This page is the privacy policy
-      for the website and the Google sign-in used by the desktop app.
+      for the website and the desktop app. Guido is currently run by an
+      individual developer, not an incorporated company; "we" below means
+      that developer.
     </p>
 
     <h2>What we collect</h2>
     <ul>
+      <li>Waitlist email, if you join the list on the website.</li>
       <li>
-        Waitlist name and email, plus optional answers (which apps you
-        want covered, and an optional note about who you are — for
-        example university student, young professional, or founder)
-        if you join the list. We also store a
-        referral code and, if you arrived from someone’s share link,
-        who referred you.
+        Your email address and a hashed password when you create an
+        account. We never see or store your password in plain text.
       </li>
       <li>
-        Google account email and Google’s stable account id (<code>sub</code>)
-        when you sign in. We use these to create your user and membership row.
-      </li>
-      <li>
-        A session token stored on your device’s OS keychain after login, and
+        A session token stored on your device's OS keychain after login, and
         the matching row on our Cloudflare D1 database so we can revoke it.
       </li>
       <li>
         A count of new skills you start (a goal + research + on-screen
         steps). We use this only to enforce the membership quota.
       </li>
+      <li>
+        The number of seconds of audio you transcribe through voice input
+        each month. We use this only to enforce the voice quota — see
+        "Voice input" below for what happens to the audio itself.
+      </li>
+      <li>
+        If you subscribe to a paid tier, your billing history and
+        subscription status. Payments are processed by Stripe — we don't
+        receive or store your full card number.
+      </li>
     </ul>
 
     <h2>Screen captures</h2>
     <p>
       When you ask Guido to look at your screen, a screenshot is sent to
-      Anthropic’s Claude API to locate a UI element. Screenshots are not
-      stored as part of a saved skill.
+      Anthropic's Claude API to locate a UI element or understand the
+      application you're in. Screenshots are not stored as part of a saved
+      skill and are not retained by us after the request completes.
+    </p>
+
+    <h2>Voice input</h2>
+    <p>
+      When you use voice input, a short audio clip (up to 120 seconds) is
+      sent from the desktop app, through our server, to Aqua Voice for
+      transcription. We do not store the audio ourselves — only the
+      transcribed text is returned to the app, and only the clip's duration
+      is logged, to enforce the monthly voice quota. We can't make retention
+      promises on Aqua Voice's behalf; if you want details on how long they
+      hold audio they receive, ask us and we'll point you to their policy.
     </p>
 
     <h2>Who we share with</h2>
     <ul>
-      <li>Google — only to complete Sign in with Google.</li>
       <li>Anthropic — screenshots and prompts for vision/research while you use the app.</li>
-      <li>Cloudflare — hosts this site and the D1 database.</li>
+      <li>Aqua Voice — audio clips, for speech-to-text transcription, if you use voice input.</li>
+      <li>Stripe — payment details and billing history, if you subscribe to a paid tier.</li>
+      <li>Cloudflare — hosts this site, our server, and our database.</li>
     </ul>
     <p>We do not sell your data.</p>
 
     <h2>How long we keep it</h2>
     <p>
-      Waitlist emails and account rows stay until you ask us to delete them.
-      Sessions expire and can be revoked by deleting the session row.
-      Skill-run counts stay so we can apply your plan’s quota.
+      Waitlist emails and account rows stay until you ask us to delete
+      them. Sessions expire and can be revoked by deleting the session row.
+      Skill-run and voice-usage counts stay so we can apply your plan's
+      quota, and reset each billing period.
+    </p>
+
+    <h2>Your choices</h2>
+    <p>
+      You can ask us to see, correct, or delete the data we hold about you,
+      or to export it, by emailing us at the address below. We'll respond
+      within a reasonable time. Deleting your account removes your user,
+      session, and quota rows; it does not retract data already sent to
+      Anthropic or Aqua Voice for a request you made before deletion, since
+      we don't control their retention.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      If what we collect or share changes, we'll update this page and move
+      the "Last updated" date above. We don't currently email users about
+      changes, so check back if you want to stay current.
     </p>
 
     <h2>Contact</h2>
     <p>
-      Questions or deletion requests:
+      Questions, or requests to access, correct, delete, or export your
+      data:
       <a href="mailto:quentinfeinaeugle@gmail.com">quentinfeinaeugle@gmail.com</a>
     </p>
   </main>

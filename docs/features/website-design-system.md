@@ -54,10 +54,12 @@ not swap it for the glass SVG mascot; that buddy is a separate
 cursor-follow helper (see [mascot.md](mascot.md)). The landing intro
 is a circular pointer, a center click, then a slow fade-in of the
 glass mascot. After that the hero holds a still of the Guido mark.
-Hashed jumps (`/#works-with`, `/#how-it-works`) skip the intro and
-scroll straight to that section — used when leaving Pricing.
+The intro plays once per browser (`localStorage` `guido.introSeen`).
+Hashed jumps (`/#works-with`, `/#how-it-works`) skip it and scroll
+straight to that section — used when leaving Pricing.
 Laptop header nav is **How it works** and **Usecases** (hidden on
-phone). The hero headline is sentence-case Space Grotesk in flash pink,
+phone). Footer links are Sign in, Privacy policy, and Terms of service.
+The hero headline is sentence-case Space Grotesk in flash pink,
 not uppercase. The header logo stays `guido-icon.png`.
 
 **Primary CTA ("keycap" button)** — black pill, hard bottom offset

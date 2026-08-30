@@ -35,6 +35,7 @@ export function SiteFooter() {
           <p>© Guido team</p>
           <a href="/login">Sign in</a>
           <a href="/privacy.html">Privacy policy</a>
+          <a href="/terms.html">Terms of service</a>
         </div>
       </div>
     </footer>

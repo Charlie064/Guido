@@ -84,6 +84,7 @@ before shipping beyond a demo.)
 | Skill generation/editing/storage algorithm | `docs/features/skills.md` |
 | Guido mascot (Tuto) states, cursor buddy | `docs/features/mascot.md` |
 | Website + desktop visual language | `docs/features/website-design-system.md` |
+| Privacy policy, terms of service | `website/public/privacy.html`, `website/public/terms.html` — update these too whenever a change adds/removes a data type collected, a third party data is sent to, or billing terms |
 | Login, Google account link, membership check (Quentin) | `docs/planning/login-membership-plan.md` |
 | Membership pricing, Anthropic API COGS | `docs/business/pricing.md` |
 

@@ -6,14 +6,31 @@ import { FLASH_BLUE } from "./brand.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 
 const INTRO_MS = 4200;
+const INTRO_SEEN_KEY = "guido.introSeen";
 const LANDING_HASHES = new Set(["how-it-works", "works-with", "waitlist"]);
 
 function landingHash() {
   return window.location.hash.replace(/^#/, "");
 }
 
+function introAlreadySeen() {
+  try {
+    return window.localStorage.getItem(INTRO_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markIntroSeen() {
+  try {
+    window.localStorage.setItem(INTRO_SEEN_KEY, "1");
+  } catch {
+    /* private mode */
+  }
+}
+
 function skipIntro() {
-  return LANDING_HASHES.has(landingHash());
+  return LANDING_HASHES.has(landingHash()) || introAlreadySeen();
 }
 
 function IntroAnimation({ onDone }) {
@@ -145,7 +162,14 @@ export default function Landing({ startWaitlist = false }) {
 
   return (
     <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
-      {introDone ? null : <IntroAnimation onDone={setIntroDone} />}
+      {introDone ? null : (
+        <IntroAnimation
+          onDone={() => {
+            markIntroSeen();
+            setIntroDone(true);
+          }}
+        />
+      )}
       {introDone ? (
         <GlassMascotCursor
           disabled={touchPointer}

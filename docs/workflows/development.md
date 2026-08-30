@@ -176,7 +176,8 @@ branded `/login` (Guido fonts/buttons), then `/auth/google/start`,
 `https://guidotutor.com/auth/google/callback`
 (production; `https://tutoria-website.guidotutor.workers.dev` still
 works) on the Google OAuth client. The privacy policy Google
-requires is `website/public/privacy.html` (`/privacy.html`). Quota
+requires is `website/public/privacy.html` (`/privacy.html`). Terms are
+`website/public/terms.html` (`/terms.html`). Quota
 rules are in [business/pricing.md](../business/pricing.md).
 
 Deploying live:
@@ -192,6 +193,9 @@ product host is Cloudflare, not Vercel.
 
 Production is `https://guidotutor.com` (and `www`) on the Tutoria
 Cloudflare account, via custom domains on the `tutoria-website` Worker.
+Live is the waitlist site (Join the waitlist, Usecases, Pricing) from
+`claudev/quentin/glass-waitlist`. `npm run deploy` from `main` or the
+older download landing overwrites that Worker for everyone — don't.
 `npm run deploy` attaches those hostnames from `wrangler.jsonc`. This
 needs `wrangler login` once, and needs you to actually be a member
 of the Tutoria Cloudflare account — invites went out 2026-08-29 (see

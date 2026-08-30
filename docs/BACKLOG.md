@@ -78,3 +78,10 @@ point — this file should never pose as a source of truth for what's done.
   Needed before the login flow in
   [planning/login-membership-plan.md](planning/login-membership-plan.md)
   can use a stable OAuth redirect origin instead of a `workers.dev` URL.
+- **BL-016 — Update privacy policy + terms for Stripe billing once wired.**
+  `website/public/privacy.html` and `website/public/terms.html` already
+  have pre-emptive billing, auto-renewal, cancellation, refunds, taxes,
+  and Stripe disclosure text. Remaining when billing ships: a self-serve
+  cancel control (terms currently fall back to email), confirm Stripe Tax
+  so the checkout-tax line is true, and a lawyer pass on the
+  arbitration/class-action-waiver clause.
