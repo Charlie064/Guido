@@ -87,6 +87,7 @@ before shipping beyond a demo.)
 | Website + desktop visual language | `docs/features/website-design-system.md` |
 | Login, membership check, quotas | `docs/features/auth.md` |
 | Voice input (speech-to-text), Aqua Voice | `docs/features/voice.md` |
+| Privacy policy, terms of service | `website/public/privacy.html`, `website/public/terms.html` — update these too whenever a change adds/removes a data type collected, a third party data is sent to, or billing terms |
 | Membership pricing, Anthropic API COGS | `docs/business/pricing.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first

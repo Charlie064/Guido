@@ -761,6 +761,9 @@ export default function Landing() {
               <a href="/privacy.html" className="text-xs text-neutral-400 hover:text-neutral-700">
                 Privacy policy
               </a>
+              <a href="/terms.html" className="text-xs text-neutral-400 hover:text-neutral-700">
+                Terms of service
+              </a>
             </div>
           </div>
         </div>

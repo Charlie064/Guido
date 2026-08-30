@@ -257,3 +257,18 @@ point — this file should never pose as a source of truth for what's done.
   (`sendVerificationEmail` in the `emailAndPassword` or
   `emailVerification` config), no schema changes required since
   `user.emailVerified` already exists in the generated table.
+- **BL-016 — Update privacy policy + terms for Stripe billing once wired.**
+  `website/public/privacy.html` and `website/public/terms.html` (added
+  2026-08-30, see [features/auth.md](features/auth.md) and
+  [business/pricing.md](business/pricing.md)) now have the *text* for
+  billing, auto-renewal, cancellation, refunds, taxes, and a Stripe data
+  disclosure written pre-emptively, since `claudev/charlie/stripe-billing`
+  hasn't merged yet and no billing UI exists. **Remaining when that
+  branch merges**: build the actual self-serve cancel control in account
+  settings the terms promise (today it falls back to "email us," which
+  the terms allow but a real control is better for the click-to-cancel
+  requirement); confirm Stripe Tax is actually enabled so the "taxes
+  collected at checkout" line is true; and get a real lawyer pass on the
+  arbitration/class-action-waiver clause before relying on it — that
+  clause's enforceability is jurisdiction- and notice-dependent in ways
+  a template can't guarantee.
