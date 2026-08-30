@@ -160,7 +160,7 @@ export default function Landing({ startWaitlist = false }) {
           <Logo />
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-neutral-600">
             <a href="#how-it-works" className="hover:text-black transition-colors">How it works</a>
-            <a href="#works-with" className="hover:text-black transition-colors">Works with</a>
+            <a href="#works-with" className="hover:text-black transition-colors">Usecases</a>
           </nav>
           <button
             type="button"
