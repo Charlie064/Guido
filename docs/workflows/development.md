@@ -264,7 +264,9 @@ The live landing page is Pauline’s Guido Vite app in `website/src/`
 buttons open the multi-step glass modal (`website/src/Waitlist.jsx`).
 `/waitlist?ref=` opens the same overlay. `/pricing` is the same chrome
 plus Free and Guido Pro cards; those CTAs open the waitlist, not
-a download. `GET /api/geo` returns `{ country }` from Cloudflare so
+a download. Desktop Upgrade/Manage opens `/pricing.html` (Charlie's
+Free/Starter/Plus billing copy) so the static file does not steal the
+public `/pricing` route. Assets use `html_handling: none` for that. `GET /api/geo` returns `{ country }` from Cloudflare so
 Guido Pro can show a local sticker converted from €7.99. It POSTs JSON (`name`,
 `email`, `apps`, `appsOther`, `role`, `ref`) to `/api/waitlist`. The
 Worker validates and inserts into D1 (`worker/index.ts` +

@@ -997,7 +997,7 @@ document.querySelector("#profile-usage").addEventListener("click", () => {
 });
 
 // No Stripe yet (docs/planning/login-membership-plan.md's "Open /
-// deferred") — the website's /pricing page (website/public/pricing.html)
+// deferred") — the website's /pricing.html page (desktop billing copy)
 // is where a plan/billing action actually goes: the account's email rides
 // along in the query string so the page (and whoever reads the resulting
 // "upgrade me" email, today Charlie flipping D1 by hand) knows which
@@ -1016,7 +1016,7 @@ function openWebsitePricing(plan) {
   if (plan) params.set("plan", plan);
   if (membership?.email) params.set("email", membership.email);
   const query = params.toString();
-  window.__TAURI__.opener.openUrl(`${WEBSITE_BASE_URL}/pricing${query ? `?${query}` : ""}`);
+  window.__TAURI__.opener.openUrl(`${WEBSITE_BASE_URL}/pricing.html${query ? `?${query}` : ""}`);
 }
 document.querySelectorAll("[data-plan-target]").forEach((btn) => {
   btn.addEventListener("click", () => {
