@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "tutoria-website",
+  "account_id": "06e757ca8ed84a9c592f859886811b41",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
   "workers_dev": true,

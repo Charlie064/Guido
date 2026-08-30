@@ -133,10 +133,11 @@ the waitlist admin. **No Cloudflare login needed for local `dev` /
 
 `GET /internal/waitlist` (and `GET /internal/waitlist/export` for CSV)
 is served by the Worker, not the React app, and is not linked from the
-public site. In production put Cloudflare Access in front of
-`/internal/waitlist*`. Locally, open
-`http://localhost:8787/internal/waitlist` on `wrangler dev` — there is
-no Access header, so the page shows “Logged in as: (no Access header)”.
+public site. Localhost is open. On `guidotutor.com` / `workers.dev` the
+Worker returns 404 unless Cloudflare Access set
+`Cf-Access-Authenticated-User-Email`. Put Access in front of
+`/internal/waitlist*` before relying on the live URL. Locally, open
+`http://localhost:8787/internal/waitlist` on `wrangler dev`.
 
 **If you built your site separately** (your own localhost project, not
 started from this scaffold), bringing it in is a copy, not a rewrite:

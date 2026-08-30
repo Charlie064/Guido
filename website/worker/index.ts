@@ -53,14 +53,15 @@ export default {
       return handleSkillStart(request, env);
     }
 
-    // Internal waitlist admin. This Worker does NOT implement auth — these
-    // routes are expected to be protected by Cloudflare Access (Zero Trust)
-    // in production. Local `wrangler dev` has no Access in front.
+    // Internal waitlist admin. Localhost is open. On a public hostname
+    // the Worker 404s unless Cloudflare Access set the user-email header.
     const path = url.pathname.replace(/\/+$/, "") || "/";
     if (path === "/internal/waitlist" && request.method === "GET") {
+      if (!allowInternalWaitlist(request)) return notFound();
       return handleInternalWaitlist(request, env);
     }
     if (path === "/internal/waitlist/export" && request.method === "GET") {
+      if (!allowInternalWaitlist(request)) return notFound();
       return handleInternalWaitlistExport(env);
     }
 
@@ -351,6 +352,16 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
     skills_included: includedFor(member.plan),
     can_save_skills: canSaveSkills(member.plan),
   });
+}
+
+function allowInternalWaitlist(request: Request): boolean {
+  const host = new URL(request.url).hostname;
+  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return true;
+  return Boolean(request.headers.get("Cf-Access-Authenticated-User-Email")?.trim());
+}
+
+function notFound(): Response {
+  return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
 }
 
 async function handleInternalWaitlist(request: Request, env: Env): Promise<Response> {
