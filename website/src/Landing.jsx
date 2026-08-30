@@ -712,16 +712,15 @@ export default function Landing() {
           className="w-full max-w-2xl mx-auto mb-10"
         />
 
-        <button
-          type="button"
-          onClick={() => setDownloadOpen(true)}
-          className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-          style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 36px 8px rgba(196,181,253,0.35)")}
-          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+        {/* Desktop download disabled 2026-08-30: last real-hardware test
+            couldn't launch the macOS build (see STATUS.md), and the next
+            release hasn't been re-verified since. Re-enable by restoring
+            the setDownloadOpen(true) button below once that's confirmed. */}
+        <div
+          className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white/60 border border-black/10 text-[#0A0A0A]/50 cursor-default select-none"
         >
-          Download for free
-        </button>
+          Desktop app — coming soon
+        </div>
       </section>
 
       {downloadOpen && (
