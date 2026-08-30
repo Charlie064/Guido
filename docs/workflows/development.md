@@ -193,9 +193,14 @@ product host is Cloudflare, not Vercel.
 
 Production is `https://guidotutor.com` (and `www`) on the Tutoria
 Cloudflare account, via custom domains on the `tutoria-website` Worker.
-Live is the waitlist site (Join the waitlist, Usecases, Pricing) from
-`claudev/quentin/glass-waitlist`. `npm run deploy` from `main` or the
-older download landing overwrites that Worker for everyone — don't.
+**Production must stay the waitlist Worker** from
+`claudev/quentin/glass-waitlist` (Join the waitlist top-right, Usecases,
+working `/pricing` with Free + Guido Pro, first-visit intro). Do not
+`npm run deploy` from `main`, from `claudev/charlie/pricing-page`, or
+from any download-landing tree — that overwrites `tutoria-website` for
+everyone and puts "Download for free" plus the static Starter/Plus page
+back on guidotutor.com. Charlie's Stripe checkout lives on that same
+branch for the desktop app; it is not the public marketing site.
 `npm run deploy` attaches those hostnames from `wrangler.jsonc`. This
 needs `wrangler login` once, and needs you to actually be a member
 of the Tutoria Cloudflare account — invites went out 2026-08-29 (see
