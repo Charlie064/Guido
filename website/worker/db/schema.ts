@@ -15,6 +15,10 @@ export const memberships = sqliteTable("memberships", {
     .primaryKey(),
   plan: text("plan").notNull(), // 'free' | 'starter' | 'plus' | 'owner'
   status: text("status").notNull(), // 'active' | 'expired'
+  // Set once the user has ever started a Stripe Checkout — lets the
+  // webhook (worker/index.ts) and the billing-portal route find the
+  // right Stripe Customer without storing it anywhere else.
+  stripeCustomerId: text("stripe_customer_id").unique(),
   updatedAt: text("updated_at")
     .default(sql`(datetime('now'))`)
     .notNull(),

@@ -704,9 +704,12 @@ homeEls.goalInput.addEventListener("input", refreshHomeSteps);
 
 const WEBSITE_BASE_URL = "https://guidotutor.com";
 
-// Opens a website URL in the system's default browser — used for
-// anything this app deliberately doesn't do itself (checkout, billing
-// management: see openPayView below and docs/planning/payment-page.md).
+// Opens a URL in the system's default browser — used for anything this
+// app deliberately doesn't do itself (checkout, billing management: see
+// openPayView below and docs/planning/payment-page.md). `path` is either
+// a site-relative path (prefixed with WEBSITE_BASE_URL — the common case)
+// or an already-absolute URL, e.g. a Stripe-hosted checkout/portal link
+// (used as-is, since prefixing it with our own origin would break it).
 // Tries the Tauri opener plugin first (registered in lib.rs, granted via
 // capabilities/default.json's "opener:default"; invoke() is the one
 // entry point guaranteed to exist per the window.__TAURI__.core pattern
@@ -715,7 +718,7 @@ const WEBSITE_BASE_URL = "https://guidotutor.com";
 // Falls back to window.open for the rare case this file is ever loaded
 // outside a Tauri webview (a plain browser during local UI iteration).
 async function openWebsite(path) {
-  const url = `${WEBSITE_BASE_URL}${path}`;
+  const url = /^https?:\/\//.test(path) ? path : `${WEBSITE_BASE_URL}${path}`;
   try {
     await invoke("plugin:opener|open_url", { url });
   } catch (err) {
@@ -930,24 +933,49 @@ document.querySelector("#profile-attach").addEventListener("click", () => {
   showView("setup");
 });
 
-// No in-app checkout, by design — the desktop app never touches payment
-// (docs/planning/payment-page.md). Both buttons hand off to the website's
-// /pricing page in the system browser; the query param lets that page
-// preselect/highlight the tier the user was already looking at. Real
-// checkout isn't wired yet (no Stripe account), so today /pricing itself
-// is the honest destination — it shows the tiers without pretending to
-// charge anyone, same spirit as the alert() it replaces, just a page
-// instead of a dialog.
+// Still no in-app checkout — the app never sees a card number or talks to
+// Stripe directly (docs/planning/payment-page.md). But it does need to be
+// the one to ask the Worker for a Checkout/Portal URL, since it's the only
+// place holding the session token; a plain browser tab on /pricing has no
+// way to authenticate (see docs/features/auth.md — login is desktop-only).
+// So: call our own already-authenticated API (same pattern as
+// chargeForNewSkill above), then hand the Stripe-hosted URL it returns to
+// the system browser. If the call fails (signed out, network, Stripe
+// error), fall back to the static /pricing page rather than dead-ending.
+async function requestBillingRedirect(path, body) {
+  if (!currentSessionToken) {
+    openWebsite("/pricing");
+    return;
+  }
+  const reasonEl = document.querySelector("#pay-reason");
+  reasonEl.textContent = "Opening checkout…";
+  reasonEl.hidden = false;
+  try {
+    const res = await fetch(`${WEBSITE_BASE_URL}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentSessionToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.url) {
+      throw new Error(payload.error || "Could not start checkout");
+    }
+    reasonEl.hidden = true;
+    await openWebsite(payload.url);
+  } catch (err) {
+    console.error("billing redirect failed, falling back to /pricing", err);
+    reasonEl.textContent = "Couldn't reach billing — opening the pricing page instead.";
+    openWebsite("/pricing");
+  }
+}
+
 document.querySelectorAll("[data-plan-target]").forEach((btn) => {
   btn.addEventListener("click", () => {
-    openWebsite(`/pricing?plan=${btn.dataset.planTarget}`);
+    requestBillingRedirect("/api/billing/checkout", { plan: btn.dataset.planTarget });
   });
 });
 document.querySelector("#pay-manage-btn").addEventListener("click", () => {
-  // No Stripe Billing Portal yet either — same page for now. Once one
-  // exists this becomes a POST to a Worker route that creates a portal
-  // session and redirects there, not a static URL (see the plan doc).
-  openWebsite("/pricing");
+  requestBillingRedirect("/api/billing/portal");
 });
 
 // Logos we ship, for apps whose icon can't be extracted from a live

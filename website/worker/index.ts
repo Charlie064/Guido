@@ -8,6 +8,7 @@ import {
   membershipFromBearer,
   remainingFor,
 } from "./auth";
+import { handleBillingCheckout, handleBillingPortal, handleBillingWebhook } from "./billing";
 import { createAuth } from "./better-auth";
 
 export type { Env };
@@ -29,7 +30,13 @@ export default {
     // fall back to its publicly-known default (see the comment on
     // `secret` in worker/better-auth.ts for why its own production check
     // doesn't catch this on Workers).
-    if (url.pathname.startsWith("/api/auth/") || url.pathname === "/api/me" || url.pathname === "/api/skills/start") {
+    if (
+      url.pathname.startsWith("/api/auth/") ||
+      url.pathname === "/api/me" ||
+      url.pathname === "/api/skills/start" ||
+      url.pathname === "/api/billing/checkout" ||
+      url.pathname === "/api/billing/portal"
+    ) {
       if (!env.BETTER_AUTH_SECRET) {
         return json({ error: "Auth is not configured on this Worker" }, 500);
       }
@@ -47,6 +54,18 @@ export default {
     }
     if (url.pathname === "/api/skills/start" && request.method === "POST") {
       return handleSkillStart(request, env);
+    }
+    if (url.pathname === "/api/billing/checkout" && request.method === "POST") {
+      return handleBillingCheckout(request, env, createAuth(env, url.origin));
+    }
+    if (url.pathname === "/api/billing/portal" && request.method === "POST") {
+      return handleBillingPortal(request, env, createAuth(env, url.origin));
+    }
+    // No BETTER_AUTH_SECRET gate: Stripe calls this directly (no bearer
+    // token), and its own signature check in handleBillingWebhook is what
+    // authenticates the request.
+    if (url.pathname === "/api/billing/webhook" && request.method === "POST") {
+      return handleBillingWebhook(request, env);
     }
 
     return env.ASSETS.fetch(request);

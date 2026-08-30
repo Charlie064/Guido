@@ -73,14 +73,15 @@ month; `owner` is never counted.
 - **Email verification** — `requireEmailVerification: false` today; see
   [BACKLOG.md](../BACKLOG.md) BL-015. Needs an email-sending provider
   before this can flip on.
-- **Stripe billing** — `starter`/`plus` are hard-capped and hand-set in
-  D1; no metered overage billing yet (`pricing.md`'s Starter overage
-  rate is specified but not wired to a payment processor). The desktop
-  paywall (`sidebar.js`'s `openPayView`) links out to a website
-  `/pricing` page for both upgrade and "manage subscription" — see
-  [planning/payment-page.md](../planning/payment-page.md) for that
-  page's spec and [BACKLOG.md](../BACKLOG.md) BL-016 for wiring real
-  checkout once a Stripe account exists.
+- **Stripe billing** — checkout and the billing portal are wired
+  (test mode; see [BACKLOG.md](../BACKLOG.md) BL-016 for what's left to
+  go live). Still no metered overage billing (`pricing.md`'s Starter
+  overage rate is specified but not wired to Stripe usage records) —
+  Starter/Plus are flat subscriptions today. Since the website has no
+  browser session (this doc's Flow section), checkout/portal are
+  requested by the **desktop app** itself, not a browser tab on
+  `/pricing` — see `requestBillingRedirect` in `sidebar.js` and
+  [planning/payment-page.md](../planning/payment-page.md).
 - **Session expiry UX** — what the desktop app shows mid-session if a
   token is revoked isn't designed beyond falling back to the login view
   on the next 401.

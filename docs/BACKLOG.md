@@ -257,17 +257,23 @@ point — this file should never pose as a source of truth for what's done.
   (`sendVerificationEmail` in the `emailAndPassword` or
   `emailVerification` config), no schema changes required since
   `user.emailVerified` already exists in the generated table.
-- **BL-016 — Wire real Stripe checkout and a billing portal to
-  `/pricing`.** The desktop app's paywall now links out to
-  `https://guidotutor.com/pricing` for both "Upgrade to Starter/Plus"
-  and "Manage subscription" (`sidebar.js`'s `openWebsite`, see
-  [planning/payment-page.md](planning/payment-page.md)), but that page
-  itself doesn't exist yet and, once it does, won't charge anyone —
-  there's no Stripe account for this project. Two separate pieces once
-  one exists: **checkout** (a Worker route that creates a Stripe
-  Checkout session for the chosen plan and redirects there) and
-  **billing management** (a Worker route that creates a Stripe Customer
-  Portal session and redirects there — `#pay-manage-btn` currently
-  points at the same static `/pricing` page as a stand-in). Needs
-  Stripe test-mode API keys to start; doesn't block building
-  `/pricing`'s static content first.
+- **BL-016 — Done in test mode; go-live is what's left.** Real Stripe
+  checkout and a billing portal are wired: `POST /api/billing/checkout`
+  and `POST /api/billing/portal` (`website/worker/billing.ts`) create a
+  Stripe Checkout/Customer Portal session and return its URL; the
+  **desktop app** calls these itself (it holds the bearer token — a
+  browser tab on `/pricing` has none, see `docs/features/auth.md`) via
+  `requestBillingRedirect` in `sidebar.js`, then opens the returned
+  Stripe URL in the system browser. A webhook
+  (`POST /api/billing/webhook`) keeps `memberships.plan`/`status` and
+  the new `memberships.stripe_customer_id` column
+  (`migrations/0004_add_stripe_customer_id.sql`) in sync with
+  `checkout.session.completed` and `customer.subscription.*` events.
+  Built and tested against a Stripe **sandbox** (test mode) — Starter
+  ($12/mo) and Plus ($24/mo) test Products/Prices exist there. **Still
+  needed before this can charge anyone real:** create the equivalent
+  live-mode Products/Prices, set live `STRIPE_SECRET_KEY` /
+  `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PLUS` on the deployed Worker
+  (`wrangler secret put`), and register a live webhook endpoint at
+  `https://guidotutor.com/api/billing/webhook` to get a live
+  `STRIPE_WEBHOOK_SECRET`.

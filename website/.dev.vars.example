@@ -3,3 +3,15 @@
 # see the comment on `secret` in worker/better-auth.ts for why this can't
 # fall back to Better Auth's default on Workers.
 BETTER_AUTH_SECRET=
+
+# Stripe test-mode secret key (Dashboard, in a sandbox: Developers > API
+# keys). Live deploys use `wrangler secret put STRIPE_SECRET_KEY` instead —
+# never put a live key in this file.
+STRIPE_SECRET_KEY=
+# Signing secret for a webhook endpoint pointed at /api/billing/webhook
+# (Dashboard > Webhooks, or `stripe listen` for local forwarding).
+STRIPE_WEBHOOK_SECRET=
+# Price IDs from Products > <plan> > Pricing in the same Stripe mode as
+# STRIPE_SECRET_KEY above.
+STRIPE_PRICE_STARTER=
+STRIPE_PRICE_PLUS=

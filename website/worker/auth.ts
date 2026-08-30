@@ -8,6 +8,10 @@ export interface Env {
   DB: D1Database;
   BETTER_AUTH_SECRET: string;
   OWNER_EMAILS?: string;
+  STRIPE_SECRET_KEY: string;
+  STRIPE_WEBHOOK_SECRET: string;
+  STRIPE_PRICE_STARTER: string;
+  STRIPE_PRICE_PLUS: string;
 }
 
 export interface MembershipRow {

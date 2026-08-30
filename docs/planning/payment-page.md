@@ -1,5 +1,26 @@
 # Website payment page — handoff plan
 
+**Status: built, Stripe wired (BL-016).** `website/public/pricing.html`
+ships the static page described below (option 1 — no router). Cloudflare's
+asset serving already resolves `/pricing` → `pricing.html` the same way it
+does for `/privacy` → `privacy.html` (`html_handling: auto-trailing-slash`,
+the project default), so no Worker route was needed — a first attempt
+added one anyway and hit a redirect loop (the Worker's own
+`/pricing.html` fetch got canonicalize-redirected back to `/pricing`,
+which the Worker was also intercepting); removed once the fallthrough
+was confirmed sufficient.
+
+Real checkout turned out to need a different shape than this plan
+originally sketched: the website has no browser session (login is
+desktop-only, see `docs/features/auth.md`), so a bare browser tab on
+`/pricing` has no way to authenticate a checkout. Instead, the **desktop
+app** calls `POST /api/billing/checkout` / `POST /api/billing/portal`
+itself (it already holds the bearer token) and opens the Stripe-hosted
+URL those return in the system browser — see `requestBillingRedirect` in
+`spikes/tauri-overlay/src/sidebar.js`. `pricing.html`'s own CTAs stay
+inert ("Open the app to upgrade") for a direct visit, since that's the
+honest state for a session-less tab.
+
 **For:** whoever builds the website `/pricing` page (a teammate or their
 agent) — not the person requesting this plan. Written so you can start
 without a scoping conversation first.
@@ -47,6 +68,9 @@ for the numbers themselves (see "Implementation approach" below for
 what *should* be live).
 
 ## What NOT to build (yet)
+
+Superseded by the "Status" note above — both of these are now built. Left
+as-is for the historical reasoning.
 
 **No real checkout.** There is no Stripe account for this project yet.
 `docs/features/auth.md`'s Deferred section and `pricing.md` are both
