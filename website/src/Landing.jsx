@@ -171,10 +171,7 @@ function DesktopDownloadWindow({ onClose }) {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => {
-                  setPlatform(p.id);
-                  setClicked(false);
-                }}
+                onClick={() => setPlatform(p.id)}
                 className="flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-200"
                 style={{ background: active ? "#0A0A0A" : "transparent", color: active ? "#ffffff" : "#6b6b6b" }}
               >
