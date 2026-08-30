@@ -65,8 +65,8 @@ top third. Used on desktop chrome, not the landing waitlist.
 **Secondary/outline button** — white pill, thin black border, violet
 halo on hover. Landing header and bottom “Join the waitlist” use this.
 
-**Pricing page** (`/pricing`) — same header, waitlist overlay, plus-grid,
-and footer as the landing page. Two cards: quiet white **Free**, then
+**Pricing page** (`/pricing`) — document title `Guido — Pricing`. Same
+header, waitlist overlay, plus-grid, and footer as the landing page. Two cards: quiet white **Free**, then
 elevated glass **Guido Pro** (how-it-works wash, Recommended chip,
 keycap CTA). Pro stacks first on the phone. No download button. Laptop
 nav adds Pricing next to How it works and Usecases. Sticker amounts
