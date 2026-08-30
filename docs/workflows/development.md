@@ -227,10 +227,18 @@ git push origin v0.1.1
 ```
 
 Release CI lives on `claudev/charlie/website-download-button`
-(`.github/workflows/release.yml`) and uploads `Guido_mac.dmg`,
-`Guido_windows.exe`, and `Guido_linux.AppImage`. Those names are
-load-bearing — `website/src/Download.jsx` links to
+(`.github/workflows/release.yml`), not on this branch, and uploads
+`Guido_mac.dmg`, `Guido_windows.exe`, and `Guido_linux.AppImage`. Those
+names are load-bearing — `website/src/Download.jsx` links to
 `github.com/Charlie064/Guido/releases/latest/download/<name>`.
+
+Installed apps check for updates once per launch (`checkForUpdate` at the
+bottom of `sidebar.js`) via Tauri's `updater` plugin, comparing against
+`latest.json` at `releases/latest/download/` — see
+`website-download-button`'s copy of this doc for how that pipeline (app
+versioning, the signing keypair, the JS updater shim) actually works;
+this branch only consumes the resulting release URLs, it doesn't build
+them.
 
 ### 4. Website (Cloudflare Workers + D1)
 

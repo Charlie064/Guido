@@ -23,7 +23,6 @@ import os
 import sys
 import tempfile
 
-import anthropic
 from dotenv import load_dotenv
 
 from live_step import capture_screen
@@ -65,19 +64,12 @@ def main() -> None:
             print('Region must be "x,y,width,height"', file=sys.stderr)
             sys.exit(1)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ANTHROPIC_API_KEY not set — check your .env file.", file=sys.stderr)
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key, max_retries=0)
-
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
         screenshot_path = tmp.name
 
     try:
         capture_screen(screenshot_path, region, portal_scope)
-        result = verify_outcome(client, screenshot_path, expected_outcome, context)
+        result = verify_outcome(screenshot_path, expected_outcome, context)
         print(json.dumps(result))
     except Exception as exc:  # noqa: BLE001 — CLI boundary, report and exit non-zero
         print(f"verify_step failed: {exc}", file=sys.stderr)

@@ -39,6 +39,13 @@
       "name": "VOICE_LIMITER",
       "namespace_id": "1002",
       "simple": { "limit": 20, "period": 60 }
+    },
+    // Abuse guard on /api/vision, which spends real Anthropic API budget
+    // per call — same reasoning as VOICE_LIMITER above.
+    {
+      "name": "VISION_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 20, "period": 60 }
     }
   ],
   "d1_databases": [

@@ -835,10 +835,22 @@ function openUsageView() {
 
     const voiceUsed = membership.voice_seconds_used ?? 0;
     const voiceIncluded = membership.voice_seconds_included ?? 0;
-    const usedMinutes = Math.round(voiceUsed / 60);
-    const capMinutes = Math.round(voiceIncluded / 60);
-    voiceMeta.textContent = `${usedMinutes} of ~${capMinutes} min this month.`;
-    voiceFill.style.width = `${voiceIncluded > 0 ? Math.min(100, (voiceUsed / voiceIncluded) * 100) : 0}%`;
+    const voicePct = voiceIncluded > 0 ? Math.min(100, Math.round((voiceUsed / voiceIncluded) * 100)) : 0;
+    if (membership.plan === "free") {
+      // Free is a one-shot lifetime trial (voice.ts's FREE_TRIAL_SECONDS),
+      // not a recurring allowance — "X of ~Y min this month" read as a
+      // monthly budget that reset, which it never does on this plan. The
+      // bar is binary too (used/not-used), not proportional to seconds
+      // spoken — a 10s clip shouldn't leave the bar looking "mostly free".
+      voiceMeta.textContent = voiceUsed > 0 ? "Free voice trial used." : "1 free voice test available.";
+      voiceFill.style.width = voiceUsed > 0 ? "100%" : "0%";
+    } else {
+      // Paid plans share voice.ts's flat $ cap, not a per-plan minute
+      // allowance, so a minute count implied precision the product
+      // doesn't have — show it as % of the monthly $ budget instead.
+      voiceMeta.textContent = `${voicePct}% of this month's voice budget used.`;
+      voiceFill.style.width = `${voicePct}%`;
+    }
   }
 
   showView("usage");
@@ -1018,19 +1030,17 @@ function openWebsitePricing(plan) {
   const query = params.toString();
   window.__TAURI__.opener.openUrl(`${WEBSITE_BASE_URL}/pricing.html${query ? `?${query}` : ""}`);
 }
-document.querySelectorAll("[data-plan-target]").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (!membership) {
-      loginReturnView = "pay";
-      showView("login");
-      return;
-    }
-    openWebsitePricing(btn.dataset.planTarget);
-  });
-});
 document.querySelector("#pay-manage-btn").addEventListener("click", () => {
   if (!membership) {
     loginReturnView = "pay";
+    showView("login");
+    return;
+  }
+  openWebsitePricing(membership.plan);
+});
+document.querySelector("#usage-upgrade-btn").addEventListener("click", () => {
+  if (!membership) {
+    loginReturnView = "usage";
     showView("login");
     return;
   }
@@ -1491,6 +1501,20 @@ async function startVoiceRecording() {
 
   if (!currentSessionToken) {
     errorEl.textContent = "Sign in to use voice input.";
+    return;
+  }
+
+  // Quota already exhausted (checked client-side off the same /api/me
+  // numbers the usage view renders) — skip straight to the paywall instead
+  // of recording a clip the server will just 403 on. Matters most for free
+  // accounts, whose one-minute lifetime trial (voice.ts's
+  // FREE_TRIAL_SECONDS) is otherwise gone the first time someone talks.
+  if (membership && (membership.voice_seconds_used ?? 0) >= (membership.voice_seconds_included ?? 0)) {
+    openPayView(
+      membership.plan === "free"
+        ? "Your free voice trial is used up — upgrade for more."
+        : "This month's voice budget is used up.",
+    );
     return;
   }
 

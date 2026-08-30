@@ -23,7 +23,6 @@ import os
 import sys
 import tempfile
 
-import anthropic
 from dotenv import load_dotenv
 
 from answer import answer_question
@@ -64,13 +63,6 @@ def main() -> None:
             print('Region must be "x,y,width,height"', file=sys.stderr)
             sys.exit(1)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ANTHROPIC_API_KEY not set — check your .env file.", file=sys.stderr)
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key, max_retries=0)
-
     # No capture at all unless a region or --portal was actually given —
     # the tri-state (no screenshot / region / portal) this script needs,
     # unlike live_step.py/verify_step.py where omitting both still
@@ -82,7 +74,7 @@ def main() -> None:
                 screenshot_path = tmp.name
             capture_screen(screenshot_path, region, portal_scope)
 
-        result = answer_question(client, question, context, screenshot_path)
+        result = answer_question(question, context, screenshot_path)
         print(json.dumps(result))
     except Exception as exc:  # noqa: BLE001 — CLI boundary, report and exit non-zero
         print(f"answer_step failed: {exc}", file=sys.stderr)

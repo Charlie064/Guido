@@ -1,4 +1,7 @@
-anthropic
-python-dotenv
-Pillow
-mss
+# Pinned so the PyInstaller sidecar build (.github/workflows/release.yml)
+# is reproducible — see docs/features/vision.md. `anthropic` was dropped:
+# the Anthropic SDK call moved server-side (worker/vision.ts), so no
+# script here talks to Anthropic directly any more.
+python-dotenv==1.2.3
+Pillow==12.3.0
+mss==10.2.0

@@ -53,12 +53,23 @@ Aqua bills $0.39/hour of audio, per second, with a 10-second minimum per
 clip. `voice.ts` tracks this in D1 (`voice_transcriptions` table,
 migration `0004_create_voice_usage.sql`) rather than client-side — the
 earlier `localStorage` cap could be cleared by anyone, so it wasn't a real
-limit. `monthlyVoiceSecondsUsed` (`worker/auth.ts`) sums a user's billed
-seconds since the start of the calendar month; once that would exceed **$2
-total** (`MONTHLY_CAP_USD` in `voice.ts`, flat across every plan — this is
-a cost-control measure, not a metered product tier like `skill_runs`),
-new transcription requests 403 with a message telling the user to type
-instead.
+limit. `voiceSecondsUsed` (`worker/auth.ts`) sums a user's billed seconds;
+`voiceCapSecondsFor` (`voice.ts`) picks the cap by plan:
+
+- **Free**: `FREE_TRIAL_SECONDS` (60s), summed **lifetime** — one trial
+  clip, same "1 new skill, lifetime" shape as `includedFor`'s free branch,
+  not a monthly allowance that quietly refills.
+- **Paid** (`starter`/`plus`/`owner`): `MONTHLY_CAP_SECONDS`, derived from
+  **$2 total** (`MONTHLY_CAP_USD` in `voice.ts`, flat across every paid
+  plan — a cost-control measure, not a metered product tier like
+  `skill_runs`), summed since the start of the calendar month.
+
+Once a plan's cap is hit, new transcription requests 403 with a message
+telling the user to upgrade (free) or that it resets next month (paid),
+or to type their goal instead either way. `sidebar.js`'s mic button checks
+the same numbers client-side (off `/api/me`) before even requesting
+microphone access, and routes straight to the pay view instead of
+recording a clip the server would just reject.
 
 The billed duration per clip is **client-reported** (`duration_seconds` in
 the form body), not measured server-side from the audio bytes — this is
@@ -80,5 +91,6 @@ code path is the only thing using the key.
 - **Text-to-speech output** — not started; see `architecture/overview.md`.
 - **Push-to-talk** — the button is click-to-start/click-to-stop, not
   hold-to-record; revisit if that reads as awkward in practice.
-- **Per-plan voice allowances** — the $2/month cap is flat across every
-  plan today, not scaled with `starter`/`plus` like skill quotas are.
+- **Scaling the paid $2/month cap by tier** — `starter`/`plus`/`owner`
+  still share one flat $2 cap; only free is broken out (one-minute
+  lifetime trial) today.

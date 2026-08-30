@@ -10,7 +10,6 @@ and draws the returned bounding box on a copy of the image.
 import os
 import sys
 
-import anthropic
 from dotenv import load_dotenv
 from PIL import Image, ImageDraw
 
@@ -37,15 +36,9 @@ def main() -> None:
         sys.exit(1)
 
     image_path, target = sys.argv[1], sys.argv[2]
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ANTHROPIC_API_KEY not set — check your .env file.")
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key)
 
     print(f"Locating: {target!r} in {image_path}")
-    box = locate_element(client, image_path, target)
+    box = locate_element(image_path, target)
     print(f"Model returned box: {box}")
 
     output_path = os.path.splitext(image_path)[0] + "_boxed.png"

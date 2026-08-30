@@ -38,126 +38,26 @@ already has the goal and is about to describe it in `steps` anyway, so a
 second dedicated "summarize this" call would just be paying for a
 network round trip to re-derive a fact this call already has in context.
 
+The prompt, web-search tool call, and response validation this used to
+build against the Anthropic SDK directly now live server-side — see
+worker/vision.ts's "research" kind.
+
 Errors go to stderr with a non-zero exit code.
 """
 
 import json
-import os
-import re
 import sys
 
-import anthropic
 from dotenv import load_dotenv
 
-MODEL = "claude-sonnet-5"
-
-STEP_REQUIRED_FIELDS = {"title", "brief", "watch_for"}
+from vision_client import call_vision
 
 
-def research_goal(client: anthropic.Anthropic, goal: str, app_name: str | None = None) -> dict:
-    app_clause = f'in "{app_name}"' if app_name else "in some application"
-    prompt = (
-        f'A user wants to do this {app_clause}: "{goal}". '
-        "Research the current, correct way to do this (the UI may have "
-        "changed since your training — use web search if that helps). "
-        "Break it into an ordered list of coarse top-level steps — not "
-        "individual clicks, just the major phases someone would move "
-        "through. For each step, also note anything you learned that's "
-        "true regardless of the user's specific screen — a UI-version "
-        "caveat, a common pitfall, an easy-to-miss detail. Don't guess at "
-        "exact on-screen positions or wording; that depends on the "
-        "user's actual screen and isn't something this research pass can "
-        "know. Also write a short, specific title for this whole chat — "
-        "the same idea as how ChatGPT titles a conversation: a few words "
-        "describing the goal, not a restatement of the user's literal "
-        "question. Respond with ONLY a JSON object (no other text), in "
-        "this exact shape: "
-        '{"title": "short description of the goal, e.g. Add a Bulleted '
-        'List in Google Docs", '
-        '"steps": [{"title": "short step name", '
-        '"brief": "one sentence on what this step accomplishes and why", '
-        '"watch_for": "a caveat or pitfall worth flagging up front, or '
-        '\\"\\" if none"}, ...]}'
-    )
-
-    response = client.messages.create(
-        model=MODEL,
-        # web_search_20260209's dynamic filtering runs its searches inside
-        # a code-execution wrapper under the hood — that's much more
-        # token-hungry than plain search, and a couple of search rounds
-        # can burn through a smaller budget before ever writing the
-        # answer (observed live: max_tokens=2048 truncated with no text
-        # block at all). max_uses caps how many rounds it can spend on
-        # search before it has to just answer — cut from 3 to 2 to trade
-        # a bit of research depth for latency (each round is the slow
-        # part; one real call still landed a full 8-step answer at 2).
-        max_tokens=4096,
-        tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 2}],
-        messages=[{"role": "user", "content": prompt}],
-        # timeout=90 alone doesn't bound the wait: the SDK retries a
-        # timed-out request max_retries (2, by default) more times, so a
-        # single stalled call silently became a ~270s+ one in testing (3
-        # attempts x 90s) — indistinguishable from a real hang to the
-        # caller. `client` below is built with max_retries=0 so one
-        # attempt fails loud at `timeout` instead of quietly retrying.
-        timeout=90.0,
-    )
-
-    # Web search responses commonly come back as several text blocks (the
-    # model's answer gets split at citation boundaries), sometimes with a
-    # blank one thrown in — joining all of them (not just the last) is
-    # required, or the JSON object gets truncated mid-value (observed
-    # live: extraction failed because the last block alone started
-    # mid-string, well after the object's opening "{").
-    text_blocks = [block.text.strip() for block in response.content if block.type == "text"]
-    text_blocks = [t for t in text_blocks if t]
-    if not text_blocks:
-        raise RuntimeError(
-            f"no text in response (stop_reason={response.stop_reason}, "
-            f"output_tokens={response.usage.output_tokens}) — likely ran "
-            "out of max_tokens before answering"
-        )
-    text = "".join(text_blocks)
-
-    # web_search inserts inline <cite index="n-m">...</cite> markup around
-    # claims it's sourcing — harmless in prose but leaks literal XML-ish
-    # tags into field values once parsed as JSON (observed live in
-    # "watch_for" text). Strip the tags, keep the cited text itself.
-    text = re.sub(r"</?cite[^>]*>", "", text)
-
-    # models sometimes wrap JSON in a markdown code fence, or prepend a
-    # stray sentence of commentary, despite "ONLY a JSON object" — both
-    # observed live (against the old bare-array shape; same failure mode
-    # applies here). Extract the object substring rather than trusting the
-    # whole trimmed block to be valid JSON on its own.
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1 or end < start:
-        raise RuntimeError(f"no JSON object found in response: {text}")
-    text = text[start : end + 1]
-
-    result = json.loads(text)
-    steps = result.get("steps") if isinstance(result, dict) else None
-    title = result.get("title") if isinstance(result, dict) else None
-    if (
-        not isinstance(result, dict)
-        or not isinstance(title, str)
-        or not title.strip()
-        or not isinstance(steps, list)
-        or not all(isinstance(s, dict) and STEP_REQUIRED_FIELDS.issubset(s) for s in steps)
-    ):
-        raise RuntimeError(
-            f'expected {{"title": non-empty str, "steps": [{STEP_REQUIRED_FIELDS} '
-            f"objects]}}, got: {text}"
-        )
-    return result
+def research_goal(goal: str, app_name: str | None = None) -> dict:
+    return call_vision("research", goal=goal, app_name=app_name)
 
 
 def main() -> None:
-    # override=True: a Claude Code session's own ANTHROPIC_API_KEY (its
-    # session credential, not a usable direct API key) is often already
-    # set in the shell this gets launched from, and load_dotenv() doesn't
-    # clobber an existing env var by default — silently using the wrong
-    # key instead of the one in .env.
     load_dotenv(override=True)
 
     if len(sys.argv) not in (2, 3):
@@ -167,18 +67,8 @@ def main() -> None:
     goal = sys.argv[1]
     app_name = sys.argv[2] if len(sys.argv) == 3 else None
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("ANTHROPIC_API_KEY not set — check your .env file.", file=sys.stderr)
-        sys.exit(1)
-
-    # max_retries=0: see the `timeout` comment in research_goal for why —
-    # retries default to 2, which multiplies a stalled call's wall time
-    # into something that reads as a hang rather than a bounded failure.
-    client = anthropic.Anthropic(api_key=api_key, max_retries=0)
-
     try:
-        steps = research_goal(client, goal, app_name)
+        steps = research_goal(goal, app_name)
         print(json.dumps(steps))
     except Exception as exc:  # noqa: BLE001 — CLI boundary, report and exit non-zero
         print(f"research failed: {exc}", file=sys.stderr)
