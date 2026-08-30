@@ -1,7 +1,10 @@
 import Landing from './Landing.jsx'
 import Login from './Login.jsx'
+import Pricing from './Pricing.jsx'
 
 export default function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  return path === '/login' ? <Login /> : <Landing />
+  if (path === '/login') return <Login />
+  if (path === '/pricing') return <Pricing />
+  return <Landing />
 }
