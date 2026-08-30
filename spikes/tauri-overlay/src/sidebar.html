@@ -817,8 +817,9 @@
 
       /* ---------- Plan badge (top bar) ---------- */
       /* One-word tier readout next to the profile avatar — see docs/business/pricing.md
-         for what each tier means. Hidden while signed out (applyMembership
-         in sidebar.js), same gate as the profile avatar itself. */
+         for what each tier means. Reads "Guest" while signed out
+         (applyMembership in sidebar.js); shown/hidden together with the
+         profile avatar itself, not gated on sign-in. */
 
       .plan-badge {
         flex-shrink: 0;
@@ -1126,6 +1127,39 @@
         width: auto;
         margin-top: 0;
         padding: 10px 16px;
+      }
+
+      /* Same toggle-button shape as #chat-screenshot-toggle, but a
+         press-to-record/press-to-stop state (.recording) instead of a
+         per-send opt-in — this button drives a MediaRecorder session
+         (sidebar.js), not a one-shot flag. */
+      #new-goal-mic {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        margin: 0 4px 0 6px;
+        background: var(--blue);
+        border: none;
+        color: #ffffff;
+        border-radius: 999px;
+        padding: 0;
+      }
+
+      #new-goal-mic:hover {
+        background: #2f6fdb;
+      }
+
+      #new-goal-mic.recording {
+        background: var(--pink);
+        animation: mic-pulse 1.4s ease-in-out infinite;
+      }
+
+      @keyframes mic-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(228, 74, 74, 0.35); }
+        50% { box-shadow: 0 0 0 5px rgba(228, 74, 74, 0); }
       }
 
       .new-goal-error {
@@ -1753,6 +1787,7 @@
               <span class="field-tick" id="home-step-goal"></span>
               <span class="field-sep"></span>
               <input id="new-goal-input" type="text" placeholder="What do you want to do?" />
+              <button id="new-goal-mic" type="button" title="Speak your goal" aria-pressed="false"></button>
             </div>
             <button id="new-goal-send" type="button">Ask</button>
           </div>

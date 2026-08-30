@@ -50,6 +50,12 @@ keyring = "4"
 gtk = "0.18"
 gtk-layer-shell = { version = "0.8", features = ["v0_6"] }
 x11rb = "0.13"
+# WebKitGTK has no built-in permission-prompt UI — an unhandled
+# getUserMedia request is silently denied by its default action (see
+# init_media_permissions in lib.rs). Already in the tree transitively via
+# wry/tauri (Cargo.lock pins 2.0.2), named directly here to reach its
+# `permission-request` signal.
+webkit2gtk = "2.0"
 
 # CGWindowListCopyWindowInfo (window_provider.rs) only needs Core
 # Foundation's CFArray/CFDictionary/CFString/CFNumber wrappers — the

@@ -45,7 +45,7 @@
 17. More sophisticated action planning
 18. Multiple applications
 19. Persistent learning history
-20. Voice interaction (see ElevenLabs note in
+20. Voice interaction (see Aqua Voice / ElevenLabs note in
     [architecture/overview.md](../architecture/overview.md))
 
 ## Demo script

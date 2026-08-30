@@ -11,7 +11,7 @@
 // command are unused by this file now but not deleted — a real cleanup
 // pass on those is a separate, larger change. See substepBubbleHtml.
 import { SKILLS } from "./fake-skill.js";
-import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon } from "./icons.js";
+import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon } from "./icons.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -743,8 +743,16 @@ function applyMembership(info) {
     document.querySelector("#profile-signin").hidden = false;
     document.querySelector("#profile-signout").hidden = true;
 
-    badge.hidden = true;
-    upgradeBtn.hidden = true;
+    // A guest is on the same allowance as `free` (docs/business/pricing.md)
+    // but has no membership row yet — show the tier readout and let them
+    // reach the pay view (openPayView already renders a "sign in to see
+    // your usage" state for this case) instead of hiding both until after
+    // sign-in, which left guests with no way to see pricing at all.
+    badge.hidden = false;
+    badge.textContent = "Guest";
+    badge.dataset.plan = "guest";
+    upgradeBtn.hidden = false;
+    upgradeBtn.textContent = "Upgrade plan";
   }
 }
 
@@ -1345,6 +1353,157 @@ async function submitNewGoal() {
 document.querySelector("#new-goal-send").addEventListener("click", submitNewGoal);
 document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitNewGoal();
+});
+
+// Speech-to-text for the goal box, via Aqua Voice's Avalon API (Rust's
+// transcribe_audio command — see docs/architecture/overview.md's "Voice
+// (later)" section). Click to start, click again to stop: a hold-to-talk
+// button would need the mouse to stay down for the whole utterance, which
+// doesn't fit this window's small footprint. Aqua accepts mp3/mp4/m4a/wav/
+// webm/mpeg/mpga; the recorder picks whichever of the webm/mp4 pair the
+// current webview's MediaRecorder actually supports (WebKit and Chromium
+// disagree here) rather than hardcoding one.
+const micButton = document.querySelector("#new-goal-mic");
+micButton.innerHTML = MicIcon({ size: 16 });
+
+const MIC_MIME_CANDIDATES = ["audio/webm", "audio/mp4"];
+
+function extensionForMimeType(mimeType) {
+  if (mimeType.includes("webm")) return "webm";
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("wav")) return "wav";
+  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
+  return "webm";
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Aqua Voice bills $0.39/hour, per second, with a 10s minimum per clip
+// (see spikes/vision-detect/transcribe.py) — tracked here per local
+// install since AQUA_VOICE_API_KEY is one shared key with no server-side
+// per-user metering yet (see docs/features/voice.md's "Deferred" note).
+// This is a soft, local-only cap to stop runaway usage from this one
+// install; it is NOT a real spend limit — set an actual cap on the Aqua
+// account itself as the backstop that still holds if this file is wiped
+// or the app is reinstalled.
+const AQUA_RATE_PER_HOUR_USD = 0.39;
+const AQUA_MIN_BILLED_SECONDS = 10;
+const VOICE_MONTHLY_CAP_USD = 2;
+const VOICE_USAGE_STORAGE_KEY = "tutoria-voice-usage";
+
+function currentMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function loadVoiceUsage() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(VOICE_USAGE_STORAGE_KEY) || "{}");
+    if (stored.month === currentMonthKey() && typeof stored.seconds === "number") return stored;
+  } catch {
+    // fall through to a fresh usage record below
+  }
+  return { month: currentMonthKey(), seconds: 0 };
+}
+
+function recordVoiceUsage(billedSeconds) {
+  const usage = loadVoiceUsage();
+  usage.seconds += billedSeconds;
+  localStorage.setItem(VOICE_USAGE_STORAGE_KEY, JSON.stringify(usage));
+}
+
+function voiceUsageCapSeconds() {
+  return (VOICE_MONTHLY_CAP_USD / AQUA_RATE_PER_HOUR_USD) * 3600;
+}
+
+let activeRecorder = null;
+
+async function startVoiceRecording() {
+  const errorEl = document.querySelector("#new-goal-error");
+  errorEl.textContent = "";
+
+  if (loadVoiceUsage().seconds >= voiceUsageCapSeconds()) {
+    errorEl.textContent = `Monthly voice quota used up ($${VOICE_MONTHLY_CAP_USD} cap) — resets next month, or type your goal instead.`;
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    errorEl.textContent = `Couldn't access the microphone: ${err.message || err}`;
+    return;
+  }
+
+  const mimeType = MIC_MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+  const recordingStartedAt = Date.now();
+  recorder.addEventListener("dataavailable", (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  });
+
+  recorder.addEventListener("stop", async () => {
+    stream.getTracks().forEach((track) => track.stop());
+    activeRecorder = null;
+    micButton.classList.remove("recording");
+
+    const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+    if (blob.size === 0) return; // stopped before any audio was captured
+
+    const goalInput = document.querySelector("#new-goal-input");
+    micButton.disabled = true;
+    goalInput.disabled = true;
+    const priorValue = goalInput.value;
+    const priorPlaceholder = goalInput.placeholder;
+    goalInput.value = "";
+    let dots = 0;
+    goalInput.placeholder = "Transcribing";
+    const dotTimer = setInterval(() => {
+      dots = (dots + 1) % 4;
+      goalInput.placeholder = "Transcribing" + ".".repeat(dots);
+    }, 400);
+    try {
+      const audioBase64 = await blobToBase64(blob);
+      const { text } = await withStatus("Transcribing…", () =>
+        invoke("transcribe_audio", { audioBase64, extension: extensionForMimeType(blob.type) }),
+      );
+      goalInput.value = text || priorValue;
+      const clipSeconds = (Date.now() - recordingStartedAt) / 1000;
+      recordVoiceUsage(Math.max(clipSeconds, AQUA_MIN_BILLED_SECONDS));
+    } catch (err) {
+      console.error("transcribe_audio failed", err);
+      errorEl.textContent = `Couldn't transcribe that: ${err}`;
+      goalInput.value = priorValue;
+    } finally {
+      clearInterval(dotTimer);
+      goalInput.placeholder = priorPlaceholder;
+      goalInput.disabled = false;
+      micButton.disabled = false;
+      goalInput.focus();
+    }
+  });
+
+  activeRecorder = recorder;
+  micButton.classList.add("recording");
+  micButton.setAttribute("aria-pressed", "true");
+  recorder.start();
+}
+
+micButton.addEventListener("click", () => {
+  if (activeRecorder) {
+    activeRecorder.stop();
+    micButton.setAttribute("aria-pressed", "false");
+  } else {
+    startVoiceRecording();
+  }
 });
 
 function openSkill(skill, { fade = false } = {}) {

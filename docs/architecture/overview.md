@@ -136,13 +136,15 @@ gets its own real content once that ADR (or a different one) is settled.
 
 ### Voice (later)
 
-ElevenLabs is the preliminary choice for voice, covering both directions
-(P2 in [planning/mvp-roadmap.md](../planning/mvp-roadmap.md)) — not required
-for the core MVP loop:
+Not required for the core MVP loop (P2 in
+[planning/mvp-roadmap.md](../planning/mvp-roadmap.md)) — see
+[features/voice.md](../features/voice.md) for the mechanism:
 
 - **Input** — speech-to-text as an alternative to typing the goal/prompt
-  (and any mid-tutorial follow-up questions).
+  (and any mid-tutorial follow-up questions). **[partial]** Aqua Voice
+  wired to the home goal box only.
 - **Output** — text-to-speech for spoken guidance alongside the overlay.
+  **[planned]** ElevenLabs is the preliminary choice; not started.
 
 ### Visual overlay
 

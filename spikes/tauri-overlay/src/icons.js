@@ -416,6 +416,15 @@ export function OpenBookIcon({ size = 16, color = "currentColor" } = {}) {
   );
 }
 
+export function MicIcon({ size = 18, color = "currentColor" } = {}) {
+  return svg(
+    size,
+    `<rect x="9" y="2.5" width="6" height="11" rx="3" stroke="${color}" stroke-width="1.5" fill="none" />
+     <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0" stroke="${color}" stroke-width="1.5" stroke-linecap="round" fill="none" />
+     <path d="M12 18v3.5M8.5 21.5h7" stroke="${color}" stroke-width="1.5" stroke-linecap="round" />`,
+  );
+}
+
 export function FilterIcon({ size = 18, color = "currentColor" } = {}) {
   return svg(
     size,
@@ -467,4 +476,5 @@ export const ICONS = {
   TrashIcon,
   OpenBookIcon,
   FilterIcon,
+  MicIcon,
 };

@@ -3864,6 +3864,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "webkit2gtk",
  "windows 0.58.0",
  "x11rb",
 ]
