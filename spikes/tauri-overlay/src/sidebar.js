@@ -2143,9 +2143,22 @@ async function checkForUpdate() {
   }
 }
 
+// Shown in the profile menu so a support conversation ("what version are
+// you on?") doesn't need an About dialog we don't have — also the
+// easiest way to eyeball that an auto-update actually landed.
+async function showAppVersion() {
+  try {
+    const version = await window.__TAURI__.app.getVersion();
+    document.querySelector("#app-version").textContent = `Guido v${version}`;
+  } catch (err) {
+    console.error("Couldn't read app version", err);
+  }
+}
+
 // Which pick gesture is possible depends on the session, so the setup view
 // can't be rendered correctly until this resolves.
 initCaptureBackend();
 loadPersistedSkills();
 restoreSession();
+showAppVersion();
 checkForUpdate();
