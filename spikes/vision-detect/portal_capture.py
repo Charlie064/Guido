@@ -251,20 +251,27 @@ class PortalSession:
         self.session_handle = None
 
 
-def grab_frame(fd: int, node_id: int, out_path: str) -> None:
+def grab_frame(fd: int, node_id: int, out_path: str, source_type: int | None) -> None:
     """Pull a single frame off the PipeWire node into a PNG.
 
     GStreamer rather than a hand-rolled PipeWire client: pipewiresrc
     already handles the format negotiation and the fd hand-off, and it is
-    a dependency the desktop already ships. The first buffers after a
-    stream starts can be blank while the compositor gets going, so a few
-    frames are taken and the last one wins.
+    a dependency the desktop already ships.
+
+    A monitor source streams continuously, so the first buffers after it
+    starts can still be blank while the compositor gets going — worth
+    taking a few and keeping the last. A window source is damage-driven
+    (framerate=0/1): it emits a frame right after Start and then nothing
+    more until the window actually redraws, so asking for a second buffer
+    risks blocking for however long the window happens to sit idle (up to
+    this call's 60s timeout). One buffer is what actually completes.
     """
+    num_buffers = 1 if source_type == WINDOW else 5
     with tempfile.TemporaryDirectory() as tmpdir:
         pattern = os.path.join(tmpdir, "frame%05d.png")
         cmd = [
             "gst-launch-1.0", "-q",
-            "pipewiresrc", f"fd={fd}", f"path={node_id}", "num-buffers=5", "!",
+            "pipewiresrc", f"fd={fd}", f"path={node_id}", f"num-buffers={num_buffers}", "!",
             "videoconvert", "!", "pngenc", "!",
             "multifilesink", f"location={pattern}",
         ]
@@ -322,7 +329,7 @@ def do_capture(out_path: str, scope: str) -> dict:
         save_token(scope, stream["restore_token"])
         fd = session.open_pipewire_fd()
         try:
-            grab_frame(fd, stream["node_id"], out_path)
+            grab_frame(fd, stream["node_id"], out_path, stream.get("source_type"))
         finally:
             os.close(fd)
         return {
