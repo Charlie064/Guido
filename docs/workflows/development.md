@@ -182,6 +182,11 @@ Deploying live:
 npm run deploy
 ```
 
+A Vercel static deploy of `website/` is optional (`website/vercel.json`).
+It serves the same Vite app; `/api` and `/auth` rewrite to
+`https://guidotutor.com` so the waitlist still writes D1. The live
+product host is Cloudflare, not Vercel.
+
 Production is `https://guidotutor.com` (and `www`) on the Tutoria
 Cloudflare account, via custom domains on the `tutoria-website` Worker.
 `npm run deploy` attaches those hostnames from `wrangler.jsonc`. This
