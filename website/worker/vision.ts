@@ -104,6 +104,10 @@ async function callClaude(
     content: unknown;
     tools?: unknown[];
     timeoutMs: number;
+    // "low" trims thinking/tool-call depth for calls where speed matters
+    // more than exhaustiveness — see research's use below. Omit for the
+    // model's own default (high).
+    effort?: "low" | "medium" | "high";
   },
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   const controller = new AbortController();
@@ -122,9 +126,19 @@ async function callClaude(
         max_tokens: opts.maxTokens,
         messages: [{ role: "user", content: opts.content }],
         ...(opts.tools ? { tools: opts.tools } : {}),
+        ...(opts.effort ? { output_config: { effort: opts.effort } } : {}),
       }),
       signal: controller.signal,
     });
+  } catch (err) {
+    // AbortController's own error ("The operation was aborted") gives no
+    // hint that this was a bounded timeout rather than a real crash —
+    // callers (and whoever reads the resulting 502) need that distinction
+    // to tell "Claude/network is slow" from "something is actually broken".
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Claude request timed out after ${opts.timeoutMs / 1000}s`);
+    }
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
@@ -375,8 +389,18 @@ async function runKind(
       const { text, inputTokens, outputTokens } = await callClaude(env, {
         maxTokens: 4096,
         content: prompt,
-        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 2 }],
-        timeoutMs: 90_000,
+        // Cut from 2 rounds to 1 (was already trimmed from 3): each round
+        // is the slow part of this call, and "low" effort further trims
+        // tool-call depth — both trade a bit of research thoroughness for
+        // a call that reliably lands well inside the timeout below,
+        // instead of routinely brushing up against it.
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 1 }],
+        effort: "low",
+        // Bumped from 90s: even a single search round plus writing the
+        // answer was hitting the old ceiling and surfacing as a bare
+        // "operation was aborted" 502 — this is headroom against a slow
+        // round, not an expectation that it normally takes this long.
+        timeoutMs: 120_000,
       });
       // web_search inserts <cite ...>...</cite> markup around sourced
       // claims — harmless in prose but leaks into field values once
