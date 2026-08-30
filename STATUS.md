@@ -3,7 +3,51 @@
 High-churn snapshot of what exists and what's next. Kept out of `CLAUDE.md`
 deliberately — that file should stay stable.
 
-_Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
+_Last updated: 2026-08-30 (overnight session, release-and-verify pass)_
+
+## 2026-08-30: release-and-verify overnight pass
+
+See [planning/overnight-2026-08-30-release-and-verify.md](docs/planning/overnight-2026-08-30-release-and-verify.md)
+for the full plan and branch survey this graduated from — delete that doc
+once this section and the actual release supersede it.
+
+- **`claudev/charlie/env-cleanup` is release-ready, not pushed.** Now 12
+  commits past `v0.1.5-rc1` (a prerelease that already built successfully
+  on macOS/Windows/Linux runners in CI — confirmed via `gh run list`,
+  not assumed). Picked up two small fixes from otherwise-superseded
+  branches: `portal-window-capture-freeze`'s fix for window-scoped portal
+  captures stalling on idle windows, and `layer-shell-sidebar`'s BL-013
+  sidebar layer-shell promotion (resolved a real merge conflict in
+  `lib.rs`, `cargo check` clean after). Version bumped to `0.1.6` in
+  `tauri.conf.json`/`package.json` so a future real tag doesn't reuse
+  `0.1.5-rc1`'s number. **Not pushed, no tag cut, nothing deployed** — by
+  design, per this session's instructions; someone still needs to review
+  and push this branch, then tag a real release.
+- **Website download button disabled, not deployed.** `Landing.jsx`'s
+  desktop download now shows a static "coming soon" state instead of
+  opening the platform-picker modal — Charlie recalled the macOS build
+  couldn't launch on real hardware last tested, and
+  `window_provider.rs`'s macOS backend is still flagged unverified above.
+  The modal/`RELEASES_BASE` code is untouched, so re-enabling is a
+  one-line revert once a release is confirmed working end to end on all
+  three platforms. **Committed only — the live site is unchanged** until
+  someone runs `wrangler deploy` by hand.
+- **`/api/vision` checked at the routing/infra layer; not a full live
+  call.** `https://guidotutor.com/api/vision` is deployed and reachable
+  (`curl` gets a clean `401 {"error":"Unauthorized"}`, not a Cloudflare
+  bot-block or a 5xx); `wrangler secret list` against the `tutoria-website`
+  Worker confirms `ANTHROPIC_API_KEY` is set. Static review of every
+  `vision.ts` kind (`locate`/`verify`/`identify_app`/`plan_step`/`answer`/
+  `research`) found no bugs beyond what's already fixed in this branch's
+  history (`18b90ef`/`8e06eb0`'s research-timeout fix). **Gap: no
+  authenticated end-to-end call was made** — creating a throwaway test
+  account against the live `/api/auth/sign-up/email` endpoint, and
+  reading the OS keyring for an already-stored session token, were both
+  blocked by this session's own permission classifier as
+  production/credential-store actions too sensitive to take
+  unilaterally. Whoever picks this up next needs to either sign in
+  through the real app and hand over a `GUIDO_SESSION_TOKEN` to test
+  with, or explicitly approve a one-off test signup.
 
 ## What exists
 
