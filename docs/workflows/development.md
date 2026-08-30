@@ -150,8 +150,9 @@ The live landing page is Pauline’s Guido Vite app in `website/src/`
 **Keep the waitlist working:** the header and bottom “Join the waitlist”
 buttons open the multi-step glass modal (`website/src/Waitlist.jsx`).
 `/waitlist?ref=` opens the same overlay. `/pricing` is the same chrome
-plus Pauline’s Free / Premium cards; those CTAs open the waitlist, not
-a download. It POSTs JSON (`name`,
+plus Free and Guido Pro cards; those CTAs open the waitlist, not
+a download. `GET /api/geo` returns `{ country }` from Cloudflare so
+the sticker currency matches the visitor. It POSTs JSON (`name`,
 `email`, `apps`, `appsOther`, `role`, `ref`) to `/api/waitlist`. The
 Worker validates and inserts into D1 (`worker/index.ts` +
 `migrations/0001_create_waitlist.sql`,

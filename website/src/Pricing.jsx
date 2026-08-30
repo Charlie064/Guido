@@ -1,156 +1,112 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
-import { FLASH_PINK } from "./brand.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
+import { currencyForCountry, formatMoney, localeCountry } from "./currency.js";
 
 const TIERS = [
+  {
+    id: "pro",
+    name: "Guido Pro",
+    amount: 7.99,
+    period: "/ month",
+    tagline: "Keep going, and keep what you learn.",
+    features: [
+      "20 new skills every month",
+      "Save skills and pick them back up",
+      "Teach, Show, and Do",
+    ],
+    featured: true,
+  },
   {
     id: "free",
     name: "Free",
     amount: 0,
     period: "",
-    tagline: "Try the whole loop.",
-    features: ["1 new skill", "Full Teach / Show / Do access", "No saved skills"],
-  },
-  {
-    id: "premium",
-    name: "Premium",
-    amount: 7.99,
-    period: "/month",
-    tagline: "For daily learning.",
-    features: [
-      "20 new skills / month",
-      "Save your skills and come back anytime",
-      "Full Teach / Show / Do access",
-    ],
-    featured: true,
+    tagline: "Try the whole loop on your own screen.",
+    features: ["1 new skill", "Teach, Show, and Do", "No saved skills"],
   },
 ];
 
-// Rough locale-based currency guess — same numeric amount everywhere,
-// just a symbol swap so the sticker looks native to the visitor.
-const REGION_CURRENCY = {
-  US: "$",
-  CA: "$",
-  AU: "$",
-  NZ: "$",
-  GB: "£",
-  CH: "CHF ",
-  JP: "¥",
-};
-const EURO_REGIONS = new Set([
-  "FR", "DE", "ES", "IT", "NL", "BE", "AT", "PT", "IE", "FI",
-  "GR", "LU", "EE", "LV", "LT", "SK", "SI", "CY", "MT",
-]);
-
-function detectCurrencySymbol() {
-  try {
-    const locale = navigator.language || "en-US";
-    const region = new Intl.Locale(locale).maximize().region;
-    if (REGION_CURRENCY[region]) return REGION_CURRENCY[region];
-    if (EURO_REGIONS.has(region)) return "€";
-    return "$";
-  } catch {
-    return "€";
-  }
-}
-
-function formatPrice(symbol, amount) {
-  if (amount === 0) return `${symbol}0`;
-  return `${symbol}${amount.toFixed(2)}`;
-}
-
-function PricingCard({ tier, currencySymbol, onJoin }) {
+function PricingCard({ tier, currency, onJoin }) {
   return (
-    <div
-      className="flex-1 min-w-[260px] max-w-sm rounded-3xl flex flex-col p-8 bg-white"
-      style={{
-        border: tier.featured ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(0,0,0,0.08)",
-        boxShadow: tier.featured
-          ? "0 30px 80px -30px rgba(0,0,0,0.15), 0 0 60px -15px rgba(196,181,253,0.35)"
-          : "0 30px 80px -30px rgba(0,0,0,0.15)",
-      }}
-    >
-      <div>
-        <h3
-          className="text-xl font-semibold tracking-tight text-[#0A0A0A]"
-          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-        >
-          {tier.name}
-        </h3>
-        <p className="text-sm mt-1 text-neutral-500">{tier.tagline}</p>
-      </div>
-
-      <div className="mt-6 flex items-baseline gap-1">
-        <span
-          className={`font-bold tracking-tight text-[#0A0A0A] ${tier.featured ? "text-6xl" : "text-4xl"}`}
-          style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-        >
-          {formatPrice(currencySymbol, tier.amount)}
-        </span>
-        {tier.period ? <span className="text-sm text-neutral-500">{tier.period}</span> : null}
-      </div>
-
-      <ul className="mt-6 flex flex-col gap-3 flex-1">
+    <article className={`pricing-card${tier.featured ? " pricing-card-pro" : ""}`}>
+      {tier.featured ? <p className="pricing-badge">Recommended</p> : null}
+      <h3 className="pricing-name">{tier.name}</h3>
+      <p className="pricing-tagline">{tier.tagline}</p>
+      <p className="pricing-amount">
+        <span>{formatMoney(tier.amount, currency)}</span>
+        {tier.period ? <span className="pricing-period">{tier.period}</span> : null}
+      </p>
+      <ul className="pricing-features">
         {tier.features.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-sm text-neutral-700">
-            <Check size={16} className="mt-0.5 shrink-0" color="#8B5CF6" />
+          <li key={f}>
+            <Check size={16} strokeWidth={2.2} aria-hidden="true" />
             {f}
           </li>
         ))}
       </ul>
-
-      <button type="button" onClick={onJoin} className="waitlist-cta waitlist-cta-lg mt-8 self-start">
+      <button
+        type="button"
+        onClick={onJoin}
+        className={tier.featured ? "pricing-cta-pro" : "waitlist-cta pricing-cta"}
+      >
         Join the waitlist
       </button>
-    </div>
+    </article>
   );
 }
 
 export default function Pricing() {
-  const [currencySymbol] = useState(detectCurrencySymbol);
+  const [currency, setCurrency] = useState(() => currencyForCountry(localeCountry()));
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/geo")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        if (!cancelled && data.country) setCurrency(currencyForCountry(data.country));
+      })
+      .catch(() => {
+        if (!cancelled) setCurrency(currencyForCountry(localeCountry()));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen text-[#0A0A0A] bg-white" style={{ fontFamily: "'Inter', sans-serif" }}>
       <SiteHeader current="pricing" onJoin={() => setWaitlistOpen(true)} />
 
-      <div className="pt-20 pb-24 px-6">
-        <div className="max-w-3xl mx-auto text-center mb-14">
-          <div
-            className="text-[11px] font-semibold uppercase mb-4 text-neutral-400"
-            style={{ letterSpacing: "0.2em" }}
-          >
-            Pricing
-          </div>
-          <h1
-            className="uppercase font-extrabold tracking-wide text-2xl sm:text-3xl mb-4 leading-tight"
-            style={{ fontFamily: "'Space Grotesk', sans-serif", color: FLASH_PINK }}
-          >
-            Start free. Upgrade when you need more.
+      <section className="pricing-page">
+        <div className="pricing-hero">
+          <p className="pricing-kicker">Pricing</p>
+          <h1 className="hero-headline pricing-title">
+            Start free. Go further with Guido Pro.
           </h1>
-          <p className="text-[17px] leading-relaxed max-w-lg mx-auto text-neutral-600">
-            Learn with the three modes on every plan.
+          <p className="pricing-lead">
+            Same three modes on every plan. Prices show in your local currency.
           </p>
         </div>
 
-        <div className="max-w-2xl mx-auto flex flex-wrap justify-center items-stretch gap-6">
+        <div className="pricing-grid">
           {TIERS.map((tier) => (
             <PricingCard
               key={tier.id}
               tier={tier}
-              currencySymbol={currencySymbol}
+              currency={currency}
               onJoin={() => setWaitlistOpen(true)}
             />
           ))}
         </div>
 
-        <p className="text-xs text-center mt-8 text-neutral-400">
-          Premium's price and included skills are subject to change.
+        <p className="pricing-note">
+          Guido Pro's price and included skills are subject to change.
         </p>
-      </div>
+      </section>
 
       <WaitlistOverlay
         open={waitlistOpen}

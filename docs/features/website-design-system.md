@@ -65,12 +65,16 @@ top third. Used on desktop chrome, not the landing waitlist.
 **Secondary/outline button** — white pill, thin black border, violet
 halo on hover. Landing header and bottom “Join the waitlist” use this.
 
-**Pricing page** (`/pricing`) — Pauline’s Free / Premium cards on the
-same header, waitlist CTAs, and footer as the landing page. No
-download button. Laptop nav adds Pricing next to How it works and
-Usecases. Sticker amounts on the page are marketing copy and may
-diverge from [business/pricing.md](../business/pricing.md) until
-billing ships.
+**Pricing page** (`/pricing`) — same header, waitlist overlay, plus-grid,
+and footer as the landing page. Two cards: quiet white **Free**, then
+elevated glass **Guido Pro** (how-it-works wash, Recommended chip,
+keycap CTA). Pro stacks first on the phone. No download button. Laptop
+nav adds Pricing next to How it works and Usecases. Sticker amounts
+are marketing copy and may diverge from
+[business/pricing.md](../business/pricing.md) until billing ships.
+Currency follows Cloudflare `request.cf.country` via `GET /api/geo`
+(locale region if that call fails) — same number, local ISO code, not
+a live FX rate.
 
 **Waitlist modal** — same pink–blue glass tile as how-it-works, as a
 large overlay (also at `/waitlist` for referral links). Clicking Join

@@ -40,6 +40,12 @@ export default {
     if (url.pathname === "/api/waitlist" && request.method === "POST") {
       return handleWaitlistSignup(request, env);
     }
+    if (url.pathname === "/api/geo" && request.method === "GET") {
+      // Cloudflare sets request.cf.country from the connecting IP.
+      // Empty on some local wrangler sessions — the page falls back.
+      const country = request.cf?.country ?? "";
+      return json({ country });
+    }
     if (url.pathname === "/auth/google/start" && request.method === "GET") {
       return handleGoogleStart(env, url);
     }
