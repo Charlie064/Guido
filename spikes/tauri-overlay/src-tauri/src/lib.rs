@@ -422,70 +422,6 @@ fn run_answer(
         .map_err(|e| format!("failed to parse answer_step.py output ({stdout}): {e}"))
 }
 
-// Speech-to-text via Aqua Voice's Avalon API — see
-// docs/architecture/overview.md's "Voice (later)" section and
-// transcribe_audio.py. The mic button (sidebar.js) records a clip in the
-// webview via MediaRecorder, base64-encodes it, and sends it here — the
-// AQUA_VOICE_API_KEY itself never leaves this process (loaded from .env by
-// the python script), matching the same "secret stays out of the webview"
-// posture as ANTHROPIC_API_KEY.
-#[derive(Serialize, Deserialize, Debug)]
-struct TranscribeResult {
-    text: String,
-}
-
-#[tauri::command]
-async fn transcribe_audio(audio_base64: String, extension: String) -> Result<TranscribeResult, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        use base64::Engine;
-
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(audio_base64)
-            .map_err(|e| format!("failed to decode recorded audio: {e}"))?;
-
-        // No tempfile crate in the dependency tree (see Cargo.toml) — a
-        // process-id + nanosecond-timestamp name is unique enough for a
-        // single short-lived clip that's deleted right after use.
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        let path = std::env::temp_dir().join(format!("tutoria-voice-{}-{nanos}.{extension}", std::process::id()));
-
-        std::fs::write(&path, &bytes).map_err(|e| format!("failed to write recorded audio: {e}"))?;
-        let result = run_transcribe(&path);
-        let _ = std::fs::remove_file(&path);
-        result
-    })
-    .await
-    .map_err(|e| format!("transcribe_audio task panicked: {e}"))?
-}
-
-fn run_transcribe(audio_path: &std::path::Path) -> Result<TranscribeResult, String> {
-    let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("transcribe_audio.py");
-
-    let output = Command::new(&python)
-        .arg(&script)
-        .arg(audio_path)
-        .current_dir(&dir)
-        .output()
-        .map_err(|e| format!("failed to run transcribe_audio.py: {e}"))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "transcribe_audio.py exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str(stdout.trim())
-        .map_err(|e| format!("failed to parse transcribe_audio.py output ({stdout}): {e}"))
-}
-
 // What the vision model read off the picked frame — see identify_app.py.
 // Both fields are optional: "I can't tell" is a real answer here and is
 // preferable to a confident wrong one, which would silently scope every
@@ -1131,7 +1067,6 @@ pub fn run() {
             locate_element,
             verify_substep,
             answer_question,
-            transcribe_audio,
             research_goal,
             plan_step,
             list_windows,
@@ -1164,7 +1099,7 @@ pub fn run() {
 
             sidebar.show()?;
 
-            // getUserMedia (the mic button — see transcribe_audio in
+            // getUserMedia (the mic button — see startVoiceRecording in
             // sidebar.js) needs the OS webview to actually grant the
             // permission request; see init_media_permissions.
             #[cfg(target_os = "linux")]

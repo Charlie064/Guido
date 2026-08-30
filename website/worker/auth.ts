@@ -3,11 +3,25 @@ import type { createAuth } from "./better-auth";
 export type Plan = "free" | "starter" | "plus" | "owner";
 export type MembershipStatus = "active" | "expired";
 
+// The Workers rate-limiting binding. Declared here rather than pulled in
+// from @cloudflare/workers-types, which this project doesn't install —
+// the worker's .ts is bundled by esbuild, which strips types without
+// checking them, so the ambient globals below (Fetcher, D1Database) are
+// already unchecked and one more local shape costs nothing.
+export interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
   BETTER_AUTH_SECRET: string;
   OWNER_EMAILS?: string;
+  // Set with `wrangler secret put AQUA_VOICE_API_KEY` — never in `vars`,
+  // never in the repo, and never shipped to the desktop app. See
+  // worker/voice.ts and docs/features/voice.md.
+  AQUA_VOICE_API_KEY?: string;
+  VOICE_LIMITER: RateLimit;
 }
 
 export interface MembershipRow {
@@ -66,6 +80,20 @@ export async function countSkillRuns(
     .bind(userId)
     .first<{ n: number }>();
   return Number(row?.n ?? 0);
+}
+
+// Sum of `duration_seconds` this calendar month, across every plan — see
+// voice.ts's MONTHLY_CAP_USD, a flat $ cap shared by all plans rather than
+// a per-plan allowance like skill_runs gets, since Aqua Voice is still a
+// cost-control measure, not a metered product feature yet.
+export async function monthlyVoiceSecondsUsed(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      "SELECT COALESCE(SUM(duration_seconds), 0) AS s FROM voice_transcriptions WHERE user_id = ? AND created_at >= date('now', 'start of month')",
+    )
+    .bind(userId)
+    .first<{ s: number }>();
+  return Number(row?.s ?? 0);
 }
 
 export function remainingFor(plan: Plan, used: number): number | null {

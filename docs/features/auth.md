@@ -68,6 +68,10 @@ Quota counting (`countSkillRuns` in `worker/auth.ts`): `free` sums
 lifetime; `starter`/`plus` sum since the start of the current calendar
 month; `owner` is never counted.
 
+- `POST /api/voice/transcribe` — same bearer auth, a separate cost-control
+  cap rather than a plan-tiered quota; see
+  [features/voice.md](voice.md).
+
 ## Deferred
 
 - **Email verification** — `requireEmailVerification: false` today; see

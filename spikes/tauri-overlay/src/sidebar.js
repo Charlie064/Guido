@@ -236,6 +236,7 @@ const views = {
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
   pay: document.querySelector("#view-pay"),
+  usage: document.querySelector("#view-usage"),
 };
 
 // Compact shell sizes — keep the panel as small as the current view
@@ -251,6 +252,7 @@ const VIEW_SIZE = {
   path: [400, 600],
   chat: [400, 600],
   pay: [420, 620],
+  usage: [420, 460],
 };
 
 async function fitWindow(name) {
@@ -269,6 +271,16 @@ async function fitWindow(name) {
 // user actually came from (home, mid-path) instead of always "home".
 let payReturnView = "home";
 
+// Set right before showView("login") so a successful sign-in (or
+// "Continue without signing in") lands back where the user actually came
+// from — e.g. a guest hitting a plan button on #view-pay — instead of
+// always "home". Reset to "home" once consumed.
+let loginReturnView = "home";
+
+// Same idea as payReturnView, for the profile menu's Usage item (openable
+// from any view the top bar appears in, not just home).
+let usageReturnView = "home";
+
 // view -> [title, subtitle getter, back-target-or-null]
 function viewMeta(name) {
   switch (name) {
@@ -286,6 +298,8 @@ function viewMeta(name) {
       return [currentStep.title, "", "path"];
     case "pay":
       return ["Upgrade", "", payReturnView];
+    case "usage":
+      return ["Usage", "", usageReturnView];
     default:
       return ["Guido", "", null];
   }
@@ -763,8 +777,14 @@ function applyMembership(info) {
 // see the cost param on /api/skills/start in worker/index.ts).
 // `reason` is plain text shown in the pink callout, or null to hide it
 // (the profile-menu path, which isn't reacting to a blocked action).
-function openPayView(reason) {
-  payReturnView = currentView === "pay" ? payReturnView : currentView;
+function openPayView(reason, { keepReturnView = false } = {}) {
+  // keepReturnView: true when re-entering pay right after a sign-in that
+  // was itself triggered from pay (loginReturnView above) — currentView
+  // is "login" at that point, which would otherwise clobber payReturnView
+  // with a back target that no longer makes sense.
+  if (!keepReturnView) {
+    payReturnView = currentView === "pay" ? payReturnView : currentView;
+  }
 
   const planName = membership ? PLAN_LABELS[membership.plan] ?? membership.plan : "Free";
   document.querySelector("#pay-status-plan").textContent = `${planName} plan`;
@@ -779,6 +799,49 @@ function openPayView(reason) {
   reasonEl.hidden = !reason;
 
   showView("pay");
+}
+
+// Counts only — both cards read straight off the /api/me membership
+// already in memory (skills_remaining/included, voice_seconds_used/
+// included — see handleMe in worker/index.ts). Voice moved server-side
+// today (worker/voice.ts), so unlike skills it has nothing to show a
+// guest at all — same sign-in prompt as startVoiceRecording's guard.
+function openUsageView() {
+  usageReturnView = currentView === "usage" ? usageReturnView : currentView;
+
+  const skillsMeta = document.querySelector("#usage-skills-meta");
+  const skillsBar = document.querySelector("#usage-skills-bar");
+  const skillsFill = document.querySelector("#usage-skills-fill");
+  const voiceMeta = document.querySelector("#usage-voice-meta");
+  const voiceFill = document.querySelector("#usage-voice-fill");
+
+  if (!membership) {
+    skillsMeta.textContent = "Sign in to see your skill usage.";
+    skillsBar.hidden = true;
+    voiceMeta.textContent = "Sign in to see your voice usage.";
+    voiceFill.style.width = "0%";
+  } else {
+    if (membership.skills_remaining === null) {
+      skillsMeta.textContent = `Unlimited on the ${PLAN_LABELS[membership.plan] ?? membership.plan} plan.`;
+      skillsBar.hidden = true;
+    } else {
+      const included = membership.skills_included ?? 0;
+      const used = Math.max(0, included - membership.skills_remaining);
+      const period = membership.plan === "free" ? "lifetime" : "this month";
+      skillsMeta.textContent = `${used} of ${included} new skills used ${period}.`;
+      skillsBar.hidden = false;
+      skillsFill.style.width = `${included > 0 ? Math.min(100, (used / included) * 100) : 100}%`;
+    }
+
+    const voiceUsed = membership.voice_seconds_used ?? 0;
+    const voiceIncluded = membership.voice_seconds_included ?? 0;
+    const usedMinutes = Math.round(voiceUsed / 60);
+    const capMinutes = Math.round(voiceIncluded / 60);
+    voiceMeta.textContent = `${usedMinutes} of ~${capMinutes} min this month.`;
+    voiceFill.style.width = `${voiceIncluded > 0 ? Math.min(100, (voiceUsed / voiceIncluded) * 100) : 0}%`;
+  }
+
+  showView("usage");
 }
 
 // Called both right after a fresh sign-in and on startup with a
@@ -805,7 +868,14 @@ async function refreshMembership(token) {
 }
 
 document.querySelector("#login-continue").addEventListener("click", () => {
-  showView("home");
+  if (!membership) applyMembership(null);
+  const target = loginReturnView;
+  loginReturnView = "home";
+  if (target === "pay") {
+    openPayView(null, { keepReturnView: true });
+  } else {
+    showView(target);
+  }
 });
 
 // "signin" | "signup" — sidebar.html has one form, this toggles its
@@ -869,7 +939,15 @@ document.querySelector("#login-form").addEventListener("submit", async (e) => {
   submitBtn.disabled = true;
   try {
     const token = await submitLogin(email, password);
-    if (await refreshMembership(token)) showView("home");
+    if (await refreshMembership(token)) {
+      const target = loginReturnView;
+      loginReturnView = "home";
+      if (target === "pay") {
+        openPayView(null, { keepReturnView: true });
+      } else {
+        showView(target);
+      }
+    }
   } catch (err) {
     console.error("login failed", err);
     setLoginError(err.message || "Something went wrong. Try again.");
@@ -913,21 +991,36 @@ document.querySelector("#profile-upgrade").addEventListener("click", () => {
   setProfileOpen(false);
   openPayView(null);
 });
-document.querySelector("#profile-attach").addEventListener("click", () => {
+document.querySelector("#profile-usage").addEventListener("click", () => {
   setProfileOpen(false);
-  showView("setup");
+  openUsageView();
 });
 
 // No Stripe yet (docs/planning/login-membership-plan.md's "Open /
 // deferred") — these are placeholders so the upgrade path has somewhere
 // to go without pretending to charge anyone. Real checkout replaces the
 // alert with whatever Stripe flow gets built.
+//
+// A guest can see this page (openPayView renders fine with membership ===
+// null), but a plan/billing action needs an account to attach to — send
+// them to sign in first, then land back on #view-pay (not home) once
+// they're in, via loginReturnView below.
 document.querySelectorAll("[data-plan-target]").forEach((btn) => {
   btn.addEventListener("click", () => {
+    if (!membership) {
+      loginReturnView = "pay";
+      showView("login");
+      return;
+    }
     alert(`Checkout for ${btn.dataset.planTarget} isn't wired up yet — ask Charlie to flip your plan in D1 for now.`);
   });
 });
 document.querySelector("#pay-manage-btn").addEventListener("click", () => {
+  if (!membership) {
+    loginReturnView = "pay";
+    showView("login");
+    return;
+  }
   alert("Subscription management is coming soon.");
 });
 
@@ -955,6 +1048,11 @@ async function restoreSession() {
   if (token && (await refreshMembership(token))) {
     showView("home");
   } else {
+    // refreshMembership already calls applyMembership(null) on a failed
+    // token; call it here too for the no-token case so the guest badge/
+    // Upgrade button are initialized before "Continue without signing in"
+    // is even clicked, not left at the HTML-default `hidden`.
+    if (!token) applyMembership(null);
     fitWindow("login");
   }
 }
@@ -1355,73 +1453,22 @@ document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitNewGoal();
 });
 
-// Speech-to-text for the goal box, via Aqua Voice's Avalon API (Rust's
-// transcribe_audio command — see docs/architecture/overview.md's "Voice
-// (later)" section). Click to start, click again to stop: a hold-to-talk
-// button would need the mouse to stay down for the whole utterance, which
-// doesn't fit this window's small footprint. Aqua accepts mp3/mp4/m4a/wav/
-// webm/mpeg/mpga; the recorder picks whichever of the webm/mp4 pair the
-// current webview's MediaRecorder actually supports (WebKit and Chromium
-// disagree here) rather than hardcoding one.
+// Speech-to-text for the goal box, via Aqua Voice's Avalon API — proxied
+// through the website Worker's /api/voice/transcribe (worker/voice.ts),
+// not called directly: AQUA_VOICE_API_KEY lives only as a Worker secret,
+// same posture as ANTHROPIC_API_KEY on /api/vision. An earlier version of
+// this called a local Python script with a key from .env, which only
+// worked on the developer's own machine — see docs/features/voice.md's
+// git history. Click to start, click again to stop: a hold-to-talk button
+// would need the mouse to stay down for the whole utterance, which
+// doesn't fit this window's small footprint. `MAX_RECORDING_SECONDS`
+// auto-stops a forgotten recording — otherwise nothing bounds how long
+// (and how expensive) a single clip could get.
 const micButton = document.querySelector("#new-goal-mic");
 micButton.innerHTML = MicIcon({ size: 16 });
 
 const MIC_MIME_CANDIDATES = ["audio/webm", "audio/mp4"];
-
-function extensionForMimeType(mimeType) {
-  if (mimeType.includes("webm")) return "webm";
-  if (mimeType.includes("mp4")) return "mp4";
-  if (mimeType.includes("wav")) return "wav";
-  if (mimeType.includes("mpeg") || mimeType.includes("mp3")) return "mp3";
-  return "webm";
-}
-
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-// Aqua Voice bills $0.39/hour, per second, with a 10s minimum per clip
-// (see spikes/vision-detect/transcribe.py) — tracked here per local
-// install since AQUA_VOICE_API_KEY is one shared key with no server-side
-// per-user metering yet (see docs/features/voice.md's "Deferred" note).
-// This is a soft, local-only cap to stop runaway usage from this one
-// install; it is NOT a real spend limit — set an actual cap on the Aqua
-// account itself as the backstop that still holds if this file is wiped
-// or the app is reinstalled.
-const AQUA_RATE_PER_HOUR_USD = 0.39;
-const AQUA_MIN_BILLED_SECONDS = 10;
-const VOICE_MONTHLY_CAP_USD = 2;
-const VOICE_USAGE_STORAGE_KEY = "tutoria-voice-usage";
-
-function currentMonthKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function loadVoiceUsage() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(VOICE_USAGE_STORAGE_KEY) || "{}");
-    if (stored.month === currentMonthKey() && typeof stored.seconds === "number") return stored;
-  } catch {
-    // fall through to a fresh usage record below
-  }
-  return { month: currentMonthKey(), seconds: 0 };
-}
-
-function recordVoiceUsage(billedSeconds) {
-  const usage = loadVoiceUsage();
-  usage.seconds += billedSeconds;
-  localStorage.setItem(VOICE_USAGE_STORAGE_KEY, JSON.stringify(usage));
-}
-
-function voiceUsageCapSeconds() {
-  return (VOICE_MONTHLY_CAP_USD / AQUA_RATE_PER_HOUR_USD) * 3600;
-}
+const MAX_RECORDING_SECONDS = 60;
 
 let activeRecorder = null;
 
@@ -1429,8 +1476,8 @@ async function startVoiceRecording() {
   const errorEl = document.querySelector("#new-goal-error");
   errorEl.textContent = "";
 
-  if (loadVoiceUsage().seconds >= voiceUsageCapSeconds()) {
-    errorEl.textContent = `Monthly voice quota used up ($${VOICE_MONTHLY_CAP_USD} cap) — resets next month, or type your goal instead.`;
+  if (!currentSessionToken) {
+    errorEl.textContent = "Sign in to use voice input.";
     return;
   }
 
@@ -1450,7 +1497,12 @@ async function startVoiceRecording() {
     if (e.data.size > 0) chunks.push(e.data);
   });
 
+  const autoStopTimer = setTimeout(() => {
+    if (activeRecorder === recorder) recorder.stop();
+  }, MAX_RECORDING_SECONDS * 1000);
+
   recorder.addEventListener("stop", async () => {
+    clearTimeout(autoStopTimer);
     stream.getTracks().forEach((track) => track.stop());
     activeRecorder = null;
     micButton.classList.remove("recording");
@@ -1471,15 +1523,22 @@ async function startVoiceRecording() {
       goalInput.placeholder = "Transcribing" + ".".repeat(dots);
     }, 400);
     try {
-      const audioBase64 = await blobToBase64(blob);
-      const { text } = await withStatus("Transcribing…", () =>
-        invoke("transcribe_audio", { audioBase64, extension: extensionForMimeType(blob.type) }),
+      const durationSeconds = (Date.now() - recordingStartedAt) / 1000;
+      const form = new FormData();
+      form.set("audio", blob, "clip");
+      form.set("duration_seconds", String(durationSeconds));
+      const res = await withStatus("Transcribing…", () =>
+        fetch(`${WEBSITE_BASE_URL}/api/voice/transcribe`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${currentSessionToken}` },
+          body: form,
+        }),
       );
-      goalInput.value = text || priorValue;
-      const clipSeconds = (Date.now() - recordingStartedAt) / 1000;
-      recordVoiceUsage(Math.max(clipSeconds, AQUA_MIN_BILLED_SECONDS));
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+      goalInput.value = payload.text || priorValue;
     } catch (err) {
-      console.error("transcribe_audio failed", err);
+      console.error("voice transcribe failed", err);
       errorEl.textContent = `Couldn't transcribe that: ${err}`;
       goalInput.value = priorValue;
     } finally {

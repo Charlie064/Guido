@@ -26,6 +26,19 @@
     // grants owner to an email the person themselves signs up with.
     "OWNER_EMAILS": "charlie.sandvall@gmail.com"
   },
+  // Abuse guard on /api/voice/transcribe, which spends real Aqua Voice
+  // money per call — same pattern as a vision-proxy rate limiter built on
+  // another branch (see docs/features/voice.md). Keyed per user, not per
+  // IP. `namespace_id` is any string unique within this Worker — there is
+  // nothing to create in the Cloudflare dashboard. `period` accepts only
+  // 10 or 60.
+  "ratelimits": [
+    {
+      "name": "VOICE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

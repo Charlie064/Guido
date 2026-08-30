@@ -965,6 +965,48 @@
         display: none;
       }
 
+      /* ---------- Usage ---------- */
+      /* Same card language as .pay-status, one card per tracked thing
+         (skills, voice). Deliberately just counts + a bar, no cost
+         breakdown — see docs/features/voice.md for where the real spend
+         numbers this is approximating (AQUA_RATE_PER_HOUR_USD etc. in
+         sidebar.js) live. */
+
+      .usage-card {
+        padding: 14px 16px;
+        border-radius: 14px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.35);
+        margin-bottom: 12px;
+      }
+
+      .usage-card-title {
+        font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+      }
+
+      .usage-card-meta {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .usage-bar {
+        margin-top: 10px;
+        height: 6px;
+        border-radius: 999px;
+        background: #eeeeee;
+        overflow: hidden;
+      }
+
+      .usage-bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--blue);
+      }
+
       /* ---------- Setup ---------- */
 
       #view-setup {
@@ -1701,9 +1743,10 @@
           <div class="bar-title" id="bar-title">Guido</div>
           <div class="bar-subtitle" id="bar-subtitle"></div>
         </div>
-        <!-- Tier readout, always visible next to the avatar while signed
-             in — text/color set by applyMembership() in sidebar.js
-             (data-plan drives the color variants above). -->
+        <!-- Tier readout, next to the avatar whenever it's visible —
+             reads "Guest" signed-out, the real plan signed-in — text/color
+             set by applyMembership() in sidebar.js (data-plan drives the
+             color variants above). -->
         <span class="plan-badge" id="plan-badge" hidden></span>
         <div class="bar-profile-wrap" id="bar-profile-wrap" hidden>
           <button class="bar-profile" id="bar-profile" type="button" aria-label="Profile" aria-expanded="false">G</button>
@@ -1714,9 +1757,13 @@
             <button type="button" id="profile-signout" hidden>Sign out</button>
             <!-- Label ("Upgrade plan" / "Manage subscription") set by
                  applyMembership() — same #view-pay screen either way, see
-                 openPayView("menu") in sidebar.js. -->
+                 openPayView("menu") in sidebar.js. Shown for guests too,
+                 not just signed-in users. -->
             <button type="button" id="profile-upgrade" hidden>Upgrade plan</button>
-            <button type="button" id="profile-attach">Use Excel window</button>
+            <!-- Available to guests too — skills usage shows "sign in to
+                 see" if signed out, voice usage is tracked per-device and
+                 works regardless of sign-in (see #view-usage). -->
+            <button type="button" id="profile-usage">Usage</button>
           </div>
         </div>
       </div>
@@ -1877,6 +1924,25 @@
           <div class="pay-manage">
             <p>Already on a paid plan? Manage billing, change tier, or cancel.</p>
             <button type="button" class="btn-primary" id="pay-manage-btn">Manage subscription</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Counts only, no cost breakdown — reads membership (skills,
+           already in memory from /api/me) and the local voice-usage
+           tracker (sidebar.js's loadVoiceUsage/voiceUsageCapSeconds,
+           per-device not per-account, so this works for guests too). -->
+      <section id="view-usage" class="view">
+        <div class="pay-body">
+          <div class="usage-card">
+            <div class="usage-card-title">New skills</div>
+            <div class="usage-card-meta" id="usage-skills-meta"></div>
+            <div class="usage-bar" id="usage-skills-bar" hidden><div class="usage-bar-fill" id="usage-skills-fill"></div></div>
+          </div>
+          <div class="usage-card">
+            <div class="usage-card-title">Voice</div>
+            <div class="usage-card-meta" id="usage-voice-meta"></div>
+            <div class="usage-bar"><div class="usage-bar-fill" id="usage-voice-fill"></div></div>
           </div>
         </div>
       </section>
