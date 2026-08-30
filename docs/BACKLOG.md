@@ -315,6 +315,44 @@ point — this file should never pose as a source of truth for what's done.
   arbitration/class-action-waiver clause before relying on it — that
   clause's enforceability is jurisdiction- and notice-dependent in ways
   a template can't guarantee.
+  - **Review pass, 2026-08-30 (`billing.ts` on `pricing-page`/
+    `stripe-billing`, no merge attempted — see
+    [planning/overnight-2026-08-30-release-and-verify.md](planning/overnight-2026-08-30-release-and-verify.md)).**
+    Code quality is solid where it exists: parameterized D1 queries, no
+    hardcoded secrets (`STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` stay
+    `wrangler secret put` values — see the "Status check" entry below for
+    the live-vs-test-mode price ID question, not re-litigated here).
+    Webhook signature verified via a from-scratch HMAC-SHA256
+    reimplementation of the `stripe` SDK's scheme; plan derived from the
+    subscription's actual price ID rather than trusted off event type
+    alone (correctly handles a downgrade still firing
+    `customer.subscription.updated`).
+    - **Do not merge as-is — the branch is based on a stale snapshot.**
+      Diffing `pricing-page` against current `env-cleanup` shows it would
+      *delete* `worker/vision.ts` (480 lines — the entire `/api/vision`
+      proxy, verified working end to end this same session), `worker/
+      voice.ts`, and their D1 migrations, replacing them with older code
+      predating both. A raw merge would regress the AI features to fix
+      billing. Needs a deliberate rebase of just `billing.ts` + its
+      schema/wrangler/pricing-page changes onto current `main`/
+      `env-cleanup`, not a merge of the branch wholesale.
+    - **Two real security findings in `verifyStripeSignature`**
+      (`billing.ts`): (1) the computed HMAC is compared to the header's
+      signature with plain `!==` string comparison, not constant-time —
+      a timing side-channel in principle, though the practical exposure
+      over real network jitter is low; (2) the signature's `timestamp`
+      field is extracted but never checked against a tolerance window
+      (Stripe's own guidance is to reject anything older than ~5
+      minutes), so a leaked-but-otherwise-valid signature could be
+      replayed indefinitely. Both are fixable in a few lines
+      (`crypto.subtle`-based constant-time compare, or a manual
+      byte-by-byte XOR-accumulate; a `Date.now()/1000 - timestamp` bound
+      check) — flagging rather than fixing, since this file isn't merged
+      into any branch this session is authorized to push.
+    - Not reviewed further: the pricing-page UI itself, checkout/portal
+      redirect flows end to end (would need a live Stripe test-mode
+      checkout, not attempted), or whether `memberships` schema changes
+      here still match current `db/schema.ts`.
   - **Gate added 2026-08-30**: `claudev/charlie/stripe-billing` must stay
     on Stripe **test-mode keys only** (`sk_test_...`/`pk_test_...`) —
     don't switch to live keys or take a real charge from anyone outside
