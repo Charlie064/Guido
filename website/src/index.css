@@ -330,6 +330,10 @@ html, body {
   font-size: clamp(2.25rem, 9vw, 3.1rem);
 }
 
+.pricing-amount.is-pending {
+  opacity: 0;
+}
+
 .pricing-period {
   font-size: 0.95rem;
   font-weight: 500;

@@ -34,8 +34,8 @@ function PricingCard({ tier, currency, onJoin }) {
       {tier.featured ? <p className="pricing-badge">Recommended</p> : null}
       <h3 className="pricing-name">{tier.name}</h3>
       <p className="pricing-tagline">{tier.tagline}</p>
-      <p className="pricing-amount">
-        <span>{formatMoney(tier.amount, currency)}</span>
+      <p className={`pricing-amount${currency ? "" : " is-pending"}`}>
+        <span>{currency ? formatMoney(tier.amount, currency) : "\u00a0"}</span>
         {tier.period ? <span className="pricing-period">{tier.period}</span> : null}
       </p>
       <ul className="pricing-features">
@@ -58,7 +58,7 @@ function PricingCard({ tier, currency, onJoin }) {
 }
 
 export default function Pricing() {
-  const [currency, setCurrency] = useState(() => currencyForCountry(localeCountry()));
+  const [currency, setCurrency] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
 
@@ -67,7 +67,9 @@ export default function Pricing() {
     fetch("/api/geo")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => {
-        if (!cancelled && data.country) setCurrency(currencyForCountry(data.country));
+        if (!cancelled) {
+          setCurrency(currencyForCountry(data.country || localeCountry()));
+        }
       })
       .catch(() => {
         if (!cancelled) setCurrency(currencyForCountry(localeCountry()));
