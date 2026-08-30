@@ -4,3 +4,10 @@ node_modules/
 target/
 __pycache__/
 *.pyc
+
+# `npx skills add` (used for the Stripe skills fallback, see
+# docs/planning/payment-page.md / BL-016) writes these — a local,
+# regenerable skill cache, not project source.
+.claude/
+.agents/
+skills-lock.json
