@@ -23,9 +23,13 @@
 7. Click
 8. Keyboard input
 9. Screen re-analysis
-10. Visual overlay/highlighting — **built** ([ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md)),
-    but further investment here (callout placement etc.) is
-    deprioritized below item 12, same reasoning as item 6.
+10. Visual overlay/highlighting — **removed, 2026-08-30.** Built per
+    [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md), then
+    cut from the UI as clutter (`5d18b45`); ADR 0006 is now marked
+    superseded. Underlying code unreferenced but not deleted. No P0 item
+    currently delivers "point at the real element" — see
+    [architecture/overview.md](../architecture/overview.md)'s "Visual
+    overlay" section.
 
 ## P1 — important
 

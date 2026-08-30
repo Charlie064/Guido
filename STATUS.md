@@ -459,7 +459,9 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
 
 ## What's next
 
-- **Guide → Do → Verify — backend built and tested, no UI yet.**
+- **Guide → Do → Verify — backend and UI both built, wired end to end
+  (2026-08-30 update: this entry was stale — the UI landed the same
+  night in `af979f0`, after this section was first written).**
   Deliberately prioritized over on-screen highlight/callout work per
   Charlie's direction: checking the user's work is more central to the
   product than where a box is drawn, and turned out to be the cheaper
@@ -476,8 +478,22 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   advancing to the next top-level step is gated on the current one being
   confirmed, and the *next* step's `plan_step` call reuses the last
   verify's screenshot as vision input instead of capturing separately.
-  Full design: `docs/planning/vision-driven-substep-loop.md`. Not wired
-  to the UI yet — see the collision note below.
+  Full design: `docs/planning/vision-driven-substep-loop.md`.
+  **UI wired (`af979f0`)**: a "Check my work" button per AI substep with
+  an `expected_outcome` calls `verify_substep` and renders
+  expected-vs-observed inline (`verifyHtml`/`data-verify` in
+  `sidebar.js`); a mismatch shows "Ask for help", prefilling the chat
+  input into the existing reactive-substep path; a separate "Next step"
+  button (`#step-advance`) is the plain self-confirm advance,
+  deliberately not gated on any verify having run in the step. **Still
+  not click-tested in a running app** — confirmed again 2026-08-30:
+  `cargo check` clean, `npx tauri dev` launches and the process stays up,
+  but this dev box's Wayland session has no screencopy protocol at all
+  (`grim` on the bare desktop fails with "compositor doesn't support the
+  screen capture protocol," not just the GNOME/Mutter gap noted
+  elsewhere in this file) — no screenshot of the running window is
+  possible here, so the actual click-through remains unverified pending
+  a machine that can capture its own screen.
 - **Note: a second Claude Code session (`tutoria-b4`) is concurrently
   editing `sidebar.js`/`sidebar.html`/`icons.js` tonight** — a two-step
   home gate (goal + window pick, either order), a research-progress
@@ -676,3 +692,26 @@ _Last updated: 2026-08-29 (overnight session, Charlie's technical track)_
   Studio Code" / "Welcome"), the icon lookup by unit test against this
   machine's real icon themes (Firefox, VS Code, Nautilus, GNOME Settings
   all resolve). **Not yet run through a real portal pick.**
+- **2026-08-30: window-scoped capture confirmed already isolated from the
+  sidebar on GNOME/Wayland — see
+  [ADR 0009](docs/decisions/0009-window-scoped-capture-excludes-sidebar.md).**
+  Tested on this session's actual dev machine (GNOME Shell 50.3, Wayland,
+  stock GNOME): a fullscreen marker window placed on top of a
+  `window`-scoped portal capture target never appeared in the captured
+  frame, 5/5 runs (`spikes/vision-detect/test_window_isolation.py`,
+  reusable — re-run it against any other capture backend before trusting
+  it). Corrects `BL-014`'s prior assumption that Linux had no way to drop
+  the `sidebar.hide()`/`.show()` dance. **Decision, not yet coded**: keep
+  Guido always-on-top and drop hide/show for `CaptureScope::Window`
+  specifically in `lib.rs`; keep hide/show for `Region`/portal `Monitor`
+  scopes. Still needs: the actual `lib.rs` edit, and the same test against
+  macOS/Windows/X11/Hyprland before extending the decision to them.
+- **Dev environment note**: this session is running on stock/non-riced
+  GNOME (Shell 50.3, Wayland) rather than this repo's original Hyprland
+  rice — Charlie is planning to move back to the Hyprland setup. Once
+  that happens, re-verify the GNOME-specific gaps this file and ADR
+  0005/0006/0007 document (no live window rects, no on-screen overlay, no
+  app-name/icon disclosure) don't regress anything that was built or
+  tested against GNOME in the meantime, and consider re-running
+  `test_window_isolation.py`-style checks against Hyprland's
+  `hyprland-toplevel-export-v1` capture path per ADR 0009.

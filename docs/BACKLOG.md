@@ -8,11 +8,17 @@ point — this file should never pose as a source of truth for what's done.
   the user completes more tutorials/skills. No spaced-repetition system.
   Mechanic undecided (badges? streaks? per-app mastery levels?). See
   [philosophy/vision.md](philosophy/vision.md).
-- **BL-003 — Movable overlay icon + selection state.** The Guido icon
-  should be draggable/repositionable instead of fixed to one screen
-  location, so it doesn't block content. Deselected state shows a gray
-  version of the icon svg; selected state (sidebar open) shows the blue
-  message icon.
+- **BL-003 — Stale premise, needs rescoping.** There is no collapsed-icon
+  mode to make draggable anymore: `sidebar.js`'s own header comment says
+  "No collapsed-icon mode for now" — the app is a single fixed 480×720
+  decorated window shown at full size from launch, not the
+  collapse-to-icon design this entry assumed. That icon UI existed
+  briefly (see the old "Collapsed icon" and "GNOME tested" entries in
+  `STATUS.md`'s history) and was cut for GNOME compatibility. If a
+  minimized/icon mode comes back (`architecture/overview.md` flags this
+  as tracked future work, not an oversight), draggability and a
+  selected/deselected icon state would apply again then — until it does,
+  this entry describes nothing currently buildable.
 - **BL-004 — OS-level active-app detection for chat naming + icons.** One
   app per chat, as today, but auto-detect the app instead of requiring the
   user to type its name — and pull its static icon so chats can be grouped
@@ -77,7 +83,13 @@ point — this file should never pose as a source of truth for what's done.
   on the working tier, resize/move event listeners feeding live rect
   updates, and a real click-through overlay renderer (the "untried" idea
   named in architecture/overview.md's Visual overlay section — a box scoped
-  to just the element, not the whole monitor). Shares its
+  to just the element, not the whole monitor). **Note (2026-08-30): the
+  overlay renderer this built on top of (`overlay.js`/`overlay.html`,
+  ADR 0006) was removed from the UI entirely** — see that ADR's
+  superseded status and the "Visual overlay" section. This item's window-
+  rect-tracking scope still stands on its own, but "real click-through
+  overlay renderer" now means rebuilding a UI entry point too, not just
+  wiring live coordinates into an existing one. Shares its
   `ActiveAppProvider`-style provider interface and platform matrix with
   BL-004 — worth building together.
   - **Known gap, scoped out of v1**: browser-hosted apps (Google Sheets,
@@ -85,17 +97,14 @@ point — this file should never pose as a source of truth for what's done.
     inside a tab. Fixing this needs a second, optional layer (a browser
     extension reporting active tab title/URL), not more OS-level work.
     Degrade to "Chrome" + let the user rename the chat until that's built.
-- **BL-006 — Integrate Pauline's website build into the codebase.**
-  Landing (Guido Vite app from `claudev/pauline/landing-page`) is in
-  `website/` on `claudev/quentin/google-login`, with waitlist + privacy
-  wired to the Worker. Remaining: `npm run deploy` once Cloudflare
-  membership is accepted, and any further design pass she still wants.
-- **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
-  currently runs on the free `workers.dev` subdomain
-  (`tutoria-website.guidotutor.workers.dev`, see
-  [reference/team.md](reference/team.md)/[STATUS.md](../STATUS.md)).
-  Register/point a real domain at the Cloudflare account and wire it into
-  `website/wrangler.jsonc` (custom domain / route), including DNS and TLS.
+- **BL-008 — Done.** Verified 2026-08-30: `guidotutor.com` and
+  `www.guidotutor.com` are wired as `custom_domain` routes in
+  `website/wrangler.jsonc` and both resolve live, serving the real site
+  (`<title>Guido</title>`) — not the free `workers.dev` subdomain this
+  entry originally described. This entry, `reference/team.md`, and the
+  older parts of `STATUS.md` describing the site as `workers.dev`-only
+  are stale. Kept here (not deleted) only as a pointer to update those —
+  delete this stub once they're fixed.
 - **BL-009 — No app identity at all on Wayland.** **Largely done — read
   the identity off the pixels instead of asking the OS.** The premise
   still holds: the portal's only identifying output is
@@ -133,9 +142,11 @@ point — this file should never pose as a source of truth for what's done.
   few pixels off looks broken; an animated cursor drifting toward the
   right neighborhood still reads as "over there"). Ties to the `action:
   "move-cursor"` value `plan_step.py` already generates per substep
-  (`VALID_ACTIONS` in that file) — today that value exists in the data
-  model and is rendered as plain instruction text only; nothing animates
-  a cursor anywhere. Needs its own design pass (where does the cursor
+  (`VALID_ACTIONS` in that file) — today that value is stored on the
+  substep object (`sidebar.js`'s `generateStepSubsteps`) but, as of the
+  2026-08-30 substep-bubble decluttering (`5d18b45`), **isn't rendered
+  anywhere at all anymore**, not even as plain text; nothing animates a
+  cursor and nothing shows the action type either. Needs its own design pass (where does the cursor
   actually move relative to the real system cursor, what triggers it,
   does it work through the same window-scope/portal constraints
   `locate_element` already has) — not scoped here.
@@ -171,14 +182,15 @@ point — this file should never pose as a source of truth for what's done.
   The dimming is what should carry "look here": everything *except* the
   target recedes, instead of the target being one more bright rectangle
   among many on a normal-brightness screen.
-  - **Where it fits today**: substeps already render two ways per
-    "Visual overlay" in `docs/architecture/overview.md` — the eye icon
-    (real on-screen box + text callout, `overlay.js`/`overlay.html`) and
-    the note icon (in-panel schematic, the required fallback wherever no
-    live window rect exists). This would be a third rendering behind the
-    eye icon, or a distinct mode of it, using the same `last_known_bbox`
-    data `locate_element` already returns — no new detection work, this
-    is presentation only.
+  - **Where it fits today — premise gone stale (2026-08-30):** this was
+    written to be a third rendering mode behind the eye icon, alongside
+    the note-icon schematic described in "Visual overlay". Both of those
+    were removed from the substep bubble UI in `5d18b45` (see that
+    section's current, marked-removed text) — there is no eye/note icon
+    row to extend anymore. This would now mean building a first overlay
+    entry point from scratch, not adding a mode to an existing one. The
+    underlying data (`last_known_bbox` from `locate_element`) and the
+    dead `overlay.js`/`overlay.html` code are still there to build on.
   - **Mechanism sketch, not decided**: an SVG mask (or a canvas
     `globalCompositeOperation: "destination-out"` punch) over a
     semi-opaque dark fill on the existing click-through `overlay` window,
@@ -218,8 +230,26 @@ point — this file should never pose as a source of truth for what's done.
   window-manager dragging still works once layer-shell is back on, since
   that's exactly what broke last time.
 - **BL-014 — Native capture-exclusion + always-on-top on macOS/Windows.**
-  Both platforms have real OS APIs to keep Guido visibly pinned on top
-  *and* invisible to any screen capture at the same time — not a
+  **Linux/Wayland part superseded — see
+  [ADR 0009](decisions/0009-window-scoped-capture-excludes-sidebar.md).**
+  This entry originally claimed Linux had no path to drop the hide/show
+  dance ("no Wayland-portal equivalent to `WDA_EXCLUDEFROMCAPTURE` exists
+  for an ordinary client to call on itself") and would keep it
+  indefinitely. Measured and found incomplete: true that no explicit
+  exclusion API exists, but a `Window`-scoped portal capture on GNOME/
+  Wayland is already isolated from anything on top of it (tested 5/5 with
+  `spikes/vision-detect/test_window_isolation.py`), so no such API is
+  needed for that scope — the hide/show can be dropped there too, same as
+  macOS/Windows below. `Region`/`Monitor`-scoped captures still need it
+  (they composite the whole screen). Remaining scope of this item:
+  macOS/Windows native APIs below (still unverified — same test method
+  needs to be re-run against each), plus re-verifying Linux X11
+  (`XCompositeNameWindowPixmap`) and Hyprland/wlroots
+  (`hyprland-toplevel-export-v1`) the same way before trusting them
+  un-tested.
+
+  Both macOS and Windows have real OS APIs to keep Guido visibly pinned on
+  top *and* invisible to any screen capture at the same time — not a
   trade-off between the two the way Linux/Wayland is:
   - **Always-on-top**: plain `alwaysOnTop`, already the fallback path
     `init_layer_shell`'s doc comment names for macOS/Windows (X11 too) —
@@ -234,10 +264,12 @@ point — this file should never pose as a source of truth for what's done.
     dance entirely** (`sidebar.hide()`/`.show()` around every capture
     site in `lib.rs` — `locate_element`, `verify_substep`,
     `answer_question`, `identify_app`, `pick_portal_source`): no more
-    flicker, sidebar just never appears in a captured frame. Linux keeps
-    the hide/show approach — no Wayland-portal equivalent to
-    `WDA_EXCLUDEFROMCAPTURE` exists for an ordinary client to call on
-    itself.
+    flicker, sidebar just never appears in a captured frame. **Outdated:
+    this paragraph previously said Linux keeps the hide/show approach
+    unconditionally — see the correction and ADR 0009 link above.** Linux
+    still has no `WDA_EXCLUDEFROMCAPTURE` equivalent for an ordinary
+    client, but `Window`-scoped portal capture doesn't need one; only
+    `Region`/`Monitor`-scoped Linux captures still require hide/show.
   - Needs Tauri-side platform-conditional code (`#[cfg(target_os =
     "macos")]` / `"windows"`), likely via `raw-window-handle` to reach
     the native `NSWindow`/`HWND`, since neither is exposed by Tauri's
@@ -281,3 +313,13 @@ point — this file should never pose as a source of truth for what's done.
     registration crosses from "should register" into non-compliant once
     it's real recurring revenue from real users, not a demo. Hackathon
     demos of the payment flow should run in test mode regardless.
+  - **Status check, 2026-08-30**: `stripe-billing` (`be6d8d3` checkout/
+    portal/webhook, `b6f0dcb` "add live Stripe price IDs to wrangler
+    vars") is **not merged into `main`** — this repo's `main` has no
+    billing routes yet, so nothing above is live in production. But the
+    branch's own `wrangler.jsonc` now carries real, non-test-mode Stripe
+    price IDs (`STRIPE_PRICE_STARTER`/`STRIPE_PRICE_PLUS`), which sits in
+    tension with the test-mode-only gate just above — worth an explicit
+    check of what `STRIPE_SECRET_KEY` actually is (test vs. live; the
+    value itself can't be read back via `wrangler secret list`, only
+    that something is set) before that branch merges, not after.

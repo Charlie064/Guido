@@ -2,8 +2,21 @@
 
 ## Status
 
-Accepted. Supersedes the "no overlay is drawn on top of the target
-application anymore" position recorded in
+**Superseded, 2026-08-30 (`5d18b45`, "declutter substep bubbles, scope
+chat to one substep").** Both delivery paths this ADR decided between —
+the real overlay (eye icon) and the in-panel schematic (note icon) — were
+removed from the substep bubble UI as clutter; a substep now shows only
+its instruction text and "Check my work." The code this ADR describes
+(`overlay.js`/`overlay.html`, the Rust `locate_element` command) is still
+in the tree but unreferenced by `sidebar.js` — left for a later cleanup
+pass, not deleted. The product promise this ADR was chasing (point at the
+real element on the real screen) is therefore currently undelivered by
+any path, not just the Wayland tier called out in "Consequences" below.
+No replacement design has been decided; treat the rest of this ADR as
+historical record of what was built and why, not current behavior.
+
+Previously: Accepted. Supersedes the "no overlay is drawn on top of the
+target application anymore" position recorded in
 [architecture/overview.md](../architecture/overview.md)'s "Visual overlay"
 section (that decision was never written up as its own ADR; this one
 records both it and its reversal).

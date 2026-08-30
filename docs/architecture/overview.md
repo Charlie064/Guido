@@ -148,11 +148,25 @@ Not required for the core MVP loop (P2 in
 
 ### Visual overlay
 
-**A real on-screen overlay is drawn again, alongside the schematic**
-[partial] — see [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md),
-which supersedes the "no overlay at all" position this section previously
-recorded. History, since it's the reason the current design looks the way
-it does: the original `main` window drew a real highlight box/bubble over
+**[removed, 2026-08-30]** Neither delivery path described below is
+reachable from the UI anymore. `5d18b45` ("declutter substep bubbles,
+scope chat to one substep") dropped the eye/target/note icon row from
+substep bubbles entirely — a substep now shows only its instruction text
+and "Check my work." [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md)
+is marked superseded accordingly. The underlying code
+(`overlay.js`/`overlay.html`, the Rust `locate_element` command) is still
+in the tree, unreferenced, pending a real cleanup pass — described below
+for that reason, not because it's current. The
+[philosophy/vision.md](../philosophy/vision.md) "point at the real
+element on the real screen" promise is therefore currently undelivered by
+any path; no replacement has been decided.
+
+History, kept for context on the code that's still sitting there unused:
+this section previously described a real on-screen overlay drawn again
+alongside an in-panel schematic, superseding an earlier "no overlay at
+all" position (see [ADR 0006](../decisions/0006-restore-real-on-screen-overlay.md)
+for the full record). The original `main` window drew a real highlight
+box/bubble over
 the target app and was abandoned because *any* real, interactive window
 sitting over that app blocks clicks into it, and because a *toggled*
 click-through state was observed to get stuck in the interactive
@@ -231,9 +245,11 @@ fully-interactive, full-screen window serving two gestures: the
 `CaptureScope::Region` fallback's region drag, and the click-to-pick
 gesture that selects a window (see "Screen understanding" above) — shown
 only for the duration of either, hidden immediately after via a real
-`hide()` call. `overlay` (`overlay.html`/`overlay.js`) is the third
-window: transparent, always-on-top, permanently click-through, hidden
-until a substep's eye icon is pressed — see "Visual overlay" below.
+`hide()` call. `overlay` (`overlay.html`/`overlay.js`) was a third
+window — transparent, always-on-top, permanently click-through, shown on
+a substep's eye icon press — but that icon (and the whole eye/target/note
+row) no longer exists in the UI as of 2026-08-30; the window/code remain
+unreferenced, not deleted. See "Visual overlay" below.
 
 **Window-pick capture, region-drag as fallback** [partial] — the sidebar's
 setup view lets the user pick a live OS window from a list

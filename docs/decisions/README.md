@@ -13,3 +13,4 @@ supersedes it and note the supersession in both files.
 - [0006 — Restore the real on-screen overlay, click-through set once](0006-restore-real-on-screen-overlay.md)
 - [0007 — Desktop portal as the capture and window-pick backend on Wayland](0007-portal-capture-backend-wayland.md)
 - [0008 — Better Auth email+password, not Google OAuth](0008-better-auth-email-password.md)
+- [0009 — Window-scoped capture already excludes the sidebar; drop the hide/show dance for it](0009-window-scoped-capture-excludes-sidebar.md)

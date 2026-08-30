@@ -47,7 +47,19 @@ before shipping beyond a demo.)
 - Always ask before committing.
 - Main only takes completed, tested merges.
 - **Co-change rule**: a behavior change updates its one canonical doc in the
-  same commit. See `docs/workflows/development.md`.
+  same commit. See `docs/workflows/development.md`. A `git commit`
+  triggers an advisory (non-blocking) hook reminder when behavior-bearing
+  code is staged with no doc change alongside it
+  (`.claude/hooks/doc-staleness-check.sh`) — treat that reminder as a
+  prompt to check, not proof either way.
+- **Staleness found mid-task, fix it inline.** If you (Claude) notice a
+  doc has drifted from the actual code while working on something else —
+  an ADR's decision was later reversed or superseded, a `BL-NNN` entry in
+  `docs/BACKLOG.md` describes something since removed or changed,
+  `STATUS.md` contradicts the repo's real state — fix it in the same
+  turn, without asking first. Same carve-out as "small obvious fixes
+  don't need a check-in" above: this is keeping an existing doc accurate,
+  not a new decision. Still ask before a commit, per the rule above.
 - **Handoff rule**: a plan written for someone else to build (not the
   person requesting it) goes in `docs/planning/<name>` and includes a
   "Before `<person>` can start" section listing exactly what access,
