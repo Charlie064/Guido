@@ -33,20 +33,35 @@ def call_vision(kind: str, **fields) -> dict:
     req = urllib.request.Request(
         f"{WORKER_BASE_URL}/api/vision",
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+            # urllib's default User-Agent ("Python-urllib/3.x") reads as a
+            # generic scripted client to Cloudflare's bot protection in
+            # front of the Worker, which flat-out blocks it (a 403 with
+            # Cloudflare's own "error code: 1010" body, never reaching
+            # vision.ts at all) — a real client identifier avoids that.
+            "User-Agent": "Guido-Desktop/1.0 (+https://guidotutor.com)",
+        },
         method="POST",
     )
     try:
-        # Matches the longest per-kind timeout (research's 90s) plus
-        # headroom for the round trip itself.
-        with urllib.request.urlopen(req, timeout=100) as resp:
+        # Must exceed the longest per-kind timeout on the server side
+        # (research's 120s, see vision.ts's callClaude) plus headroom for
+        # the round trip itself — otherwise this client-side timeout fires
+        # first and surfaces as a raw "The read operation timed out"
+        # instead of vision.ts's own clean timeout message.
+        with urllib.request.urlopen(req, timeout=135) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         try:
             detail = json.loads(detail).get("error", detail)
         except json.JSONDecodeError:
-            pass
+            # A Cloudflare block page (or any other non-JSON error body) is
+            # HTML, often several KB — truncate so it doesn't flood the
+            # caller's stderr/UI with markup instead of a readable message.
+            detail = detail.strip()[:300]
         raise RuntimeError(f"vision request failed ({exc.code}): {detail}") from exc
     except urllib.error.URLError as exc:
         raise RuntimeError(f"vision request failed: {exc.reason}") from exc
