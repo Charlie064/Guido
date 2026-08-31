@@ -1,0 +1,62 @@
+<!--
+  Source for the app icon (taskbar/installer/Start-menu icon) — NOT the
+  same asset as src/assets/mascot/*.svg (those are the tiny in-app mascot
+  states, e.g. sidebar.js's .step-mascot marker). Regenerate every
+  platform size/format from this with:
+    npx tauri icon icons/app-icon-source.svg -o icons
+
+  Rebuilt 2026-08-31 for two reasons found testing on real Windows
+  hardware: the mascot only filled about half the canvas (illegible once
+  Windows scales it down to a 16/32px taskbar/window icon — see the
+  `_NET_WM_ICON`/BL-004-equivalent Windows icon extraction added the same
+  session), and the near-white pastel gradient background gave almost no
+  contrast against the mascot's own pale colors. Mascot artwork is
+  mascot-happy.svg's shapes (closest state to what the old icon.png
+  actually drew: closed smiling eyes + blush, not idle's open round
+  eyes), scaled up from its native 200x230 viewBox to fill most of a
+  1024x1024 canvas, on a solid fill of the brand's own lime green
+  (#B6FF3E, docs/features/website-design-system.md's BRAND token) instead
+  of white/near-white. The two soft blurred secondary highlight ellipses
+  mascot-happy.svg has (feGaussianBlur) are dropped here — blur-filter
+  primitive lengths don't scale cleanly with an outer transform, and
+  they're a minor secondary detail, not needed for recognizability at
+  icon sizes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#bfe0fb"/>
+      <stop offset="55%" stop-color="#d7c8f0"/>
+      <stop offset="100%" stop-color="#f6c7dd"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="220" fill="#B6FF3E"/>
+
+  <g transform="translate(512,536) scale(3.9) translate(-100,-115)">
+    <ellipse cx="100" cy="205" rx="52" ry="10" fill="#0A0A0A" opacity="0.14"/>
+
+    <ellipse cx="76" cy="182" rx="15" ry="11" fill="url(#body)" fill-opacity="0.95"/>
+    <ellipse cx="124" cy="182" rx="15" ry="11" fill="url(#body)" fill-opacity="0.95"/>
+
+    <g fill="url(#body)" fill-opacity="0.95">
+      <ellipse cx="100" cy="132" rx="76" ry="64"/>
+      <circle cx="54" cy="82" r="36"/>
+      <circle cx="86" cy="62" r="33"/>
+      <circle cx="122" cy="63" r="35"/>
+      <circle cx="152" cy="86" r="33"/>
+    </g>
+
+    <ellipse cx="80" cy="58" rx="46" ry="16" fill="url(#shine)" opacity="0.55" transform="rotate(-18 80 58)"/>
+
+    <path d="M66,120 C71,112 85,112 90,120" stroke="#2a2233" stroke-width="6" stroke-linecap="round" fill="none"/>
+    <path d="M111,118 C116,110 130,110 135,118" stroke="#2a2233" stroke-width="6" stroke-linecap="round" fill="none"/>
+    <path d="M85,140 C93,150 107,150 115,138" stroke="#2a2233" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <ellipse cx="62" cy="138" rx="8" ry="5" fill="#ff9fb0" opacity="0.55"/>
+    <ellipse cx="140" cy="136" rx="8" ry="5" fill="#ff9fb0" opacity="0.55"/>
+  </g>
+</svg>
