@@ -63,15 +63,21 @@ point — this file should never pose as a source of truth for what's done.
     The per-app grouping this entry describes is built too: the chat list
     is one card per app titled "<App> chats", ranked by its newest chat,
     with that app's chats inside it under the group's shared icon.
+    **Windows done, verified live (2026-08-31)** — `window_icon` prefers
+    the window's own icon (`WM_GETICON`, falling back to the window
+    class's registered icon) over the exe's own icon (`ExtractIconExW`)
+    as a last resort, decoded via `GetIconInfo`/`GetDIBits` with an
+    AND-mask fallback for legacy icons with no real alpha channel.
+    Verified against real windows on this machine (Windows Terminal,
+    Explorer, this app's own window) — correct colors, correct alpha.
     Remaining: the macOS (`NSRunningApplication.icon` off the window's
-    owner pid) and Windows (`WM_GETICON`/`ExtractIconEx`) backends.
-  - **Not verified against a real app.** The `_NET_WM_ICON` decode has
-    unit tests (`window_provider.rs`) but has never run on real pixels:
-    the dev machine is GNOME Wayland, where Mutter publishes no
+    owner pid) backend.
+  - **Linux: not verified against a real app.** The `_NET_WM_ICON` decode
+    has unit tests (`window_provider.rs`) but has never run on real
+    pixels: the dev machine is GNOME Wayland, where Mutter publishes no
     `_NET_CLIENT_LIST`, so a walk of the whole X11 tree finds zero windows
     carrying an icon even with `GDK_BACKEND=x11` forced. Needs an X11
-    login session (or the macOS/Windows backends) before it can be called
-    working.
+    login session before it can be called working.
 - **BL-005 — Live window-rect tracking backend + window-picker capture +
   real on-screen overlay.** The actual OS calls behind
   [ADR 0005](decisions/0005-window-anchored-overlay-coordinates.md)'s

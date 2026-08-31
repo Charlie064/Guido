@@ -72,6 +72,43 @@ See `BL-014` in `docs/BACKLOG.md`.
   of silently leaving the sidebar visible in every capture with no
   fallback.
 
+**Auto-updater verified live end to end**: shipped a tiny, deliberately
+cosmetic change (`v0.1.8` — enlarged the step-path Guido mascot icon,
+20px → 24px) specifically to test the update path against an already-
+installed `v0.1.7` real release. The installed app detected `v0.1.8` on
+startup (`checkForUpdate()`), downloaded, installed, and relaunched
+itself with no manual reinstall — the pipeline works.
+
+**Windows window-icon extraction built and verified — BL-004 mostly
+closed.** `window_provider.rs`'s `window_icon` was a stub on Windows
+(`Ok(None)` unconditionally) — Charlie hit this directly, watching every
+app (Paint, Microsoft Store, Edge, Terminal, Explorer) fail to show a
+real icon in the picker. Real implementation now: the window's own icon
+(`WM_GETICON`, falling back to the window class's registered icon) over
+the exe's own icon (`ExtractIconExW`) as a last resort, decoded via
+`GetIconInfo`/`GetDIBits` with an AND-mask fallback for legacy icons with
+no true alpha channel. Careful about handle ownership — `WM_GETICON`/
+`GetClassLongPtrW` icons belong to the target window/class and must never
+be `DestroyIcon`'d, unlike `ExtractIconExW`'s, which transfers ownership
+to us. Verified against real windows on this machine (Windows Terminal,
+Explorer, this app's own window) by temporarily dumping decoded icons to
+PNG and inspecting them — correct colors, correct alpha, no channel-swap
+or stride bugs; that verification code was removed once confirmed. macOS
+backend still unwritten.
+
+**App icon redesigned — bigger mascot, brand-green background.** The
+shipped `icon.png` had the mascot filling only about half the canvas on a
+near-white pastel gradient — illegible once Windows scales it down to a
+16/32px taskbar icon (confirmed by looking at this app's own icon via the
+extraction work above). Rebuilt from `src/assets/mascot/mascot-happy.svg`
+(the state whose face actually matches the old icon — closed smiling
+eyes + blush, not idle's open round eyes), scaled way up to fill most of
+a 1024×1024 canvas, on a solid fill of the brand's own lime green
+(`#B6FF3E`, `docs/features/website-design-system.md`'s BRAND token)
+instead of white. New source: `icons/app-icon-source.svg`; every
+platform size/format regenerated from it via `npx tauri icon
+icons/app-icon-source.svg -o icons`.
+
 ## 2026-08-30: release-and-verify overnight pass
 
 See [planning/overnight-2026-08-30-release-and-verify.md](docs/planning/overnight-2026-08-30-release-and-verify.md)
