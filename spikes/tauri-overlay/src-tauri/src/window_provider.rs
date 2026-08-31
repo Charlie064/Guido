@@ -55,12 +55,15 @@ pub fn window_icon(id: &str) -> Result<Option<IconImage>, String> {
     {
         linux_x11::window_icon(id)
     }
-    // macOS (NSRunningApplication.icon via the window's owner pid) and
-    // Windows (WM_GETICON / ExtractIconEx off the exe path) are the
-    // BL-004 paths and are not wired up yet — reported as "no icon"
-    // rather than an error so the picker degrades to the letter avatar
-    // instead of surfacing a failure the user can't act on.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows_backend::window_icon(id)
+    }
+    // macOS (NSRunningApplication.icon via the window's owner pid) is the
+    // one BL-004 path still not wired up — reported as "no icon" rather
+    // than an error so the picker degrades to the letter avatar instead of
+    // surfacing a failure the user can't act on.
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         let _ = id;
         Ok(None)
@@ -320,7 +323,7 @@ mod windows_backend {
         OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, HICON, IsWindowVisible,
     };
     use windows::core::PWSTR;
 
@@ -338,26 +341,31 @@ mod windows_backend {
         Some(rect)
     }
 
-    fn process_name(hwnd: HWND) -> String {
+    // Full path, wide-string (UTF-16) form — what ExtractIconExW's
+    // exe_hicon fallback needs. process_name below is the file-stem-only
+    // view every other caller wants.
+    fn process_exe_path(hwnd: HWND) -> Option<Vec<u16>> {
         unsafe {
             let mut pid = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
-                return String::new();
-            };
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
             let mut buf = [0u16; 512];
             let mut len = buf.len() as u32;
             let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
             let _ = CloseHandle(handle);
-            if ok.is_err() {
-                return String::new();
-            }
-            let path = OsString::from_wide(&buf[..len as usize]);
-            std::path::Path::new(&path)
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default()
+            ok.is_ok().then(|| buf[..len as usize].to_vec())
         }
+    }
+
+    fn process_name(hwnd: HWND) -> String {
+        let Some(wide) = process_exe_path(hwnd) else {
+            return String::new();
+        };
+        let path = OsString::from_wide(&wide);
+        std::path::Path::new(&path)
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 
     fn window_title(hwnd: HWND) -> String {
@@ -420,6 +428,227 @@ mod windows_backend {
             width: (rect.right - rect.left) as i64,
             height: (rect.bottom - rect.top) as i64,
         })
+    }
+
+    // ---------- BL-004: window icon extraction ----------
+    //
+    // Prefers the window's own icon (WM_GETICON, falling back to the
+    // window class's registered icon for older apps that never answer
+    // WM_GETICON) over the exe's icon (ExtractIconExW) — the window's own
+    // icon is the one actually shown in its titlebar/taskbar entry right
+    // now, where the exe's is just whatever the file itself carries.
+    // WM_GETICON/GetClassLongPtrW hand back an icon *owned by the target
+    // window or its class* — must never be DestroyIcon'd, unlike
+    // ExtractIconExW's, which transfers ownership to us. Getting this
+    // wrong would destroy another process's own icon resource.
+    fn window_hicon(hwnd: HWND) -> Option<HICON> {
+        use windows::Win32::UI::WindowsAndMessaging::{
+            GCLP_HICON, GetClassLongPtrW, ICON_BIG, ICON_SMALL2, SendMessageW, WM_GETICON,
+        };
+        use windows::Win32::Foundation::WPARAM;
+
+        unsafe {
+            // ICON_BIG (2) before the SMALL variants — a real app icon,
+            // not the tiny taskbar-corner one.
+            let big = SendMessageW(hwnd, WM_GETICON, WPARAM(ICON_BIG as usize), LPARAM(0));
+            if big.0 != 0 {
+                return Some(HICON(big.0 as _));
+            }
+            let small = SendMessageW(hwnd, WM_GETICON, WPARAM(ICON_SMALL2 as usize), LPARAM(0));
+            if small.0 != 0 {
+                return Some(HICON(small.0 as _));
+            }
+            let class_icon = GetClassLongPtrW(hwnd, GCLP_HICON);
+            if class_icon != 0 {
+                return Some(HICON(class_icon as _));
+            }
+            None
+        }
+    }
+
+    // Last resort for a window that answers neither WM_GETICON nor
+    // carries a class icon — pull whatever icon its own exe file
+    // declares. This HICON *is* ours to destroy (ExtractIconExW hands
+    // over a fresh copy), unlike window_hicon's above.
+    fn exe_hicon(hwnd: HWND) -> Option<HICON> {
+        use windows::Win32::UI::Shell::ExtractIconExW;
+
+        let path = process_exe_path(hwnd)?;
+        let mut path = path;
+        path.push(0); // ExtractIconExW wants a NUL-terminated wide string.
+        let mut large = [HICON::default(); 1];
+        unsafe {
+            let extracted = ExtractIconExW(windows::core::PCWSTR(path.as_ptr()), 0, Some(large.as_mut_ptr()), None, 1);
+            if extracted == 0 || large[0].is_invalid() {
+                return None;
+            }
+        }
+        Some(large[0])
+    }
+
+    // Straight (non-premultiplied) RGBA8, top-down row order — matches
+    // IconImage's own contract (see window_provider.rs's doc comment).
+    fn decode_hicon(hicon: HICON) -> Result<super::IconImage, String> {
+        use windows::Win32::Graphics::Gdi::{
+            BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, DeleteObject, GetDC, GetDIBits, GetObjectW,
+            ReleaseDC,
+        };
+        use windows::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
+
+        // GetDIBits wants a color-table slot for a <=8bpp DIB (the mask
+        // request below is 1bpp) sized for the number of entries the bit
+        // depth implies — BITMAPINFO's own bmiColors is fixed at exactly
+        // one RGBQUAD, which is one short for a 1bpp mask's 2-entry table
+        // and would let GetDIBits write past the end of a plain
+        // BITMAPINFO. This gives it the extra room; the color values
+        // themselves are never read, only the mask's raw bits are.
+        #[repr(C)]
+        struct MaskBitmapInfo {
+            header: BITMAPINFOHEADER,
+            colors: [u32; 2],
+        }
+
+        unsafe {
+            let mut info = ICONINFO::default();
+            GetIconInfo(hicon, &mut info).map_err(|e| format!("GetIconInfo failed: {e}"))?;
+            // GetIconInfo always hands back fresh copies of both bitmaps
+            // regardless of whether hicon itself is borrowed or owned —
+            // these are ours to free unconditionally.
+            let hbm_color = info.hbmColor;
+            let hbm_mask = info.hbmMask;
+            let cleanup = || {
+                if !hbm_color.is_invalid() {
+                    let _ = DeleteObject(hbm_color);
+                }
+                if !hbm_mask.is_invalid() {
+                    let _ = DeleteObject(hbm_mask);
+                }
+            };
+
+            if hbm_color.is_invalid() {
+                cleanup();
+                return Err("icon has no color bitmap (legacy monochrome-only icon)".to_string());
+            }
+
+            let mut bmp = BITMAP::default();
+            if GetObjectW(hbm_color, std::mem::size_of::<BITMAP>() as i32, Some(&mut bmp as *mut _ as *mut _))
+                == 0
+            {
+                cleanup();
+                return Err("GetObjectW failed on icon color bitmap".to_string());
+            }
+            let width = bmp.bmWidth as u32;
+            let height = bmp.bmHeight as u32;
+            if width == 0 || height == 0 {
+                cleanup();
+                return Err("icon bitmap has zero size".to_string());
+            }
+
+            let hdc = GetDC(None);
+            let header = BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width as i32,
+                biHeight: -(height as i32), // negative = top-down output, no manual flip needed
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0 as u32,
+                ..Default::default()
+            };
+            let mut buf = vec![0u8; (width * height * 4) as usize];
+            let mut bmi = BITMAPINFO { bmiHeader: header, ..Default::default() };
+            let scanlines = GetDIBits(
+                hdc,
+                hbm_color,
+                0,
+                height,
+                Some(buf.as_mut_ptr() as *mut _),
+                &mut bmi,
+                DIB_RGB_COLORS,
+            );
+            if scanlines == 0 {
+                ReleaseDC(None, hdc);
+                cleanup();
+                return Err("GetDIBits failed on icon color bitmap".to_string());
+            }
+
+            // Real alpha? Most modern icons (32bpp, PNG-sourced .ico)
+            // carry a genuine alpha channel here. If every alpha byte
+            // came back 0 this is an old-style icon whose color bitmap
+            // has no transparency info at all — fall back to the AND
+            // mask below instead of rendering it as fully invisible.
+            let has_alpha = buf.chunks_exact(4).any(|px| px[3] != 0);
+
+            // BGRA (Windows DIB order) -> straight RGBA.
+            for px in buf.chunks_exact_mut(4) {
+                px.swap(0, 2);
+                if !has_alpha {
+                    px[3] = 255; // placeholder; overwritten below from the mask
+                }
+            }
+
+            if !has_alpha {
+                let mask_header = BITMAPINFOHEADER {
+                    biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                    biWidth: width as i32,
+                    biHeight: -(height as i32),
+                    biPlanes: 1,
+                    biBitCount: 1,
+                    biCompression: BI_RGB.0 as u32,
+                    ..Default::default()
+                };
+                // 1bpp DIB rows are padded to 32-bit (4-byte) boundaries.
+                let stride = (width as usize).div_ceil(32) * 4;
+                let mut mask_buf = vec![0u8; stride * height as usize];
+                let mut mask_info = MaskBitmapInfo { header: mask_header, colors: [0; 2] };
+                let mask_ok = GetDIBits(
+                    hdc,
+                    hbm_mask,
+                    0,
+                    height,
+                    Some(mask_buf.as_mut_ptr() as *mut _),
+                    &mut mask_info as *mut MaskBitmapInfo as *mut BITMAPINFO,
+                    DIB_RGB_COLORS,
+                );
+                if mask_ok != 0 {
+                    for y in 0..height as usize {
+                        for x in 0..width as usize {
+                            let byte = mask_buf[y * stride + x / 8];
+                            let bit = (byte >> (7 - (x % 8))) & 1;
+                            // AND mask: 1 = transparent, 0 = opaque.
+                            let alpha = if bit == 1 { 0 } else { 255 };
+                            buf[(y * width as usize + x) * 4 + 3] = alpha;
+                        }
+                    }
+                }
+            }
+
+            ReleaseDC(None, hdc);
+            cleanup();
+
+            Ok(super::IconImage { width, height, rgba: buf })
+        }
+    }
+
+    pub fn window_icon(id: &str) -> Result<Option<super::IconImage>, String> {
+        let raw: isize = id.parse().map_err(|e| format!("bad window id {id}: {e}"))?;
+        let hwnd = HWND(raw as _);
+
+        let (hicon, owned) = match window_hicon(hwnd) {
+            Some(icon) => (icon, false),
+            None => match exe_hicon(hwnd) {
+                Some(icon) => (icon, true),
+                None => return Ok(None),
+            },
+        };
+
+        let result = decode_hicon(hicon);
+        if owned {
+            use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
+            unsafe {
+                let _ = DestroyIcon(hicon);
+            }
+        }
+        result.map(Some)
     }
 }
 
