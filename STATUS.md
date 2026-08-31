@@ -116,18 +116,17 @@ PNG and inspecting them — correct colors, correct alpha, no channel-swap
 or stride bugs; that verification code was removed once confirmed. macOS
 backend still unwritten.
 
-**App icon redesigned — bigger mascot, brand-green background.** The
-shipped `icon.png` had the mascot filling only about half the canvas on a
-near-white pastel gradient — illegible once Windows scales it down to a
-16/32px taskbar icon (confirmed by looking at this app's own icon via the
-extraction work above). Rebuilt from `src/assets/mascot/mascot-happy.svg`
-(the state whose face actually matches the old icon — closed smiling
-eyes + blush, not idle's open round eyes), scaled way up to fill most of
-a 1024×1024 canvas, on a solid fill of the brand's own lime green
-(`#B6FF3E`, `docs/features/website-design-system.md`'s BRAND token)
-instead of white. New source: `icons/app-icon-source.svg`; every
-platform size/format regenerated from it via `npx tauri icon
-icons/app-icon-source.svg -o icons`.
+**App icon redesign tried and reverted.** The shipped `icon.png` had the
+mascot filling only about half the canvas on a near-white pastel
+gradient — illegible once Windows scales it down to a 16/32px taskbar
+icon (confirmed by looking at this app's own icon via the extraction work
+above). Rebuilt from `src/assets/mascot/mascot-happy.svg`, scaled up to
+fill most of a 1024×1024 canvas, on a solid fill of the brand's lime
+green (`#B6FF3E`). **Charlie didn't want the green background** — reverted
+whole (`8f0cb2d`), back to the original `icon.png`/`icon.ico`/etc. The
+"mascot too small at real icon sizes" problem this was trying to fix is
+still real and still open; a future attempt should keep the near-white
+background (or find a different accent) and focus on just the scale-up.
 
 ## 2026-08-30: release-and-verify overnight pass
 
