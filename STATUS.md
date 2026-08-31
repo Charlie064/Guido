@@ -18,7 +18,13 @@ once this section and the actual release supersede it.
   branches: `portal-window-capture-freeze`'s fix for window-scoped portal
   captures stalling on idle windows, and `layer-shell-sidebar`'s BL-013
   sidebar layer-shell promotion (resolved a real merge conflict in
-  `lib.rs`, `cargo check` clean after). Version bumped to `0.1.6` in
+  `lib.rs`, `cargo check` clean after). A code review the same night
+  flagged that the cherry-pick had dropped BL-013's original "kept
+  isolated, not merged, unsure it works" caution — re-gated behind
+  `GUIDO_LAYER_SHELL_SIDEBAR=1` (unset by default) so the code ships
+  without changing any real Sway/Hyprland/KDE user's default behavior
+  until it's verified on real hardware; see BL-013 in
+  `docs/BACKLOG.md`. Version bumped to `0.1.6` in
   `tauri.conf.json`/`package.json` so a future real tag doesn't reuse
   `0.1.5-rc1`'s number. **Not pushed, no tag cut, nothing deployed** — by
   design, per this session's instructions; someone still needs to review

@@ -211,9 +211,19 @@ point — this file should never pose as a source of truth for what's done.
     leave no baseline, so `plan_step` needs to know not to generate a
     relative `expected_outcome` there and fall back to an absolute one.
 - **BL-013 — Always-on-top sidebar on layer-shell-capable Linux
-  compositors.** **Attempted on `claudev/charlie/layer-shell-sidebar`
-  (branched off `main`, kept isolated since this was unsure to work),
-  not merged.** `init_layer_shell` (`lib.rs`) is now parameterized on
+  compositors.** Originally attempted on `claudev/charlie/layer-shell-sidebar`
+  (branched off `main`, kept isolated since this was unsure to work) and
+  not merged; **cherry-picked into `claudev/charlie/env-cleanup`
+  2026-08-30 during an overnight review pass, then re-gated the same
+  night once a code review flagged that the cherry-pick had dropped the
+  original isolation** — `init_layer_shell_sidebar` now only runs when
+  `GUIDO_LAYER_SHELL_SIDEBAR=1` is set (`lib.rs`'s `run()`), so merging
+  the code doesn't silently promote every Sway/Hyprland/KDE user's
+  sidebar to the unverified state described below. Unset (the default),
+  every wlroots compositor keeps the plain decorated toplevel with
+  WM-titlebar dragging, unchanged.
+
+  `init_layer_shell` (`lib.rs`) is now parameterized on
   layer + anchors instead of hardcoding `Overlay`/fill-screen, and a new
   `init_layer_shell_sidebar` promotes the sidebar to `Layer::Top`,
   anchored to the top-right corner only (so it keeps its own

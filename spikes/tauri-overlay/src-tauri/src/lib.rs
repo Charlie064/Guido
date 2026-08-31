@@ -1169,12 +1169,27 @@ pub fn run() {
                 .unwrap_or_else(|| panic!("\"sidebar\" window declared in tauri.conf.json must exist"));
 
             // BL-013 — see init_layer_shell_sidebar's comment for what's
-            // unverified here. Must run before show() (gtk-layer-shell
-            // asserts the surface isn't mapped yet), which is why this
-            // comes before sidebar.show() below rather than after it like
-            // the pre-BL-013 code had.
+            // unverified here: window-manager dragging may not exist at
+            // all for a layer-shell surface (no interactive-move request),
+            // and "decorations": true may render nothing on one, on a
+            // real Sway/Hyprland/KDE session — neither has been checked on
+            // real hardware. The branch this came from deliberately kept
+            // it un-merged for exactly this reason ("kept isolated since
+            // this was unsure to work" — see BL-013 in docs/BACKLOG.md);
+            // opt-in via env var preserves that caution now that the code
+            // itself is merged, rather than silently promoting every
+            // Sway/Hyprland/KDE user's sidebar to a state that might ship
+            // permanently undraggable. Set GUIDO_LAYER_SHELL_SIDEBAR=1 to
+            // try it; unset, every wlroots compositor keeps today's plain
+            // decorated toplevel with WM-titlebar dragging, unchanged.
+            // Must run before show() (gtk-layer-shell asserts the surface
+            // isn't mapped yet), which is why this comes before
+            // sidebar.show() below rather than after it like the
+            // pre-BL-013 code had.
             #[cfg(target_os = "linux")]
-            init_layer_shell_sidebar(&sidebar)?;
+            if std::env::var("GUIDO_LAYER_SHELL_SIDEBAR").as_deref() == Ok("1") {
+                init_layer_shell_sidebar(&sidebar)?;
+            }
 
             sidebar.show()?;
 
