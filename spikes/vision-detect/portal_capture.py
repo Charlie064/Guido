@@ -251,12 +251,8 @@ class PortalSession:
         self.session_handle = None
 
 
-def grab_frame(fd: int, node_id: int, out_path: str, source_type: int | None) -> None:
-    """Pull a single frame off the PipeWire node into a PNG.
-
-    GStreamer rather than a hand-rolled PipeWire client: pipewiresrc
-    already handles the format negotiation and the fd hand-off, and it is
-    a dependency the desktop already ships.
+def num_buffers_for(source_type: int | None, position: object) -> int:
+    """How many PipeWire buffers to pull before keeping the last one.
 
     A monitor source streams continuously, so the first buffers after it
     starts can still be blank while the compositor gets going — worth
@@ -265,8 +261,32 @@ def grab_frame(fd: int, node_id: int, out_path: str, source_type: int | None) ->
     more until the window actually redraws, so asking for a second buffer
     risks blocking for however long the window happens to sit idle (up to
     this call's 60s timeout). One buffer is what actually completes.
+
+    `source_type` is optional per the portal spec — some implementations
+    omit it (this file already documents GNOME omitting the *other*
+    optional field, `position`, for windows). When it's missing, `position`
+    is a decent proxy, since it's only ever sent for monitor sources. If
+    both are missing, prefer the window assumption: a single buffer risks
+    one blank frame (the vision call fails cleanly and can be retried),
+    whereas guessing 5 on an actual window risks the 60s hang this
+    function exists to prevent.
     """
-    num_buffers = 1 if source_type == WINDOW else 5
+    if source_type == WINDOW:
+        return 1
+    if source_type == MONITOR:
+        return 5
+    return 5 if position is not None else 1
+
+
+def grab_frame(fd: int, node_id: int, out_path: str, source_type: int | None, position: object = None) -> None:
+    """Pull a single frame off the PipeWire node into a PNG.
+
+    GStreamer rather than a hand-rolled PipeWire client: pipewiresrc
+    already handles the format negotiation and the fd hand-off, and it is
+    a dependency the desktop already ships. See num_buffers_for() for how
+    many buffers this asks for and why.
+    """
+    num_buffers = num_buffers_for(source_type, position)
     with tempfile.TemporaryDirectory() as tmpdir:
         pattern = os.path.join(tmpdir, "frame%05d.png")
         cmd = [
@@ -329,7 +349,7 @@ def do_capture(out_path: str, scope: str) -> dict:
         save_token(scope, stream["restore_token"])
         fd = session.open_pipewire_fd()
         try:
-            grab_frame(fd, stream["node_id"], out_path, stream.get("source_type"))
+            grab_frame(fd, stream["node_id"], out_path, stream.get("source_type"), stream.get("position"))
         finally:
             os.close(fd)
         return {
