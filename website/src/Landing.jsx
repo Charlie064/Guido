@@ -68,11 +68,11 @@ function IntroAnimation() {
   );
 }
 
-// Re-enabled 2026-08-31 pointing at the real v0.1.7 release — Charlie
-// promoted it despite macOS still being unverified on real hardware
-// (v0.1.7 tag message, STATUS.md), so this carries an "Early access" badge
-// and a macOS caution in the modal rather than presenting it as fully done.
-function DownloadButton({ className = "", onClick }) {
+// Shared 3D-press CTA button, colored per the two brand flash colors
+// (FLASH_BLUE for Download, FLASH_PINK for Join waitlist) instead of the
+// neutral black used elsewhere, so these two primary actions read as a
+// matched pair and stand out against the rest of the page.
+function CTAButton({ className = "", onClick, accent, dark, children }) {
   const [pressed, setPressed] = useState(false);
   return (
     <button
@@ -83,25 +83,43 @@ function DownloadButton({ className = "", onClick }) {
       onPointerLeave={() => setPressed(false)}
       className={`relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 ${className}`}
       style={{
-        background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
+        background: `linear-gradient(180deg, ${accent} 0%, ${accent} 55%, ${dark} 100%)`,
         boxShadow: pressed
-          ? "0 1px 0 0 #000, 0 2px 6px -2px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)"
-          : "0 5px 0 0 #000, 0 14px 26px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
+          ? `0 1px 0 0 ${dark}, 0 2px 6px -2px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.15)`
+          : `0 5px 0 0 ${dark}, 0 14px 26px -10px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.3)`,
         transform: pressed ? "translateY(4px)" : "translateY(0)",
       }}
     >
       <span
         className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
-        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
+        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0))" }}
       />
-      <span className="relative flex items-center gap-2">
-        <Apple size={15} />
-        Download
-        <span className="text-[9px] font-bold uppercase tracking-wide text-white/60 border border-white/30 rounded-full px-1.5 py-0.5">
-          Early access
-        </span>
-      </span>
+      <span className="relative flex items-center gap-2">{children}</span>
     </button>
+  );
+}
+
+// Re-enabled 2026-08-31 pointing at the real v0.1.7 release — Charlie
+// promoted it despite macOS still being unverified on real hardware
+// (v0.1.7 tag message, STATUS.md), so this carries an "Early access" badge
+// and a macOS caution in the modal rather than presenting it as fully done.
+function DownloadButton({ className = "", onClick }) {
+  return (
+    <CTAButton className={className} onClick={onClick} accent={FLASH_BLUE} dark="#1D4ED8">
+      <Apple size={15} />
+      Download
+      <span className="text-[9px] font-bold uppercase tracking-wide text-white/70 border border-white/30 rounded-full px-1.5 py-0.5">
+        Early access
+      </span>
+    </CTAButton>
+  );
+}
+
+function WaitlistButton({ className = "", onClick }) {
+  return (
+    <CTAButton className={className} onClick={onClick} accent={FLASH_PINK} dark="#B8107A">
+      Join waitlist
+    </CTAButton>
   );
 }
 
@@ -500,27 +518,15 @@ export default function Landing() {
             <a href="#demo" className="hover:text-black transition-colors">How it works</a>
             <a href="#works-with" className="hover:text-black transition-colors">Works with</a>
           </nav>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
+          <div className="flex items-center gap-2.5">
+            <WaitlistButton
+              className="hidden sm:inline-flex px-4 py-2 text-sm"
               onClick={() => setWaitlistOpen(true)}
-              className="hidden sm:inline-flex items-center rounded-full font-semibold px-4 py-2 text-sm text-neutral-600 hover:text-black transition-colors"
-            >
-              Join waitlist
-            </button>
-            <button
-              type="button"
+            />
+            <DownloadButton
+              className="px-4 py-2 text-sm"
               onClick={() => setDownloadOpen(true)}
-              className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-              style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-              onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
-              onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
-            >
-              Download
-              <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400 border border-black/15 rounded-full px-1.5 py-0.5">
-                Early access
-              </span>
-            </button>
+            />
           </div>
         </div>
       </header>
@@ -571,10 +577,14 @@ export default function Landing() {
               </span>
             </p>
 
-            <div className="mt-8">
+            <div className="mt-8 flex items-center justify-center gap-3 flex-wrap">
               <DownloadButton
                 className="px-7 py-3.5 text-[15px]"
                 onClick={() => setDownloadOpen(true)}
+              />
+              <WaitlistButton
+                className="px-7 py-3.5 text-[15px]"
+                onClick={() => setWaitlistOpen(true)}
               />
             </div>
           </div>
@@ -748,10 +758,16 @@ export default function Landing() {
           className="w-full max-w-2xl mx-auto mb-10"
         />
 
-        <DownloadButton
-          className="px-7 py-3.5 text-[15px]"
-          onClick={() => setDownloadOpen(true)}
-        />
+        <div className="flex items-center justify-center gap-3 flex-wrap">
+          <DownloadButton
+            className="px-7 py-3.5 text-[15px]"
+            onClick={() => setDownloadOpen(true)}
+          />
+          <WaitlistButton
+            className="px-7 py-3.5 text-[15px]"
+            onClick={() => setWaitlistOpen(true)}
+          />
+        </div>
       </section>
 
       {downloadOpen && (
