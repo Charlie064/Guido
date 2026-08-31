@@ -202,17 +202,35 @@ export default function Landing({ startWaitlist = false }) {
               className="hero-mark relative w-full max-w-3xl mx-auto overflow-hidden mb-8"
               style={{
                 background: "#fcfcfc",
-                maskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
-                WebkitMaskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
+                borderRadius: "28px",
+                boxShadow: "0 30px 70px -30px rgba(0,0,0,0.18)",
               }}
             >
               <video
                 ref={heroVideoRef}
                 src="/assets/hero-demo.mp4"
+                poster="/assets/hero-demo-poster.jpg"
                 className="w-full h-auto block"
                 muted
                 playsInline
                 preload="auto"
+              />
+              {/* Painted fade instead of mask-image/-webkit-mask-image on
+                  the video's ancestor: masking a container around a
+                  <video> is a known WebKit/iOS bug that makes the video
+                  render invisible on real Safari (reported missing on
+                  mobile) even though it looks fine everywhere else,
+                  Chromium's mobile emulation included. This produces the
+                  same "fades into the page" look by painting the same
+                  near-white color over the edges instead of cutting
+                  alpha via a mask, so it never touches video compositing. */}
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background:
+                    "radial-gradient(ellipse 65% 70% at center, transparent 55%, #fcfcfc 100%)",
+                }}
+                aria-hidden="true"
               />
               <span ref={heroGuidoRef} className="hero-guido-rest" aria-hidden="true" />
             </div>
