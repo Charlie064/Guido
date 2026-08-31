@@ -2194,6 +2194,43 @@ window.addEventListener("keydown", (e) => {
 listen("tutoria:quit", () => getCurrentWindow().close());
 
 
+// A silent multi-second-or-more background download with zero visible
+// feedback reads as "the app is frozen," not "it's working" — confirmed
+// live: a real update landed correctly but, with nothing on screen
+// showing it, looked exactly like nothing had happened at all. This
+// covers the whole panel (not just the thin #status-bar strip, easy to
+// miss entirely) with the current/next version and a real byte-progress
+// bar for as long as the download actually takes.
+const updateEls = {
+  overlay: document.querySelector("#update-overlay"),
+  versions: document.querySelector("#update-versions"),
+  progressFill: document.querySelector("#update-progress-fill"),
+  progressLabel: document.querySelector("#update-progress-label"),
+};
+
+function showUpdateOverlay(currentVersion, nextVersion) {
+  updateEls.versions.textContent = `v${currentVersion} → v${nextVersion}`;
+  updateEls.progressFill.style.width = "0%";
+  updateEls.progressLabel.textContent = "Starting…";
+  updateEls.overlay.hidden = false;
+}
+
+function setUpdateProgress(downloaded, total) {
+  if (total > 0) {
+    const pct = Math.min(100, Math.round((downloaded / total) * 100));
+    updateEls.progressFill.style.width = `${pct}%`;
+    updateEls.progressLabel.textContent = `${pct}% — ${(downloaded / 1e6).toFixed(1)} of ${(total / 1e6).toFixed(1)} MB`;
+  } else {
+    // Some responses omit Content-Length — still show real bytes moving
+    // rather than a stalled-looking 0%.
+    updateEls.progressLabel.textContent = `${(downloaded / 1e6).toFixed(1)} MB downloaded…`;
+  }
+}
+
+function hideUpdateOverlay() {
+  updateEls.overlay.hidden = true;
+}
+
 // Checked once per launch, silently — no release yet, no network, or a
 // bad signature should never interrupt the app, just skip until next
 // launch. Installing relaunches the whole process, so this always runs
@@ -2203,14 +2240,29 @@ async function checkForUpdate() {
   try {
     const update = await checkUpdate();
     if (!update?.available) return;
-    await withStatus(`Updating to ${update.version}`, () => update.downloadAndInstall(), {
-      slowAfter: 5,
-      stallAfter: 30,
-      stalledHint: "Downloading the update — this can take a minute on a slow connection.",
+
+    showUpdateOverlay(update.currentVersion, update.version);
+    let total = 0;
+    let downloaded = 0;
+    await update.downloadAndInstall((event) => {
+      switch (event.event) {
+        case "Started":
+          total = event.data.contentLength ?? 0;
+          setUpdateProgress(0, total);
+          break;
+        case "Progress":
+          downloaded += event.data.chunkLength;
+          setUpdateProgress(downloaded, total);
+          break;
+        case "Finished":
+          updateEls.progressLabel.textContent = "Installing…";
+          break;
+      }
     });
     await relaunch();
   } catch (err) {
     console.error("Update check failed", err);
+    hideUpdateOverlay();
   }
 }
 

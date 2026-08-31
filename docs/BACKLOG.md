@@ -383,3 +383,25 @@ point — this file should never pose as a source of truth for what's done.
     check of what `STRIPE_SECRET_KEY` actually is (test vs. live; the
     value itself can't be read back via `wrangler secret list`, only
     that something is set) before that branch merges, not after.
+- **BL-017 — macOS builds need Apple Developer ID signing + notarization.**
+  Confirmed live 2026-08-31: installing `v0.1.7`'s `.dmg` on real macOS
+  hardware gets "Guido is damaged and can't be opened. You should move it
+  to the Trash" — not the friendlier "unidentified developer" prompt.
+  Root cause: `.github/workflows/release.yml` only signs updater artifacts
+  with Tauri's own minisign key (`TAURI_SIGNING_PRIVATE_KEY`/
+  `_PASSWORD`), which verifies updates came from us but has nothing to do
+  with Apple's Gatekeeper — the `.app`/`.dmg` itself is completely
+  unsigned from Apple's perspective. A downloaded file gets the
+  `com.apple.quarantine` xattr, and Gatekeeper refuses a fully unsigned
+  quarantined app outright rather than offering to let the user override
+  it. This is very likely the exact "macOS launch failure" that prompted
+  disabling the website's download button (see `STATUS.md`'s history) —
+  now reconfirmed, not just recalled.
+  - **Workaround, not a fix**: `xattr -cr /Applications/Guido.app` (or
+    wherever installed) strips the quarantine flag before first launch.
+  - **Real fix** needs an Apple Developer Program enrollment ($99/year),
+    a Developer ID Application certificate, and a `codesign`/
+    `xcrun notarytool` step added to `release.yml`'s macOS leg (Tauri's
+    own docs have a recipe for this). Blocked on Charlie enrolling in the
+    Apple Developer Program first — not something achievable from this
+    dev environment regardless of who does the CI work.

@@ -77,7 +77,27 @@ cosmetic change (`v0.1.8` — enlarged the step-path Guido mascot icon,
 20px → 24px) specifically to test the update path against an already-
 installed `v0.1.7` real release. The installed app detected `v0.1.8` on
 startup (`checkForUpdate()`), downloaded, installed, and relaunched
-itself with no manual reinstall — the pipeline works.
+itself with no manual reinstall — the pipeline works. **Found a real UX
+gap doing this**: the download/install ran with zero visible feedback —
+Charlie initially thought it had failed, since the app just sat there
+looking unchanged for the time it took to download+install, then
+suddenly relaunched as the new version. Fixed: a full-panel
+`#update-overlay` (mascot, "v{current} → v{next}", a real byte-progress
+bar driven by `downloadAndInstall`'s `Started`/`Progress`/`Finished`
+channel events) replaces the old silent-to-console handling — see
+`checkForUpdate` in `sidebar.js`. Not yet verified live (needs another
+version bump to trigger a real update the way `v0.1.8` did).
+
+**macOS Gatekeeper failure confirmed live — see `BL-017`.** Installing
+`v0.1.7`'s `.dmg` on real macOS hardware gets "Guido is damaged and
+can't be opened," not the friendlier "unidentified developer" prompt —
+`release.yml` only signs updater artifacts with Tauri's own minisign
+key, never the app itself with an Apple Developer ID, so Gatekeeper
+refuses a fully-unsigned quarantined app outright. Almost certainly the
+same "macOS launch failure" already flagged as the reason the website's
+download button is disabled — now reconfirmed, not just recalled.
+Workaround (`xattr -cr`) given to Charlie; real fix needs Apple
+Developer Program enrollment first, which only Charlie can start.
 
 **Windows window-icon extraction built and verified — BL-004 mostly
 closed.** `window_provider.rs`'s `window_icon` was a stub on Windows

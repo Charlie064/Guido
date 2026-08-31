@@ -57,6 +57,7 @@
 
       /* Always-on panel (no collapsed-icon mode — see sidebar.js). */
       #panel {
+        position: relative;
         display: flex;
         flex-direction: column;
         height: 100%;
@@ -1692,6 +1693,69 @@
         white-space: nowrap;
         flex: 1;
       }
+
+      /* A silent background download taking 10s+ with zero visible
+         feedback reads as "the app is frozen," not "it's working" — this
+         covers the whole panel (not the thin #status-bar strip; that's
+         easy to miss entirely, which is exactly what happened testing
+         this live) for the one flow where being unmissable matters most:
+         nothing else in the app responds while an update installs. */
+      #update-overlay {
+        position: absolute;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 32px;
+        background: #ffffff;
+        text-align: center;
+      }
+
+      #update-overlay[hidden] {
+        display: none;
+      }
+
+      .update-mascot {
+        width: 64px;
+        height: 64px;
+      }
+
+      .update-title {
+        font-family: "Space Grotesk", sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+
+      .update-versions {
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .update-progress-track {
+        width: 100%;
+        max-width: 260px;
+        height: 8px;
+        border-radius: 4px;
+        background: var(--border);
+        overflow: hidden;
+        margin-top: 8px;
+      }
+
+      .update-progress-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--brand);
+        transition: width 0.2s ease;
+      }
+
+      .update-progress-label {
+        font-size: 11px;
+        color: var(--muted);
+      }
     </style>
   </head>
   <body>
@@ -1917,6 +1981,16 @@
       <div id="status-bar">
         <div id="status-spinner"></div>
         <div id="status-text"></div>
+      </div>
+
+      <div id="update-overlay" hidden>
+        <img class="update-mascot" src="assets/mascot/mascot-thinking.svg" alt="" />
+        <div class="update-title">Updating Guido</div>
+        <div class="update-versions" id="update-versions"></div>
+        <div class="update-progress-track">
+          <div class="update-progress-fill" id="update-progress-fill"></div>
+        </div>
+        <div class="update-progress-label" id="update-progress-label">Starting…</div>
       </div>
     </div>
 
