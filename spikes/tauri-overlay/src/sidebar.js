@@ -173,13 +173,20 @@ function currentCaptureScope() {
 // used to fail deep inside capture_screen (grim, which this kind of
 // GNOME/Wayland session can't actually use) instead of surfacing as the
 // "pick a source" step it really is — prompt for the pick here instead.
+//
+// selectPortalSource() catches its own failures (a cancelled system
+// dialog included) to update the setup-view label and never rethrows, so
+// it can return having picked nothing — check for that explicitly and
+// throw here instead of quietly passing scope: null through to the same
+// capture_screen failure this function exists to avoid.
 async function ensureCaptureScope() {
   const existing = currentCaptureScope();
   if (existing) return existing;
   if (captureBackend !== "portal") return null; // native "full screen" is a real default
   await selectPortalSource();
   const scope = deriveScopeFromGlobals();
-  if (currentSkill && scope) currentSkill.captureScope = scope;
+  if (!scope) throw new Error("pick a capture source first");
+  if (currentSkill) currentSkill.captureScope = scope;
   return scope;
 }
 
