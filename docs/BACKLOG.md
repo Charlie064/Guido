@@ -310,7 +310,7 @@ point — this file should never pose as a source of truth for what's done.
   2026-08-30, see [features/auth.md](features/auth.md) and
   [business/pricing.md](business/pricing.md)) now have the *text* for
   billing, auto-renewal, cancellation, refunds, taxes, and a Stripe data
-  disclosure written pre-emptively, since `claudev/charlie/stripe-billing`
+  disclosure written pre-emptively, since `claudev/charlie/pricing-page`
   hasn't merged yet and no billing UI exists. **Remaining when that
   branch merges**: build the actual self-serve cancel control in account
   settings the terms promise (today it falls back to "email us," which
@@ -321,7 +321,7 @@ point — this file should never pose as a source of truth for what's done.
   clause's enforceability is jurisdiction- and notice-dependent in ways
   a template can't guarantee.
   - **Review pass, 2026-08-30 (`billing.ts` on `pricing-page`/
-    `stripe-billing`, no merge attempted — see
+    `pricing-page`, no merge attempted — see
     [planning/overnight-2026-08-30-release-and-verify.md](planning/overnight-2026-08-30-release-and-verify.md)).**
     Code quality is solid where it exists: parameterized D1 queries, no
     hardcoded secrets (`STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` stay
@@ -358,7 +358,7 @@ point — this file should never pose as a source of truth for what's done.
       redirect flows end to end (would need a live Stripe test-mode
       checkout, not attempted), or whether `memberships` schema changes
       here still match current `db/schema.ts`.
-  - **Gate added 2026-08-30**: `claudev/charlie/stripe-billing` must stay
+  - **Gate added 2026-08-30**: `claudev/charlie/pricing-page` must stay
     on Stripe **test-mode keys only** (`sk_test_...`/`pk_test_...`) —
     don't switch to live keys or take a real charge from anyone outside
     the team — until Charlie has registered as a sole trader (enskild
@@ -367,7 +367,7 @@ point — this file should never pose as a source of truth for what's done.
     registration crosses from "should register" into non-compliant once
     it's real recurring revenue from real users, not a demo. Hackathon
     demos of the payment flow should run in test mode regardless.
-  - **Status check, 2026-08-30**: `stripe-billing` (`be6d8d3` checkout/
+  - **Status check, 2026-08-30**: `pricing-page` (`be6d8d3` checkout/
     portal/webhook, `b6f0dcb` "add live Stripe price IDs to wrangler
     vars") is **not merged into `main`** — this repo's `main` has no
     billing routes yet, so nothing above is live in production. But the
@@ -377,3 +377,91 @@ point — this file should never pose as a source of truth for what's done.
     check of what `STRIPE_SECRET_KEY` actually is (test vs. live; the
     value itself can't be read back via `wrangler secret list`, only
     that something is set) before that branch merges, not after.
+- **BL-017 — Warn the user before they hit their quota, and meter Starter
+  overage for real.** Two related gaps in
+  [features/auth.md](features/auth.md) and
+  [business/pricing.md](business/pricing.md):
+  - **Approaching-limit warning.** `GET /api/me` already returns
+    `skills_remaining`/`skills_included` (`worker/auth.ts`'s
+    `countSkillRuns`) — nothing in the desktop app (`sidebar.js`) reads
+    those fields to show a "you're close to your monthly limit" notice
+    before the hard 403 lands. Cheap to add: a threshold check (e.g.
+    `skills_remaining <= 3`) on the response `/api/me` is already
+    fetched from, surfaced as a banner or toast. No new endpoint, no
+    schema change.
+  - **Real overage billing.** `pricing.md`'s Starter tier specifies
+    $0.25/skill overage instead of a hard wall, but MVP enforces a hard
+    cap (`handleSkillStart` 403s once the 30/month allowance is used —
+    see [features/auth.md](features/auth.md)'s Deferred section) because
+    no metered billing is wired to a payment processor. Actually
+    charging overage needs Stripe usage-based billing (a metered price,
+    reported usage records, an invoice line item) — this depends on
+    **BL-016**'s Stripe integration (`claudev/charlie/pricing-page`)
+    landing first, and is a materially bigger lift than the warning
+    banner above (webhook handling, a UI for authorizing overage spend,
+    reconciling `skill_runs` counts against what Stripe actually bills).
+    Do the warning banner independently; treat overage metering as
+    riding on BL-016's merge, not before.
+  - Also still open, flagged in `pricing.md`: `answer_question` calls
+    are uncapped against any quota today — worth deciding whether a
+    near-limit warning should account for that unbounded tail or only
+    the metered `skill_runs` count.
+- **BL-018 — Scope: bring back a visible waitlist position/counter.**
+  **Full integration path now scoped in
+  [planning/glass-waitlist-integration.md](planning/glass-waitlist-integration.md)**
+  — the branch below (`claudev/quentin/glass-waitlist`) still has the
+  whole feature intact (position, referral, the gradient number) plus a
+  chunk of other unmerged work (intro animation, nav chrome, `/pricing`,
+  an admin waitlist view); that doc covers what's a clean pull-in vs.
+  what actually conflicts with the current line (migration numbering,
+  `worker/vision.ts`, the stale pre-ADR-0008 `Login.jsx`). Keeping the
+  original scoping notes below since the per-option trade-offs (minimal
+  count vs. live pre-signup counter vs. reviving referral) still apply
+  regardless of which branch the code ends up coming from.
+  The current waitlist (`website/src/Waitlist.jsx`, nav modal; the
+  footer `WaitlistForm` in `Landing.jsx`) only confirms "You're on the
+  list." after signup — no number. An earlier build
+  (`claudev/quentin/glass-waitlist`, commit `d722908`, superseded by
+  `7aa4811`'s simpler top-bar modal) had a real version of this: the
+  worker computed a `position` via a `waitlistPosition(env.DB, id)`
+  helper and returned it in the signup response, and the frontend
+  rendered it as a large `#{position}` in a blue→purple→pink gradient
+  (`.waitlist-place` in the old `index.css`) — that's the "pink #83"
+  effect being asked about. It was cut deliberately, not lost by
+  accident: `7aa4811`'s commit message says the richer schema (position
+  plus referral codes/links) would have needed a new D1 migration and
+  worker rewrite the author didn't want to risk unreviewed in
+  production, so it shipped the plain `name/email/phone/persona` shape
+  that's live today. `worker/db/schema.ts`'s current `waitlist` table
+  has no `referral_code` column and `handleWaitlistSignup` returns only
+  `{ ok: true }` — the position feature does not exist in any form on
+  `main` right now, front or back end.
+  - **Scope for bringing it back, not decided yet:**
+    - **Minimal version**: re-add just a count, no referral system.
+      `SELECT COUNT(*) FROM waitlist WHERE created_at <= (this row's
+      created_at)` (or an autoincrement-`id`-based rank, cheaper than a
+      timestamp comparison) returned from `handleWaitlistSignup`,
+      rendered post-submit with the old gradient treatment. One column-
+      free query, no migration.
+    - **Showing the count *before* signup** (the "watch the number go
+      up" ask) is a different, bigger feature than restoring the
+      post-submit number: it means a public, unauthenticated read of
+      total signups (a `GET /api/waitlist/count` or similar), live-
+      updating on the landing page. Decide: poll on an interval, or
+      accept a static count fetched on page load — a live-updating
+      counter implies either polling or a push channel, neither of
+      which exists on this Worker today. Also a product question, not
+      just an engineering one: does showing the raw count help
+      (social proof, "join the growing list") or hurt (a low number
+      undercuts urgency pre-launch) — worth deciding before building,
+      not after.
+    - **Referral codes** (`referral_code`, `referredBy`,
+      `waitlistReferralUrl` in the old branch) moved people up the list
+      and are what made the position number *meaningful* ("send this to
+      a friend" — sharing to jump the queue). A bare position with no
+      referral mechanic is just a fun number, not a growth loop; decide
+      whether this is worth reviving alongside position, since it's the
+      part that needed the new migration `7aa4811` avoided.
+  - Not scoped here: which of these (if any) actually ships. This entry
+    exists so the option and its trade-offs are written down, not to
+    pre-decide them.

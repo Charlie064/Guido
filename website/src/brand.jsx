@@ -11,7 +11,7 @@ export function Logo() {
       <img
         src="/assets/guido-icon.png"
         alt="Guido"
-        className="w-11 h-11 rounded-xl"
+        className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl"
         style={{
           border: "1.5px solid rgba(0,0,0,0.1)",
           boxShadow: "0 0 0 4px rgba(196,181,253,0.15), 0 4px 10px -2px rgba(0,0,0,0.15)",

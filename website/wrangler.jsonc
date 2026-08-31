@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "tutoria-website",
+  "account_id": "06e757ca8ed84a9c592f859886811b41",
   "main": "worker/index.ts",
   "compatibility_date": "2026-08-01",
   // Better Auth's password hashing and internal async-hooks usage need
@@ -11,8 +12,13 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
+    // "none": public/pricing.html (Charlie's static desktop-billing copy)
+    // and the React /pricing route (Pricing.jsx, this change) both want
+    // to own that path — this stops Assets from serving the static file
+    // over the SPA route. See docs/planning/glass-waitlist-integration.md.
+    "html_handling": "none",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/internal/*"]
   },
   "routes": [
     { "pattern": "guidotutor.com", "custom_domain": true },

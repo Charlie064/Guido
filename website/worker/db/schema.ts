@@ -41,6 +41,20 @@ export const skillRuns = sqliteTable(
 export const waitlist = sqliteTable("waitlist", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),
+  // name/phone/persona: 0003_add_waitlist_profile_fields.sql. apps/
+  // appsOther/role/referralCode/referredBy: 0006_waitlist_apps_and_referral.sql
+  // (renumbered from glass-waitlist's 0004 — see
+  // docs/planning/glass-waitlist-integration.md). This table definition
+  // had drifted behind both migrations before this change; brought
+  // current while touching it, not a behavior change on its own.
+  name: text("name"),
+  phone: text("phone"),
+  persona: text("persona"),
+  apps: text("apps"),
+  appsOther: text("apps_other"),
+  role: text("role"),
+  referralCode: text("referral_code").unique(),
+  referredBy: text("referred_by"),
   createdAt: text("created_at")
     .default(sql`(datetime('now'))`)
     .notNull(),

@@ -3,15 +3,23 @@
 **Contract** [partial]
 - Canonical home for membership **tiers**, sticker/overage, and Anthropic
   **COGS**. [ADR 0002](../decisions/0002-agency-hybrid-vision-platform-business.md)
-  owns “monthly subscription”; this file owns the four `plan` values
-  and what each unlocks.
-- D1 `memberships.plan`: `free` | `starter` | `plus` | `owner`.
-  `status`: `active` | `expired`. New accounts start as `free` /
-  `active` (or `owner` if their email is on the `OWNER_EMAILS` allowlist)
-  — see [features/auth.md](../features/auth.md). MVP: set `plan` by hand
-  in D1 for `starter`/`plus` — no Stripe yet. Starter overage
-  (Claude-style) is specified here; wiring meters + charges is a
-  follow-up.
+  owns “monthly subscription”; this file owns the `plan` values and what
+  each unlocks.
+- **Decided 2026-09 (Charlie), collapsing `starter`/`plus` into one
+  `pro` tier** — see `pro` below. This is a pricing-doc decision only:
+  `worker/auth.ts`'s `plan` enum, `includedFor()`/`canSaveSkills()`, and
+  D1 `memberships.plan` still say `free|starter|plus|owner` as of this
+  write-up. Updating the code to match (rename, merge the two
+  allowances, re-point `/pricing` if it ever reads plan names) is
+  tracked as its own follow-up, not done in this pass — see
+  [planning/glass-waitlist-integration.md](../planning/glass-waitlist-integration.md),
+  which is what surfaced this doc was already out of sync with the
+  `Pricing.jsx` page it's wiring in.
+- D1 `memberships.plan` (current code): `free` | `starter` | `plus` |
+  `owner`. `status`: `active` | `expired`. New accounts start as `free`
+  / `active` (or `owner` if their email is on the `OWNER_EMAILS`
+  allowlist) — see [features/auth.md](../features/auth.md). MVP: set
+  `plan` by hand in D1 — no Stripe yet.
 - Quota unit is a **new skill** (one goal → one Research + the locates
   for that run), not a raw locate. Skill persistence is owned by
   [features/skills.md](../features/skills.md); this file only says
@@ -41,7 +49,8 @@ changed.
 
 Lifetime, not monthly: this is “try the feature,” not a perpetual
 hobby tier. After the free allowance, the app stops new Research and
-points at Starter.
+points at Pro (the old copy said "Starter" — see the Contract note
+above on the `starter`/`plus` → `pro` collapse).
 
 ### `free` — Simple
 
@@ -51,32 +60,44 @@ points at Starter.
 - `plan=free`, `status=active` until the 1st skill completes, then
   still `free` / `active` but `/api/me` reports `skills_remaining: 0`.
 
-### `starter`
+### `pro` — the one paid tier
 
-- **30 new skills / calendar month** included (~1/day, the planning
-  usage). Then **usage billing like Claude**: pay per extra new skill,
-  not a hard wall.
-- Sticker **$12/month** (covers ~$4.05 typical Anthropic COGS with
-  room; voice still extra).
-- Overage **$0.25 / new skill** (our cost ~$0.14; do not meter raw
-  locates — a retry-heavy step should not surprise-bill).
-- **No saved skills** — same as free. Starter is for people who want
-  to *learn more*, not keep a library.
-- MVP without Stripe: enforce the 30 as a hard cap and flip `plan` by
-  hand. Record the $0.25 rate so billing can match later.
+Replaces the old `starter`/`plus` split with a single public paid SKU,
+matching `website/src/Pricing.jsx` (wired in via the glass-waitlist
+integration) — that page already shipped copy for this shape before
+the doc caught up, not the other way around.
 
-### `plus` — Premium
-
-- Everything in Starter’s included allowance (30 new skills / month,
-  then $0.25 overage).
+- **20 new skills / calendar month** included (`Pricing.jsx`'s stated
+  number — lower than the old Starter's 30, so recompute COGS from this
+  figure, not the 30/month numbers below in "Usage we price from").
 - **Save skills** — the durable artifact in
-  [features/skills.md](../features/skills.md). Replay and refresh of
-  saved skills do not consume the monthly new-skill quota (refresh is
-  one locate; treat it as included on Plus, not a new skill).
-- Sticker **$24/month**. The extra $12 is for the library, not a
-  bigger locate dump — replay is cheap; the reason to pay is not
-  re-researching.
-- `plan=plus`.
+  [features/skills.md](../features/skills.md), previously the Plus-only
+  unlock. With only one paid tier left there's no cheaper tier to
+  withhold it from, so it's included here.
+- **Sticker: tentatively $8/month — up for debate, not finalized.**
+  The number actually shipped in code today is **€7.99**
+  (`PRO_EUR` in `website/src/currency.js`, converted to local currency
+  per country), which is *not* exactly $8 at typical EUR/USD rates —
+  worth deciding whether the sticker is "$8 in the US, €7.99 in the
+  eurozone" (two round numbers, not a strict conversion) or one true
+  price converted everywhere, before this goes further than a waitlist
+  page.
+  - **Margin flag, not a blocker**: at 20 skills/month, COGS is roughly
+    20 × ~$0.20/skill ≈ **$4/month** (using the "Guide->Do->Verify"
+    adjusted per-skill estimate below), before voice. An $8 sticker is
+    a ~50% margin before voice costs land — thinner than the "safer
+    paid band: $15–25/month" this doc concluded further down under the
+    old two-tier assumptions. Not a reason to block a debated number,
+    but the debate should account for this, not just pick a
+    friendly-sounding price.
+- Overage beyond 20/month: **not decided for the single-tier shape.**
+  The old Starter's $0.25/skill overage was designed as a floor above
+  ~$0.14 cost per skill and could still apply here, or MVP could keep
+  the existing hard-cap-until-Stripe pattern
+  ([features/auth.md](../features/auth.md)'s Deferred section) a while
+  longer. Tracked in [BACKLOG.md](../BACKLOG.md) BL-017 either way.
+- `plan=pro` **in this doc's model only** — not yet the code's enum
+  value; see the Contract note above.
 
 ### `owner`
 
@@ -90,9 +111,12 @@ points at Starter.
 ### What `/api/me` should return
 
 `{ email, plan, status, skills_remaining, skills_included, can_save_skills }`.
-`skills_included` is `5` (lifetime) on free, `30` (monthly) on
-starter/plus, omitted or `null` on owner. `can_save_skills` is true
-only for `plus` and `owner`.
+Under this doc's collapsed model: `skills_included` is `1` (lifetime,
+matching the code's current `includedFor()` — the "5" in the section
+above is the older, superseded reasoning) on free, `20` (monthly) on
+`pro`, omitted or `null` on owner. `can_save_skills` is true for `pro`
+and `owner`. **Current code still returns the `starter`/`plus` shape**
+(`skills_included: 30` on both) — see the Contract note above.
 
 ## Unit costs (Claude Sonnet 5, 2026-08)
 

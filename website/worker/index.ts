@@ -10,10 +10,31 @@ import {
   voiceSecondsUsed,
 } from "./auth";
 import { createAuth } from "./better-auth";
+import {
+  accessEmailLabel,
+  csvResponse,
+  fetchWaitlist,
+  htmlResponse,
+  loadErrorResponse,
+  waitlistCsv,
+  waitlistHtml,
+} from "./internal-waitlist";
 import { handleVision, visionCeilingMicroUsdFor } from "./vision";
 import { handleVoiceTranscribe, voiceCapSecondsFor } from "./voice";
 
 export type { Env };
+
+function bytesToBase64Url(buf: Uint8Array): string {
+  let binary = "";
+  for (const byte of buf) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomUrlToken(byteCount = 32): string {
+  const buf = new Uint8Array(byteCount);
+  crypto.getRandomValues(buf);
+  return bytesToBase64Url(buf);
+}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -25,6 +46,12 @@ export default {
 
     if (url.pathname === "/api/waitlist" && request.method === "POST") {
       return handleWaitlistSignup(request, env);
+    }
+    if (url.pathname === "/api/geo" && request.method === "GET") {
+      // Cloudflare sets request.cf.country from the connecting IP.
+      // Empty on some local wrangler sessions — the page falls back.
+      const country = request.cf?.country ?? "";
+      return json({ country });
     }
 
     // Better Auth signs/encrypts session tokens with this secret — refuse
@@ -79,57 +106,163 @@ export default {
       return handleVision(request, env, auth);
     }
 
+    // Internal waitlist admin. Localhost is open. On a public hostname
+    // the Worker 404s unless Cloudflare Access set the user-email header.
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    if (path === "/internal/waitlist" && request.method === "GET") {
+      if (!allowInternalWaitlist(request)) return notFound();
+      return handleInternalWaitlist(request, env);
+    }
+    if (path === "/internal/waitlist/export" && request.method === "GET") {
+      if (!allowInternalWaitlist(request)) return notFound();
+      return handleInternalWaitlistExport(env);
+    }
+
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;
 
-const PERSONAS = new Set([
-  "uni_student",
+// Position/referral shape from claudev/quentin/glass-waitlist — see
+// docs/planning/glass-waitlist-integration.md. `persona`/`phone` from the
+// old form are gone from the UI (Waitlist.jsx), but the columns stay in
+// the DB (0003_add_waitlist_profile_fields.sql) since old rows have them.
+const WAITLIST_APPS = new Set([
+  "excel",
+  "word",
+  "notion",
+  "adobe",
+  "davinci",
+  "cad",
+  "blender",
+]);
+
+const WAITLIST_ROLES = new Set([
+  "university_student",
   "young_professional",
   "high_school_student",
   "entrepreneur",
+  "creative",
   "other",
 ]);
 
+function waitlistReferralUrl(code: string): string {
+  return `https://guidotutor.com/waitlist?ref=${encodeURIComponent(code)}`;
+}
+
+async function waitlistPosition(db: D1Database, id: number): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS n FROM waitlist WHERE id <= ?")
+    .bind(id)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+async function ensureReferralCode(db: D1Database, id: number, existing: string | null): Promise<string> {
+  if (existing) return existing;
+  const code = randomUrlToken(6);
+  await db.prepare("UPDATE waitlist SET referral_code = ? WHERE id = ?").bind(code, id).run();
+  return code;
+}
+
 async function handleWaitlistSignup(request: Request, env: Env): Promise<Response> {
-  let email: string | undefined;
-  let name: string | undefined;
-  let phone: string | null | undefined;
-  let persona: string | null | undefined;
+  let body: {
+    email?: string;
+    name?: string;
+    apps?: unknown;
+    appsOther?: string;
+    role?: string;
+    ref?: string;
+  };
   try {
-    ({ email, name, phone, persona } = await request.json<{
-      email?: string;
-      name?: string;
-      phone?: string | null;
-      persona?: string | null;
-    }>());
+    body = await request.json();
   } catch {
-    return json({ error: "Invalid request" }, 400);
+    return json({ error: "Invalid email" }, 400);
   }
+
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const appsOther = typeof body.appsOther === "string" ? body.appsOther.trim() : "";
+  const role = typeof body.role === "string" ? body.role.trim() : "";
+  const ref = typeof body.ref === "string" ? body.ref.trim() : "";
+  const apps = Array.isArray(body.apps)
+    ? [...new Set(body.apps.filter((app): app is string => typeof app === "string" && WAITLIST_APPS.has(app)))]
+    : [];
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: "Invalid email" }, 400);
   }
-  if (!name || !name.trim()) {
+  if (!name || name.length > 80) {
     return json({ error: "Name is required" }, 400);
   }
-  if (persona && !PERSONAS.has(persona)) {
-    return json({ error: "Invalid persona" }, 400);
+  if (apps.length === 0 && !appsOther) {
+    return json({ error: "Pick at least one app, or tell us something else" }, 400);
+  }
+  if (appsOther.length > 280) {
+    return json({ error: "That note is a bit long" }, 400);
+  }
+  if (role && !WAITLIST_ROLES.has(role)) {
+    return json({ error: "Pick who you are" }, 400);
   }
 
+  const existing = await env.DB.prepare(
+    "SELECT id, referral_code FROM waitlist WHERE email = ?",
+  )
+    .bind(email)
+    .first<{ id: number; referral_code: string | null }>();
+
+  if (existing) {
+    const code = await ensureReferralCode(env.DB, existing.id, existing.referral_code);
+    return json({
+      ok: true,
+      alreadyJoined: true,
+      position: await waitlistPosition(env.DB, existing.id),
+      referralCode: code,
+      referralUrl: waitlistReferralUrl(code),
+    });
+  }
+
+  let referredBy: string | null = null;
+  if (ref) {
+    const referrer = await env.DB.prepare("SELECT referral_code FROM waitlist WHERE referral_code = ?")
+      .bind(ref)
+      .first<{ referral_code: string }>();
+    if (referrer) referredBy = referrer.referral_code;
+  }
+
+  const referralCode = randomUrlToken(6);
   try {
-    await env.DB.prepare(
-      "INSERT INTO waitlist (email, name, phone, persona) VALUES (?, ?, ?, ?)",
+    const inserted = await env.DB.prepare(
+      `INSERT INTO waitlist (email, name, apps, apps_other, role, referral_code, referred_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(email, name.trim(), phone?.trim() || null, persona || null)
+      .bind(email, name, JSON.stringify(apps), appsOther || null, role || null, referralCode, referredBy)
       .run();
+    const id = Number(inserted.meta.last_row_id);
+    return json({
+      ok: true,
+      alreadyJoined: false,
+      position: await waitlistPosition(env.DB, id),
+      referralCode,
+      referralUrl: waitlistReferralUrl(referralCode),
+    });
   } catch (err) {
-    if (!(err instanceof Error) || !err.message.includes("UNIQUE")) {
-      return json({ error: "Could not save signup" }, 500);
+    if (err instanceof Error && err.message.includes("UNIQUE")) {
+      const again = await env.DB.prepare("SELECT id, referral_code FROM waitlist WHERE email = ?")
+        .bind(email)
+        .first<{ id: number; referral_code: string | null }>();
+      if (again) {
+        const code = await ensureReferralCode(env.DB, again.id, again.referral_code);
+        return json({
+          ok: true,
+          alreadyJoined: true,
+          position: await waitlistPosition(env.DB, again.id),
+          referralCode: code,
+          referralUrl: waitlistReferralUrl(code),
+        });
+      }
     }
+    return json({ error: "Could not save signup" }, 500);
   }
-
-  return json({ ok: true });
 }
 
 async function handleMe(request: Request, env: Env): Promise<Response> {
@@ -199,4 +332,34 @@ async function handleSkillStart(request: Request, env: Env): Promise<Response> {
     skills_included: includedFor(member.plan),
     can_save_skills: canSaveSkills(member.plan),
   });
+}
+
+function allowInternalWaitlist(request: Request): boolean {
+  const host = new URL(request.url).hostname;
+  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") return true;
+  return Boolean(request.headers.get("Cf-Access-Authenticated-User-Email")?.trim());
+}
+
+function notFound(): Response {
+  return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store" } });
+}
+
+async function handleInternalWaitlist(request: Request, env: Env): Promise<Response> {
+  try {
+    const snapshot = await fetchWaitlist(env.DB);
+    return htmlResponse(waitlistHtml(snapshot, accessEmailLabel(request)));
+  } catch (err) {
+    console.error("internal waitlist failed", err);
+    return loadErrorResponse();
+  }
+}
+
+async function handleInternalWaitlistExport(env: Env): Promise<Response> {
+  try {
+    const snapshot = await fetchWaitlist(env.DB);
+    return csvResponse(waitlistCsv(snapshot));
+  } catch (err) {
+    console.error("internal waitlist export failed", err);
+    return loadErrorResponse();
+  }
 }

@@ -86,8 +86,30 @@ view (login, setup, skills, path, chat):
 
 Hero sits on a faint plus/cross SVG tiled 40×40px. Hover halo bloom
 and the keycap press are the two motions the app reuses. Full website
-patterns (marquee, demo lightbox, mode switcher) stay on the landing
-page until a desktop view needs them.
+patterns (the works-with marquee, the multi-step waitlist overlay)
+stay on the landing page until a desktop view needs them.
+
+**Nav/chrome** (`SiteChrome.jsx`, shared by the landing and pricing
+pages) — sticky blurred header: logo, `How it works` / `Usecases` /
+`Pricing` links, a `Join the waitlist` pill. No visible download entry
+point right now — see
+[planning/glass-waitlist-integration.md](../planning/glass-waitlist-integration.md).
+
+**First-visit intro** — a ~4.2s overlay (mascot + a cursor orbiting
+into place) plays once per browser (`localStorage['guido.introSeen']`)
+and is skipped when landing directly on an in-page hash
+(`#how-it-works`, `#works-with`, `#waitlist`).
+
+**Waitlist** — a 3-step glass overlay (identity → apps you want to
+learn → role), ending on a referral link and a `#{position}` count in
+the blue→purple→pink gradient used for numbered UI elsewhere on the
+page (`.waitlist-place`).
+
+The interactive Teach/Show/Do demo panel (mode switcher, equalizer
+bars, expandable video lightbox) that used to live on this page was
+dropped when the landing page was replaced wholesale in the
+glass-waitlist integration above — deliberate, not an oversight; no
+equivalent exists anywhere on the site right now.
 
 ## Assets
 
