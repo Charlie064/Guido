@@ -133,7 +133,6 @@ export default function Landing({ startWaitlist = false }) {
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   );
   const heroGuidoRef = useRef(null);
-  const heroVideoRef = useRef(null);
 
   useEffect(() => {
     const id = landingHash();
@@ -142,25 +141,6 @@ export default function Landing({ startWaitlist = false }) {
     jump();
     const raf = requestAnimationFrame(jump);
     return () => cancelAnimationFrame(raf);
-  }, []);
-
-  useEffect(() => {
-    const video = heroVideoRef.current;
-    if (!video) return;
-    const settle = () => {
-      const t = Number.isFinite(video.duration) ? Math.min(0.45, video.duration * 0.16) : 0.4;
-      video.muted = true;
-      const freeze = () => {
-        video.pause();
-        video.currentTime = t;
-      };
-      const play = video.play();
-      if (play && typeof play.then === "function") play.then(freeze).catch(freeze);
-      else freeze();
-    };
-    if (video.readyState >= 2) settle();
-    else video.addEventListener("loadeddata", settle, { once: true });
-    return () => video.removeEventListener("loadeddata", settle);
   }, []);
 
   return (
@@ -202,35 +182,22 @@ export default function Landing({ startWaitlist = false }) {
               className="hero-mark relative w-full max-w-3xl mx-auto overflow-hidden mb-8"
               style={{
                 background: "#fcfcfc",
-                borderRadius: "28px",
-                boxShadow: "0 30px 70px -30px rgba(0,0,0,0.18)",
+                maskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
+                WebkitMaskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
               }}
             >
-              <video
-                ref={heroVideoRef}
-                src="/assets/hero-demo.mp4"
-                poster="/assets/hero-demo-poster.jpg"
+              {/* Static frame, not a <video> — this was already just a
+                  held frame by design (Quentin's 516894a: "hold a frame
+                  ... instead of looping"), never real playback. Masking
+                  a <video> ancestor is a known WebKit bug that made this
+                  render invisible on real iOS Safari; an <img> has no
+                  such bug, so the original seamless mask-to-transparent
+                  edge (vs. the boxed/shadowed compromise from the
+                  video-era fix) works everywhere with no trade-off. */}
+              <img
+                src="/assets/hero-demo-poster.jpg"
+                alt=""
                 className="w-full h-auto block"
-                muted
-                playsInline
-                preload="auto"
-              />
-              {/* Painted fade instead of mask-image/-webkit-mask-image on
-                  the video's ancestor: masking a container around a
-                  <video> is a known WebKit/iOS bug that makes the video
-                  render invisible on real Safari (reported missing on
-                  mobile) even though it looks fine everywhere else,
-                  Chromium's mobile emulation included. This produces the
-                  same "fades into the page" look by painting the same
-                  near-white color over the edges instead of cutting
-                  alpha via a mask, so it never touches video compositing. */}
-              <div
-                className="absolute inset-0 pointer-events-none"
-                style={{
-                  background:
-                    "radial-gradient(ellipse 65% 70% at center, transparent 55%, #fcfcfc 100%)",
-                }}
-                aria-hidden="true"
               />
               <span ref={heroGuidoRef} className="hero-guido-rest" aria-hidden="true" />
             </div>
