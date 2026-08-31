@@ -5,6 +5,28 @@ deliberately — that file should stay stable.
 
 _Last updated: 2026-08-31_
 
+## 2026-08-31: v0.1.7 promoted; website download re-enabled as early access
+
+`v0.1.7-rc1` was promoted to a real `v0.1.7` tag (Charlie, tag message):
+"Windows tested end-to-end, no major problems. macOS unverified on real
+hardware — promoted anyway per explicit decision, accepting that risk."
+This is a real (non-prerelease) tag, so `releases/latest/download/*` and
+the auto-updater now serve it.
+
+Given that explicit decision, the website's download button — disabled
+since the 2026-08-30 pass below over the same macOS-unverified concern —
+is re-enabled rather than left waiting on a check Charlie already chose to
+route around. `Landing.jsx`'s three entry points (nav, hero, download
+section) all reopen the platform-picker modal again, downloading from
+`releases/latest/download` (now correctly `v0.1.7`, since it isn't a
+GitHub prerelease). Every entry point carries a visible "Early access"
+badge (not "Prerelease" — `v0.1.7` isn't actually flagged as one on
+GitHub), and the modal itself shows the caveat verbatim: Windows tested
+end-to-end, macOS not reconfirmed on real hardware. `RELEASE_VERSION` in
+`Landing.jsx` is a display-only constant — bump it by hand alongside each
+real tag promotion. **Committed only — the live site is unchanged** until
+someone runs `wrangler deploy` by hand.
+
 ## 2026-08-31: Windows end-to-end pass — no major problems found
 
 Charlie drove the desktop app live on real Windows hardware (`npx tauri dev`
@@ -107,15 +129,8 @@ once this section and the actual release supersede it.
   disabling the website's download button was never reconfirmed fixed.
   Once that's confirmed, promote to a real `v0.1.6` tag (which *does* go
   live to the website/auto-updater) and re-enable the download button.
-- **Website download button disabled, not deployed.** `Landing.jsx`'s
-  desktop download now shows a static "coming soon" state instead of
-  opening the platform-picker modal — Charlie recalled the macOS build
-  couldn't launch on real hardware last tested, and
-  `window_provider.rs`'s macOS backend is still flagged unverified above.
-  The modal/`RELEASES_BASE` code is untouched, so re-enabling is a
-  one-line revert once a release is confirmed working end to end on all
-  three platforms. **Committed only — the live site is unchanged** until
-  someone runs `wrangler deploy` by hand.
+- **Website download button disabled here, since re-enabled — see the
+  2026-08-31 "v0.1.7 promoted" section above.**
 - **`/api/vision` — all six kinds verified live, end to end, against the
   real Claude API. Gap closed.** `https://guidotutor.com/api/vision` is
   deployed and reachable (`curl` gets a clean `401 {"error":"Unauthorized"}`

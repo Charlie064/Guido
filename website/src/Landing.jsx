@@ -67,22 +67,38 @@ function IntroAnimation() {
   );
 }
 
-// Desktop download disabled 2026-08-30 (see the download section below for
-// why) — this always renders its disabled state now regardless of the
-// `onClick` a caller passes, so every entry point stays in lockstep with
-// no risk of one getting missed again. `onClick` is kept as a prop rather
-// than deleted so re-enabling is still a one-line revert.
-function DownloadButton({ className = "" }) {
+// Re-enabled 2026-08-31 pointing at the real v0.1.7 release — Charlie
+// promoted it despite macOS still being unverified on real hardware
+// (v0.1.7 tag message, STATUS.md), so this carries an "Early access" badge
+// and a macOS caution in the modal rather than presenting it as fully done.
+function DownloadButton({ className = "", onClick }) {
+  const [pressed, setPressed] = useState(false);
   return (
     <button
       type="button"
-      disabled
-      className={`relative inline-flex items-center gap-2 rounded-full font-semibold text-white/50 overflow-hidden cursor-default select-none ${className}`}
-      style={{ background: "linear-gradient(180deg, #4a4a4a 0%, #2a2a2a 60%, #1a1a1a 100%)" }}
+      onClick={onClick}
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      className={`relative inline-flex items-center gap-2 rounded-full font-semibold text-white overflow-hidden transition-transform duration-100 ${className}`}
+      style={{
+        background: "linear-gradient(180deg, #2a2a2a 0%, #0A0A0A 60%, #000000 100%)",
+        boxShadow: pressed
+          ? "0 1px 0 0 #000, 0 2px 6px -2px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.15)"
+          : "0 5px 0 0 #000, 0 14px 26px -10px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2)",
+        transform: pressed ? "translateY(4px)" : "translateY(0)",
+      }}
     >
+      <span
+        className="absolute inset-x-1 top-1 h-1/3 rounded-full pointer-events-none"
+        style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0))" }}
+      />
       <span className="relative flex items-center gap-2">
         <Apple size={15} />
-        Coming soon
+        Download
+        <span className="text-[9px] font-bold uppercase tracking-wide text-white/60 border border-white/30 rounded-full px-1.5 py-0.5">
+          Early access
+        </span>
       </span>
     </button>
   );
@@ -117,6 +133,11 @@ function WindowChrome({ title, onDotClick, cream }) {
   );
 }
 
+// v0.1.7 is a real (non-prerelease) tag, so `/releases/latest/` correctly
+// resolves to it — GitHub's `latest` endpoint only skips prereleases.
+// RELEASE_VERSION is just for display; bump it by hand alongside each real
+// tag promotion.
+const RELEASE_VERSION = "v0.1.7";
 const RELEASES_BASE = "https://github.com/Charlie064/Guido/releases/latest/download";
 
 const PLATFORMS = [
@@ -154,6 +175,16 @@ function DesktopDownloadWindow({ onClose }) {
           backgroundSize: "22px 22px",
         }}
       >
+        <div className="flex flex-col items-center gap-1.5 text-center max-w-md">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-white bg-[#0A0A0A] rounded-full px-2.5 py-1">
+            Early access — {RELEASE_VERSION}
+          </span>
+          <p className="text-xs text-neutral-500">
+            Windows tested end-to-end. macOS hasn't been reconfirmed working
+            on real hardware yet — expect rough edges there.
+          </p>
+        </div>
+
         <div className="inline-flex items-center gap-1 rounded-full p-1.5" style={{ background: "#EFEFEF" }}>
           {PLATFORMS.map((p) => {
             const PIcon = p.icon;
@@ -467,9 +498,19 @@ export default function Landing() {
             <a href="#demo" className="hover:text-black transition-colors">How it works</a>
             <a href="#works-with" className="hover:text-black transition-colors">Works with</a>
           </nav>
-          <div className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white/60 border border-black/10 text-[#0A0A0A]/50 cursor-default select-none">
-            Coming soon
-          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadOpen(true)}
+            className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
+            style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
+            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+          >
+            Download
+            <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400 border border-black/15 rounded-full px-1.5 py-0.5">
+              Early access
+            </span>
+          </button>
         </div>
       </header>
 
@@ -520,7 +561,10 @@ export default function Landing() {
             </p>
 
             <div className="mt-8">
-              <DownloadButton className="px-7 py-3.5 text-[15px]" />
+              <DownloadButton
+                className="px-7 py-3.5 text-[15px]"
+                onClick={() => setDownloadOpen(true)}
+              />
             </div>
           </div>
         </div>
@@ -693,15 +737,10 @@ export default function Landing() {
           className="w-full max-w-2xl mx-auto mb-10"
         />
 
-        {/* Desktop download disabled 2026-08-30: last real-hardware test
-            couldn't launch the macOS build (see STATUS.md), and the next
-            release hasn't been re-verified since. Re-enable by restoring
-            the setDownloadOpen(true) button below once that's confirmed. */}
-        <div
-          className="inline-flex items-center gap-2 rounded-full font-semibold px-7 py-3.5 text-[15px] bg-white/60 border border-black/10 text-[#0A0A0A]/50 cursor-default select-none"
-        >
-          Desktop app — coming soon
-        </div>
+        <DownloadButton
+          className="px-7 py-3.5 text-[15px]"
+          onClick={() => setDownloadOpen(true)}
+        />
       </section>
 
       {downloadOpen && (
