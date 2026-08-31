@@ -63,6 +63,44 @@ render), per [demo-v0.md](../planning/demo-v0.md).
   virt-viewer window) avoids VM chrome and cursor artifacts in the
   output.
 
+  **Setting up the dev toolchain inside the Windows VM**, once installed:
+  `winget install --id Git.Git -e`, `winget install --id OpenJS.NodeJS.LTS -e`,
+  `winget install --id Rustlang.Rustup -e`, then
+  `winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override
+  "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools
+  --includeRecommended"` for the MSVC linker Tauri needs (the biggest
+  install here, ~6-8GB). Restart the shell so `PATH` picks everything up,
+  then `npm install -g @anthropic-ai/claude-code` gets you a Claude Code
+  session running natively in the VM against a real `git clone` of this
+  repo — faster iteration on `window_provider.rs` than bouncing changes
+  over from the host. Budget disk accordingly: Windows itself is
+  15-20GB, the toolchain above is another ~8-10GB, so give the VM's disk
+  at least 50GB total, not the 30GB that's enough for just installing and
+  running the app.
+
+  **If you sized the VM's disk too small and need to grow it after the
+  fact:** shut the VM down, then on the host, `sudo qemu-img resize
+  /var/lib/libvirt/images/<vm-name>.qcow2 +20G` (adjust path/name).
+  Boot back in and extend the Windows partition with `diskpart` — `list
+  disk`, `select disk 0`, `list partition` to find your C: partition
+  number and the new unallocated space. **If a Recovery partition sits
+  between C: and the new unallocated space** (Windows' default GPT layout
+  puts Recovery last), `select partition <N>` on it and `delete partition
+  override` first — Disk Management's GUI "Extend Volume" only works into
+  *adjacent* unallocated space, and won't jump over a partition in
+  between even when there's a `diskpart extend` error saying "not enough
+  usable free space" that suggests otherwise. Deleting Recovery is safe
+  on a test VM (loses local WinRE only, not a real backup); then
+  `select partition <C's number>` and `extend`.
+
+  **Clipboard between host and VM** needs the SPICE guest agent, not just
+  a SPICE display channel (`virsh dumpxml <vm> | grep graphics` should
+  already show `type='spice'` from virt-manager's defaults). Inside the
+  VM, install ["Spice guest tools"](https://www.spice-space.org/download.html)
+  (separate from `virtio-win-guest-tools.exe`, which only covers
+  disk/network drivers) and reboot the VM — copy/paste then works both
+  directions.
+
   **The macOS backend can't be tested this way.** Apple's EULA prohibits
   running macOS on non-Apple hardware, so there's no legitimate local-VM
   equivalent (a Hackintosh/OSX-KVM setup would also be more fragile:
