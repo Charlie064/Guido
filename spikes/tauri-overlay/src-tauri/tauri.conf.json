@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "tauri-overlay",
-  "version": "0.1.0",
-  "identifier": "com.charlie.tauri-overlay",
+  "productName": "Guido",
+  "version": "0.1.5",
+  "identifier": "com.charlie.guido",
   "build": {
     "frontendDist": "../src"
   },
@@ -63,7 +63,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["appimage", "nsis", "dmg", "app"],
+    "createUpdaterArtifacts": true,
+    "externalBin": [
+      "binaries/verify_step",
+      "binaries/answer_step",
+      "binaries/identify_app",
+      "binaries/plan_step",
+      "binaries/research",
+      "binaries/live_step",
+      "binaries/portal_capture"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -255,11 +255,17 @@ mod macos {
                 continue;
             }
 
-            let Some(bounds) = dict
+            // core-foundation 0.10 only implements ConcreteCFType for the
+            // untyped CFDictionary, not CFDictionary<CFString, CFType>.
+            // Downcast untyped, then re-wrap as typed so get_num works.
+            let Some(bounds_untyped) = dict
                 .find(CFString::new("kCGWindowBounds"))
-                .and_then(|v| v.downcast::<CFDictionary<CFString, CFType>>())
+                .and_then(|v| v.downcast::<CFDictionary>())
             else {
                 continue;
+            };
+            let bounds: CFDictionary<CFString, CFType> = unsafe {
+                CFDictionary::wrap_under_get_rule(bounds_untyped.as_concrete_TypeRef())
             };
             let x = get_num(&bounds, "X").unwrap_or(0);
             let y = get_num(&bounds, "Y").unwrap_or(0);

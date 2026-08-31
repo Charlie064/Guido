@@ -26,6 +26,7 @@ export default function GlassMascotCursor({
   size = 108,
   disabled = false,
   danceSignal,
+  restRef,
   className,
   style,
 }) {
@@ -54,10 +55,21 @@ export default function GlassMascotCursor({
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const s = stateRef.current;
 
-    s.mouseX = window.innerWidth / 2;
-    s.mouseY = window.innerHeight / 2;
-    s.posX = s.mouseX;
-    s.posY = s.mouseY;
+    function restPoint() {
+      const node = restRef?.current;
+      if (node) {
+        const r = node.getBoundingClientRect();
+        return { x: r.left + r.width * 0.52, y: r.top + r.height * 0.34 };
+      }
+      return { x: window.innerWidth / 2, y: Math.min(window.innerHeight * 0.34, 280) };
+    }
+
+    const home = restPoint();
+    s.mouseX = home.x;
+    s.mouseY = home.y;
+    s.posX = home.x;
+    s.posY = home.y;
+    s.hasMouse = false;
     s.lastMove = performance.now();
 
     function startDance(x, y) {
@@ -113,8 +125,10 @@ export default function GlassMascotCursor({
         s.posX = s.danceX;
         s.posY = s.danceY;
       } else {
-        const targetX = s.mouseX;
-        const targetY = s.mouseY - 6;
+        const home = restPoint();
+        const goHome = !s.hasMouse || now - s.lastMove > 2200;
+        const targetX = goHome ? home.x : s.mouseX;
+        const targetY = goHome ? home.y : s.mouseY - 6;
         const ease = reduceMotion ? 1 : 0.16 * dt;
         const dx = targetX - s.posX;
         const dy = targetY - s.posY;

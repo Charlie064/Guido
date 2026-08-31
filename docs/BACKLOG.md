@@ -8,7 +8,7 @@ point — this file should never pose as a source of truth for what's done.
   the user completes more tutorials/skills. No spaced-repetition system.
   Mechanic undecided (badges? streaks? per-app mastery levels?). See
   [philosophy/vision.md](philosophy/vision.md).
-- **BL-003 — Movable overlay icon + selection state.** The Tutoria icon
+- **BL-003 — Movable overlay icon + selection state.** The Guido icon
   should be draggable/repositionable instead of fixed to one screen
   location, so it doesn't block content. Deselected state shows a gray
   version of the icon svg; selected state (sidebar open) shows the blue
@@ -90,23 +90,15 @@ point — this file should never pose as a source of truth for what's done.
   `website/` on `claudev/quentin/google-login`, with waitlist + privacy
   wired to the Worker. Remaining: `npm run deploy` once Cloudflare
   membership is accepted, and any further design pass she still wants.
-- **BL-007 — Enforce membership quotas.** Tiers and Worker endpoints
-  (`GET /api/me`, `POST /api/skills/start`) are on
-  `claudev/quentin/google-login`. Remaining: desktop must call
-  `/api/skills/start` when a new goal starts and hide save unless
-  `can_save_skills` (Charlie pairs on the Tauri half). Stripe + Starter
-  overage charges are a later slice. See
-  [business/pricing.md](business/pricing.md).
 - **BL-008 — Link a real domain in Cloudflare (Quentin).** The site
   currently runs on the free `workers.dev` subdomain
   (`tutoria-website.guidotutor.workers.dev`, see
   [reference/team.md](reference/team.md)/[STATUS.md](../STATUS.md)).
   Register/point a real domain at the Cloudflare account and wire it into
   `website/wrangler.jsonc` (custom domain / route), including DNS and TLS.
-  Needed before the login flow in
-  [planning/login-membership-plan.md](planning/login-membership-plan.md)
-  can use a stable OAuth redirect origin instead of a `workers.dev` URL.
-- **BL-009 — No app identity at all on Wayland.** **Largely done — read
+  Domain is now on `guidotutor.com`. Desktop login is Better Auth — see
+  [features/auth.md](features/auth.md).
+- **BL-009 — No app identity at all on Wayland.** **Largely done — read**
   the identity off the pixels instead of asking the OS.** The premise
   still holds: the portal's only identifying output is
   `"window (1920x1080)"` (`describe()` in
@@ -228,8 +220,8 @@ point — this file should never pose as a source of truth for what's done.
   window-manager dragging still works once layer-shell is back on, since
   that's exactly what broke last time.
 - **BL-014 — Native capture-exclusion + always-on-top on macOS/Windows.**
-  Both platforms have real OS APIs to keep the sidebar visibly pinned on
-  top *and* invisible to any screen capture at the same time — not a
+  Both platforms have real OS APIs to keep Guido visibly pinned on top
+  *and* invisible to any screen capture at the same time — not a
   trade-off between the two the way Linux/Wayland is:
   - **Always-on-top**: plain `alwaysOnTop`, already the fallback path
     `init_layer_shell`'s doc comment names for macOS/Windows (X11 too) —
@@ -252,3 +244,42 @@ point — this file should never pose as a source of truth for what's done.
     "macos")]` / `"windows"`), likely via `raw-window-handle` to reach
     the native `NSWindow`/`HWND`, since neither is exposed by Tauri's
     window API directly.
+- **BL-015 — Require email verification before an account is usable.**
+  Login switched from Google OAuth to Better Auth email+password
+  (`website/worker/better-auth.ts`, decided 2026-08-29 to avoid Google's
+  test-user allowlist blocking self-serve signup during the demo — see
+  [ADR 0008](decisions/0008-better-auth-email-password.md) and
+  [features/auth.md](features/auth.md)). As configured, `emailAndPassword.requireEmailVerification` is `false` — an
+  account is active the instant it's created, no proof the email address
+  is real. Explicitly deferred for the hackathon demo, but flagged here so
+  it isn't forgotten: **must be turned on before charging real users or
+  accepting signups beyond a small trusted demo group.** Needs an
+  email-sending provider wired in first (Resend, Postmark, etc.) — Better
+  Auth supports verification emails natively once one exists
+  (`sendVerificationEmail` in the `emailAndPassword` or
+  `emailVerification` config), no schema changes required since
+  `user.emailVerified` already exists in the generated table.
+- **BL-016 — Update privacy policy + terms for Stripe billing once wired.**
+  `website/public/privacy.html` and `website/public/terms.html` (added
+  2026-08-30, see [features/auth.md](features/auth.md) and
+  [business/pricing.md](business/pricing.md)) now have the *text* for
+  billing, auto-renewal, cancellation, refunds, taxes, and a Stripe data
+  disclosure written pre-emptively, since `claudev/charlie/stripe-billing`
+  hasn't merged yet and no billing UI exists. **Remaining when that
+  branch merges**: build the actual self-serve cancel control in account
+  settings the terms promise (today it falls back to "email us," which
+  the terms allow but a real control is better for the click-to-cancel
+  requirement); confirm Stripe Tax is actually enabled so the "taxes
+  collected at checkout" line is true; and get a real lawyer pass on the
+  arbitration/class-action-waiver clause before relying on it — that
+  clause's enforceability is jurisdiction- and notice-dependent in ways
+  a template can't guarantee.
+  - **Gate added 2026-08-30**: `claudev/charlie/stripe-billing` must stay
+    on Stripe **test-mode keys only** (`sk_test_...`/`pk_test_...`) —
+    don't switch to live keys or take a real charge from anyone outside
+    the team — until Charlie has registered as a sole trader (enskild
+    näringsidkare) with Skatteverket. An individual can legally accept
+    payments in Sweden without an AB, but running live billing with zero
+    registration crosses from "should register" into non-compliant once
+    it's real recurring revenue from real users, not a demo. Hackathon
+    demos of the payment flow should run in test mode regardless.

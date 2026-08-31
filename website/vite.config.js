@@ -21,6 +21,7 @@ export default defineConfig({
     proxy: {
       '/api': 'http://127.0.0.1:8787',
       '/auth': 'http://127.0.0.1:8787',
+      '/internal': 'http://127.0.0.1:8787',
     },
   },
 })

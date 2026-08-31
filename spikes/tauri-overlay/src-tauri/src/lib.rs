@@ -117,6 +117,65 @@ fn vision_detect_dir() -> std::path::PathBuf {
         .join("vision-detect")
 }
 
+// The vision-detect scripts call the Worker's /api/vision proxy
+// (worker/vision.ts) instead of holding an Anthropic key locally — see
+// docs/features/vision.md — so every one of them needs the same session
+// token store_session_token/get_session_token already manage. Passed to
+// the subprocess as an env var (GUIDO_SESSION_TOKEN, read by
+// vision_client.py) rather than a CLI arg, so it never lands in a process
+// listing or gets echoed back into an error message that includes argv.
+fn vision_session_token() -> Result<String, String> {
+    match session_token_entry()?.get_password() {
+        Ok(token) => Ok(token),
+        Err(keyring::Error::NoEntry) => Err("Sign in to use this feature.".to_string()),
+        Err(e) => Err(format!("couldn't read the session token: {e}")),
+    }
+}
+
+// A packaged build has no `spikes/vision-detect/.venv` on the user's
+// machine — that directory only ever existed on a developer's own
+// checkout — so each vision-detect script is compiled by PyInstaller into
+// a standalone binary and shipped as a Tauri externalBin sidecar (see
+// tauri.conf.json's `bundle.externalBin` and
+// .github/workflows/release.yml's build-sidecars step). Tauri places
+// sidecars next to the main executable in the final bundle on every OS,
+// so `current_exe()`'s directory is where to look for one; falling back
+// to the dev `.venv` (per-OS layout: Scripts/python.exe on Windows,
+// bin/python3 elsewhere) when no sidecar is there keeps `cargo run`
+// working unchanged during development.
+fn sidecar_path(stem: &str) -> Option<std::path::PathBuf> {
+    let dir = std::env::current_exe().ok()?.parent()?.to_path_buf();
+    for name in [stem.to_string(), format!("{stem}.exe")] {
+        let candidate = dir.join(name);
+        // build.rs's ensure_sidecar_placeholders() writes a zero-byte
+        // stand-in wherever no real PyInstaller sidecar has been built
+        // (every local dev build) purely to satisfy tauri-build's
+        // externalBin existence check — treat that the same as "not
+        // there" so `tauri dev` keeps falling through to the real
+        // `.venv` scripts below, matching pre-sidecar behavior. A real
+        // sidecar is a multi-MB standalone binary; it is never empty.
+        match candidate.metadata() {
+            Ok(meta) if meta.is_file() && meta.len() > 0 => return Some(candidate),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn vision_command(dir: &std::path::Path, stem: &str) -> Command {
+    if let Some(sidecar) = sidecar_path(stem) {
+        return Command::new(sidecar);
+    }
+    let python = if cfg!(windows) {
+        dir.join(".venv").join("Scripts").join("python.exe")
+    } else {
+        dir.join(".venv").join("bin").join("python3")
+    };
+    let mut cmd = Command::new(python);
+    cmd.arg(dir.join(format!("{stem}.py")));
+    cmd
+}
+
 // sidebar is the only real (non-click-through) window now — but a screen
 // *capture* still shouldn't see it, since it'd otherwise show up in the
 // exact frame sent to the vision model. Hiding it here, right around the
@@ -282,11 +341,8 @@ fn run_verify(
     context: Option<&str>,
 ) -> Result<VerifyResult, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("verify_step.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(expected_outcome);
+    let mut cmd = vision_command(&dir, "verify_step");
+    cmd.arg(expected_outcome);
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -297,6 +353,7 @@ fn run_verify(
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run verify_step.py: {e}"))?;
@@ -390,11 +447,8 @@ fn run_answer(
     context: Option<&str>,
 ) -> Result<AnswerResult, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("answer_step.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(question);
+    let mut cmd = vision_command(&dir, "answer_step");
+    cmd.arg(question);
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -405,6 +459,7 @@ fn run_answer(
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run answer_step.py: {e}"))?;
@@ -479,11 +534,7 @@ fn identify_app_blocking(app: &tauri::AppHandle, scope: Option<CaptureScope>) ->
 
 fn run_identify_app(region: &Option<Region>, portal_scope: Option<&str>) -> Result<AppIdentity, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("identify_app.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script);
+    let mut cmd = vision_command(&dir, "identify_app");
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -491,6 +542,7 @@ fn run_identify_app(region: &Option<Region>, portal_scope: Option<&str>) -> Resu
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run identify_app.py: {e}"))?;
@@ -700,11 +752,7 @@ async fn pick_portal_source(app: tauri::AppHandle, scope: Option<String>) -> Res
 
 fn run_portal_pick(scope: &str) -> Result<PortalPick, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("portal_capture.py");
-
-    let output = Command::new(&python)
-        .arg(&script)
+    let output = vision_command(&dir, "portal_capture")
         .arg("pick")
         .arg(scope)
         .current_dir(&dir)
@@ -788,16 +836,14 @@ async fn save_skills_json(app: tauri::AppHandle, json: String) -> Result<(), Str
 
 fn run_research(goal: &str, app_name: Option<&str>) -> Result<ResearchResult, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("research.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(goal);
+    let mut cmd = vision_command(&dir, "research");
+    cmd.arg(goal);
     if let Some(app) = app_name {
         cmd.arg(app);
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run research.py: {e}"))?;
@@ -859,15 +905,12 @@ fn run_plan_step(
     step_watch_for: &str,
 ) -> Result<Vec<PlannedSubstep>, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("plan_step.py");
-
-    let output = Command::new(&python)
-        .arg(&script)
+    let output = vision_command(&dir, "plan_step")
         .arg(goal)
         .arg(step_title)
         .arg(step_brief)
         .arg(step_watch_for)
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run plan_step.py: {e}"))?;
@@ -892,11 +935,8 @@ fn run_locate(
     context: Option<&str>,
 ) -> Result<Box2D, String> {
     let dir = vision_detect_dir();
-    let python = dir.join(".venv").join("bin").join("python3");
-    let script = dir.join("live_step.py");
-
-    let mut cmd = Command::new(&python);
-    cmd.arg(&script).arg(target);
+    let mut cmd = vision_command(&dir, "live_step");
+    cmd.arg(target);
     if let Some(scope) = portal_scope {
         cmd.arg("--portal").arg(scope);
     } else if let Some(r) = region {
@@ -914,6 +954,7 @@ fn run_locate(
     }
 
     let output = cmd
+        .env("GUIDO_SESSION_TOKEN", vision_session_token()?)
         .current_dir(&dir)
         .output()
         .map_err(|e| format!("failed to run live_step.py: {e}"))?;
@@ -929,6 +970,57 @@ fn run_locate(
     let stdout = String::from_utf8_lossy(&output.stdout);
     serde_json::from_str(stdout.trim())
         .map_err(|e| format!("failed to parse live_step.py output ({stdout}): {e}"))
+}
+
+// Session-token storage (docs/planning/login-membership-plan.md): sign-in
+// itself is a plain fetch() from sidebar.js straight to the Worker's
+// Better Auth routes (email+password, no browser round trip needed) — the
+// only piece that has to live in Rust is holding onto the token it gets
+// back somewhere other programs / a stolen laptop's filesystem can't
+// casually read, which means the OS's own credential store.
+const KEYRING_SERVICE: &str = "guido";
+const KEYRING_ACCOUNT: &str = "session_token";
+
+fn session_token_entry() -> Result<keyring::Entry, String> {
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .map_err(|e| format!("couldn't open the OS credential store: {e}"))
+}
+
+#[tauri::command]
+async fn store_session_token(token: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        session_token_entry()?
+            .set_password(&token)
+            .map_err(|e| format!("couldn't save the session token: {e}"))
+    })
+    .await
+    .map_err(|e| format!("store_session_token task panicked: {e}"))?
+}
+
+// None for "never signed in" (no credential saved yet), distinct from an
+// error — same reasoning as load_skills_json's None case above.
+#[tauri::command]
+async fn get_session_token() -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(|| match session_token_entry()?.get_password() {
+        Ok(token) => Ok(Some(token)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("couldn't read the session token: {e}")),
+    })
+    .await
+    .map_err(|e| format!("get_session_token task panicked: {e}"))?
+}
+
+// Called on sign-out and on a 401 from /api/me (expired/revoked session) —
+// sidebar.js falls back to the login view either way. Deleting a
+// credential that isn't there is treated as success, not an error.
+#[tauri::command]
+async fn clear_session_token() -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(|| match session_token_entry()?.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(format!("couldn't clear the session token: {e}")),
+    })
+    .await
+    .map_err(|e| format!("clear_session_token task panicked: {e}"))?
 }
 
 // region-select only, not sidebar (see run() below): a plain alwaysOnTop
@@ -987,6 +1079,27 @@ fn init_layer_shell(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
+// WebKitGTK (the Linux webview backend) has no native permission-prompt
+// UI, unlike Chromium/WKWebView on Windows/macOS — an unhandled
+// getUserMedia call's `permission-request` signal just falls through to
+// its default action, which is deny, and the mic button's
+// `getUserMedia` call rejects with a generic "not allowed by the user
+// agent" (no separate "no prompt exists" error to tell that apart from an
+// actual user denial). Auto-allowing here is safe: the only thing that
+// calls getUserMedia is this app's own sidebar.js mic button, not
+// arbitrary web content.
+#[cfg(target_os = "linux")]
+fn init_media_permissions(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use webkit2gtk::{PermissionRequestExt, WebViewExt};
+
+    window.with_webview(|webview| {
+        webview.inner().connect_permission_request(|_webview, request| {
+            request.allow();
+            true
+        });
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1005,7 +1118,10 @@ pub fn run() {
             refresh_window_rect,
             window_at_point,
             window_icon,
-            identify_app
+            identify_app,
+            store_session_token,
+            get_session_token,
+            clear_session_token
         ])
         .setup(|app| {
             use tauri::Manager;
@@ -1023,6 +1139,12 @@ pub fn run() {
                 .unwrap_or_else(|| panic!("\"sidebar\" window declared in tauri.conf.json must exist"));
 
             sidebar.show()?;
+
+            // getUserMedia (the mic button — see startVoiceRecording in
+            // sidebar.js) needs the OS webview to actually grant the
+            // permission request; see init_media_permissions.
+            #[cfg(target_os = "linux")]
+            init_media_permissions(&sidebar)?;
 
             // "region-select" gets layer-shell too (fill_screen — see
             // init_layer_shell), so it floats above everything (including

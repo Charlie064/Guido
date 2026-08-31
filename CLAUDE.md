@@ -23,8 +23,8 @@ note in `docs/philosophy/vision.md`).
    observing the new screen state, not assumed from the user's say-so.
 4. **Keep providers swappable.** Vision, voice, and search are behind
    interfaces the agent controller calls — providers (currently Claude
-   vision, ElevenLabs, provider TBD for search) can change without touching
-   the controller.
+   vision, Aqua Voice for speech-to-text, ElevenLabs for text-to-speech,
+   provider TBD for search) can change without touching the controller.
 5. **Don't overbuild the hackathon MVP.** No complex backend, accounts,
    billing, or long-term memory unless a P0/P1 item in
    `docs/planning/mvp-roadmap.md` actually needs it.
@@ -85,7 +85,10 @@ before shipping beyond a demo.)
 | Adding a UI icon (check the pool first, don't redraw) | `spikes/tauri-overlay/src/icons.js`, gallery at `src/icons.html` |
 | Guido mascot (Tuto) states, cursor buddy | `docs/features/mascot.md` |
 | Website + desktop visual language | `docs/features/website-design-system.md` |
-| Login, Google account link, membership check (Quentin) | `docs/planning/login-membership-plan.md` |
+| Login, membership check, quotas | `docs/features/auth.md` |
+| Voice input (speech-to-text), Aqua Voice | `docs/features/voice.md` |
+| Claude vision proxy, screen-watching, sidecar packaging | `docs/features/vision.md` |
+| Privacy policy, terms of service | `website/public/privacy.html`, `website/public/terms.html` — update these too whenever a change adds/removes a data type collected, a third party data is sent to, or billing terms |
 | Membership pricing, Anthropic API COGS | `docs/business/pricing.md` |
 
 Add rows here as `docs/features/`, `docs/schemas/`, etc. get their first

@@ -4,18 +4,14 @@
 // depended on always-on-top+undecorated quirks that didn't hold up on
 // GNOME anyway); `#panel` is always shown at the window's full size.
 //
-// Substeps offer two ways to be shown (see actionsHtml below):
-// - the eye: a real highlight box + text callout drawn over the target app
-//   by the separate, permanently click-through "overlay" window (see
-//   overlay.js / overlay.html). An earlier attempt at this was cut because
-//   a full-screen always-on-top window blocked clicks into the app being
-//   taught; what makes it viable now is that click-through is set once in
-//   Rust and never toggled, so it can't get stuck interactive.
-// - the note: the in-panel schematic diagram, which stays as the fallback
-//   for platforms with no live window rect (a Wayland portal capture never
-//   discloses screen position) and as a non-intrusive "roughly where".
+// Substeps no longer offer an on-screen overlay or in-panel schematic —
+// cut 2026-08-30 as UI clutter (the eye/target/note icon row and the
+// duplicate target-description line above the instruction text). The
+// "overlay" window, overlay.js/overlay.html, and the Rust locate_element
+// command are unused by this file now but not deleted — a real cleanup
+// pass on those is a separate, larger change. See substepBubbleHtml.
 import { SKILLS } from "./fake-skill.js";
-import { EyeIcon, EyeOffIcon, TargetIcon, NoteIcon, TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon } from "./icons.js";
+import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon } from "./icons.js";
 
 // Registered before anything below gets a chance to throw — including
 // this file's own top-level init further down, which would otherwise
@@ -239,6 +235,8 @@ const views = {
   group: document.querySelector("#view-group"),
   path: document.querySelector("#view-path"),
   chat: document.querySelector("#view-chat"),
+  pay: document.querySelector("#view-pay"),
+  usage: document.querySelector("#view-usage"),
 };
 
 // Compact shell sizes — keep the panel as small as the current view
@@ -253,6 +251,8 @@ const VIEW_SIZE = {
   group: [420, 620],
   path: [400, 600],
   chat: [400, 600],
+  pay: [420, 620],
+  usage: [420, 460],
 };
 
 async function fitWindow(name) {
@@ -266,6 +266,20 @@ async function fitWindow(name) {
     // Browser preview / missing Tauri API — leave CSS to fill the webview.
   }
 }
+
+// Set right before showView("pay") so its back arrow returns wherever the
+// user actually came from (home, mid-path) instead of always "home".
+let payReturnView = "home";
+
+// Set right before showView("login") so a successful sign-in (or
+// "Continue without signing in") lands back where the user actually came
+// from — e.g. a guest hitting a plan button on #view-pay — instead of
+// always "home". Reset to "home" once consumed.
+let loginReturnView = "home";
+
+// Same idea as payReturnView, for the profile menu's Usage item (openable
+// from any view the top bar appears in, not just home).
+let usageReturnView = "home";
 
 // view -> [title, subtitle getter, back-target-or-null]
 function viewMeta(name) {
@@ -282,6 +296,10 @@ function viewMeta(name) {
       return [currentSkill.title, currentSkill.goal, "home"];
     case "chat":
       return [currentStep.title, "", "path"];
+    case "pay":
+      return ["Upgrade", "", payReturnView];
+    case "usage":
+      return ["Usage", "", usageReturnView];
     default:
       return ["Guido", "", null];
   }
@@ -299,12 +317,6 @@ function setProfileOpen(open) {
 // list is a result arriving, and a beat of animation is what marks it as
 // one.
 function showView(name, { fade = false } = {}) {
-  // Leaving the chat view drops the on-screen overlay: it belongs to one
-  // substep in one step, so leaving that context would otherwise strand a
-  // highlight box on screen with nothing in the UI still pointing at it
-  // (and no visible way to dismiss it, since the eye that toggles it is
-  // in the view being left).
-  if (currentView === "chat" && name !== "chat") hideOverlay();
   // Refreshed on every visit, not just after a new goal — this is also
   // how a skill generated earlier (or restored from disk) stays reachable
   // after navigating away from it, see renderAppsList's comment.
@@ -698,20 +710,263 @@ homeEls.researchSkip.addEventListener("click", () => {
 homeEls.goalInput.addEventListener("input", refreshHomeSteps);
 
 // ---------- Login ----------
+//
+// See docs/planning/login-membership-plan.md. The session token itself is
+// held in the OS keychain (Rust side, lib.rs's store/get/clear_session_token
+// — see docs.rs/keyring), never in localStorage/a file this app controls;
+// this module only ever holds the decoded /api/me response in memory.
 
-document.querySelector("#login-continue").addEventListener("click", () => {
-  showView("home");
-});
+const WEBSITE_BASE_URL = "https://guidotutor.com";
 
-async function startGoogleLogin() {
-  try {
-    await invoke("start_google_login");
-  } catch {
-    window.open("https://tutoria-website.guidotutor.workers.dev/login", "_blank");
+// null = signed out (or /api/me hasn't resolved yet). Shape:
+// { email, plan, status, skills_remaining, skills_included, can_save_skills }
+let membership = null;
+
+// Kept only so sign-out can tell the Worker which session to revoke
+// (Better Auth's /api/auth/sign-out, bearer-authenticated same as every
+// other call) — the token of record still lives in the OS keychain, this
+// is just the copy currently active in this run of the app.
+let currentSessionToken = null;
+
+const PLAN_LABELS = { free: "Free", starter: "Starter", plus: "Plus", owner: "Owner" };
+
+function applyMembership(info) {
+  membership = info;
+  const badge = document.querySelector("#plan-badge");
+  const upgradeBtn = document.querySelector("#profile-upgrade");
+
+  if (info) {
+    els.profileMenu.querySelector(".profile-menu-who").textContent = info.email;
+    const remaining = info.skills_remaining === null ? "unlimited" : `${info.skills_remaining} left`;
+    els.profileMenu.querySelector(".profile-menu-meta").textContent = `${info.plan} plan · ${remaining}`;
+    document.querySelector("#profile-signin").hidden = true;
+    document.querySelector("#profile-signout").hidden = false;
+
+    badge.hidden = false;
+    badge.textContent = PLAN_LABELS[info.plan] ?? info.plan;
+    badge.dataset.plan = info.plan;
+
+    // Free/Starter get "Upgrade plan" (pushes toward a paid tier); Plus
+    // and Owner get "Manage subscription" instead — same #view-pay screen
+    // either way, see openPayView below.
+    upgradeBtn.hidden = false;
+    upgradeBtn.textContent = info.plan === "plus" || info.plan === "owner" ? "Manage subscription" : "Upgrade plan";
+  } else {
+    els.profileMenu.querySelector(".profile-menu-who").textContent = "Guest";
+    els.profileMenu.querySelector(".profile-menu-meta").textContent = "Not signed in";
+    document.querySelector("#profile-signin").hidden = false;
+    document.querySelector("#profile-signout").hidden = true;
+
+    // A guest is on the same allowance as `free` (docs/business/pricing.md)
+    // but has no membership row yet — show the tier readout and let them
+    // reach the pay view (openPayView already renders a "sign in to see
+    // your usage" state for this case) instead of hiding both until after
+    // sign-in, which left guests with no way to see pricing at all.
+    badge.hidden = false;
+    badge.textContent = "Guest";
+    badge.dataset.plan = "guest";
+    upgradeBtn.hidden = false;
+    upgradeBtn.textContent = "Upgrade plan";
   }
 }
 
-document.querySelector("#login-google").addEventListener("click", startGoogleLogin);
+// Single screen for every paywall trigger — hitting the quota on a new
+// ask, one ask costing more than what's left, or the profile menu's
+// Upgrade/Manage item (docs/business/pricing.md's flat 1-per-skill
+// charge is why "costs more" only ever means "you're at 0 left" today —
+// see the cost param on /api/skills/start in worker/index.ts).
+// `reason` is plain text shown in the pink callout, or null to hide it
+// (the profile-menu path, which isn't reacting to a blocked action).
+function openPayView(reason, { keepReturnView = false } = {}) {
+  // keepReturnView: true when re-entering pay right after a sign-in that
+  // was itself triggered from pay (loginReturnView above) — currentView
+  // is "login" at that point, which would otherwise clobber payReturnView
+  // with a back target that no longer makes sense.
+  if (!keepReturnView) {
+    payReturnView = currentView === "pay" ? payReturnView : currentView;
+  }
+
+  const planName = membership ? PLAN_LABELS[membership.plan] ?? membership.plan : "Free";
+  document.querySelector("#pay-status-plan").textContent = `${planName} plan`;
+  document.querySelector("#pay-status-meta").textContent = membership
+    ? membership.skills_remaining === null
+      ? "Unlimited new skills"
+      : `${membership.skills_remaining} of ${membership.skills_included ?? 0} new skills left`
+    : "Sign in to see your usage";
+
+  const reasonEl = document.querySelector("#pay-reason");
+  reasonEl.textContent = reason ?? "";
+  reasonEl.hidden = !reason;
+
+  showView("pay");
+}
+
+// Counts only — both cards read straight off the /api/me membership
+// already in memory (skills_remaining/included, voice_seconds_used/
+// included — see handleMe in worker/index.ts). Voice moved server-side
+// today (worker/voice.ts), so unlike skills it has nothing to show a
+// guest at all — same sign-in prompt as startVoiceRecording's guard.
+function openUsageView() {
+  usageReturnView = currentView === "usage" ? usageReturnView : currentView;
+
+  const skillsMeta = document.querySelector("#usage-skills-meta");
+  const skillsBar = document.querySelector("#usage-skills-bar");
+  const skillsFill = document.querySelector("#usage-skills-fill");
+  const voiceMeta = document.querySelector("#usage-voice-meta");
+  const voiceFill = document.querySelector("#usage-voice-fill");
+
+  if (!membership) {
+    skillsMeta.textContent = "Sign in to see your skill usage.";
+    skillsBar.hidden = true;
+    voiceMeta.textContent = "Sign in to see your voice usage.";
+    voiceFill.style.width = "0%";
+  } else {
+    if (membership.skills_remaining === null) {
+      skillsMeta.textContent = `Unlimited on the ${PLAN_LABELS[membership.plan] ?? membership.plan} plan.`;
+      skillsBar.hidden = true;
+    } else {
+      const included = membership.skills_included ?? 0;
+      const used = Math.max(0, included - membership.skills_remaining);
+      const period = membership.plan === "free" ? "lifetime" : "this month";
+      skillsMeta.textContent = `${used} of ${included} new skills used ${period}.`;
+      skillsBar.hidden = false;
+      skillsFill.style.width = `${included > 0 ? Math.min(100, (used / included) * 100) : 100}%`;
+    }
+
+    const voiceUsed = membership.voice_seconds_used ?? 0;
+    const voiceIncluded = membership.voice_seconds_included ?? 0;
+    const voicePct = voiceIncluded > 0 ? Math.min(100, Math.round((voiceUsed / voiceIncluded) * 100)) : 0;
+    if (membership.plan === "free") {
+      // Free is a one-shot lifetime trial (voice.ts's FREE_TRIAL_SECONDS),
+      // not a recurring allowance — "X of ~Y min this month" read as a
+      // monthly budget that reset, which it never does on this plan. The
+      // bar is binary too (used/not-used), not proportional to seconds
+      // spoken — a 10s clip shouldn't leave the bar looking "mostly free".
+      voiceMeta.textContent = voiceUsed > 0 ? "Free voice trial used." : "1 free voice test available.";
+      voiceFill.style.width = voiceUsed > 0 ? "100%" : "0%";
+    } else {
+      // Paid plans share voice.ts's flat $ cap, not a per-plan minute
+      // allowance, so a minute count implied precision the product
+      // doesn't have — show it as % of the monthly $ budget instead.
+      voiceMeta.textContent = `${voicePct}% of this month's voice budget used.`;
+      voiceFill.style.width = `${voicePct}%`;
+    }
+  }
+
+  showView("usage");
+}
+
+// Called both right after a fresh sign-in and on startup with a
+// previously-stored token. A 401 means the token expired or was revoked
+// server-side (the plan doc's reason for a real `sessions` table, not a
+// signed-JWT-only approach) — fall through to the login view either way,
+// same as never having signed in.
+async function refreshMembership(token) {
+  try {
+    const res = await fetch(`${WEBSITE_BASE_URL}/api/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`api/me returned ${res.status}`);
+    applyMembership(await res.json());
+    currentSessionToken = token;
+    return true;
+  } catch (err) {
+    console.error("refreshMembership failed", err);
+    await invoke("clear_session_token").catch(() => {});
+    applyMembership(null);
+    currentSessionToken = null;
+    return false;
+  }
+}
+
+document.querySelector("#login-continue").addEventListener("click", () => {
+  if (!membership) applyMembership(null);
+  const target = loginReturnView;
+  loginReturnView = "home";
+  if (target === "pay") {
+    openPayView(null, { keepReturnView: true });
+  } else {
+    showView(target);
+  }
+});
+
+// "signin" | "signup" — sidebar.html has one form, this toggles its
+// copy/mode rather than showing two separate views.
+let loginMode = "signin";
+
+function setLoginMode(mode) {
+  loginMode = mode;
+  const isSignup = mode === "signup";
+  document.querySelector("#login-mode-label").textContent = isSignup ? "Create your account" : "Sign in to continue";
+  document.querySelector("#login-submit").textContent = isSignup ? "Sign up" : "Sign in";
+  document.querySelector("#login-toggle-mode").textContent = isSignup
+    ? "Already have an account? Sign in"
+    : "Need an account? Sign up";
+  document.querySelector("#login-password").autocomplete = isSignup ? "new-password" : "current-password";
+  setLoginError(null);
+}
+
+function setLoginError(message) {
+  const el = document.querySelector("#login-error");
+  el.textContent = message ?? "";
+  el.hidden = !message;
+}
+
+document.querySelector("#login-toggle-mode").addEventListener("click", () => {
+  setLoginMode(loginMode === "signin" ? "signup" : "signin");
+});
+
+// Straight to the Worker's Better Auth routes (worker/better-auth.ts) —
+// no browser round trip, since a plain email+password form has no
+// OAuth consent screen to hand off to. The bearer plugin returns the
+// session token in the `set-auth-token` response header, not the JSON
+// body — see docs.better-auth.com/docs/plugins/bearer.
+async function submitLogin(email, password) {
+  const path = loginMode === "signup" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email";
+  const body = loginMode === "signup" ? { email, password, name: email.split("@")[0] } : { email, password };
+
+  const res = await fetch(`${WEBSITE_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const token = res.headers.get("set-auth-token");
+  if (!res.ok || !token) {
+    const payload = await res.json().catch(() => ({}));
+    throw new Error(payload.message || payload.error || "Sign-in failed");
+  }
+
+  await invoke("store_session_token", { token }).catch(() => {});
+  return token;
+}
+
+document.querySelector("#login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.querySelector("#login-email").value.trim();
+  const password = document.querySelector("#login-password").value;
+  const submitBtn = document.querySelector("#login-submit");
+
+  setLoginError(null);
+  submitBtn.disabled = true;
+  try {
+    const token = await submitLogin(email, password);
+    if (await refreshMembership(token)) {
+      const target = loginReturnView;
+      loginReturnView = "home";
+      if (target === "pay") {
+        openPayView(null, { keepReturnView: true });
+      } else {
+        showView(target);
+      }
+    }
+  } catch (err) {
+    console.error("login failed", err);
+    setLoginError(err.message || "Something went wrong. Try again.");
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
 
 els.profileBtn.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -721,11 +976,75 @@ document.addEventListener("click", () => setProfileOpen(false));
 els.profileMenu.addEventListener("click", (e) => e.stopPropagation());
 document.querySelector("#profile-signin").addEventListener("click", () => {
   setProfileOpen(false);
-  startGoogleLogin();
+  setLoginMode("signin");
+  showView("login");
 });
-document.querySelector("#profile-attach").addEventListener("click", () => {
+document.querySelector("#profile-signout").addEventListener("click", async () => {
   setProfileOpen(false);
-  showView("setup");
+  // Revoke server-side first (deletes the `session` row — Better Auth's
+  // bearer-auth sign-out), not just the local keychain copy: otherwise a
+  // "signed out" token stays valid against /api/me for the rest of its
+  // 7-day life if anything else ever got hold of it.
+  if (currentSessionToken) {
+    // Better Auth's sign-out route 400s on a body-less POST — it insists
+    // on parseable JSON even though it ignores the content.
+    await fetch(`${WEBSITE_BASE_URL}/api/auth/sign-out`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentSessionToken}`, "Content-Type": "application/json" },
+      body: "{}",
+    }).catch((err) => console.error("sign-out request failed", err));
+  }
+  currentSessionToken = null;
+  await invoke("clear_session_token").catch(() => {});
+  applyMembership(null);
+  showView("login");
+});
+document.querySelector("#profile-upgrade").addEventListener("click", () => {
+  setProfileOpen(false);
+  openPayView(null);
+});
+document.querySelector("#profile-usage").addEventListener("click", () => {
+  setProfileOpen(false);
+  openUsageView();
+});
+
+// No Stripe yet (docs/planning/login-membership-plan.md's "Open /
+// deferred") — the website's /pricing.html page (desktop billing copy)
+// is where a plan/billing action actually goes: the account's email rides
+// along in the query string so the page (and whoever reads the resulting
+// "upgrade me" email, today Charlie flipping D1 by hand) knows which
+// account to apply the change to, since there's no Stripe session to
+// attach it to yet. Opens in the system browser via the opener plugin,
+// not the sidebar's own webview, both because a subscription/checkout
+// flow shouldn't run inside a click-through-adjacent panel and because
+// the sidebar's webview holds no cookies for guidotutor.com anyway.
+//
+// A guest can see this page (openPayView renders fine with membership ===
+// null), but a plan/billing action needs an account to attach to — send
+// them to sign in first, then land back on #view-pay (not home) once
+// they're in, via loginReturnView below.
+function openWebsitePricing(plan) {
+  const params = new URLSearchParams();
+  if (plan) params.set("plan", plan);
+  if (membership?.email) params.set("email", membership.email);
+  const query = params.toString();
+  window.__TAURI__.opener.openUrl(`${WEBSITE_BASE_URL}/pricing.html${query ? `?${query}` : ""}`);
+}
+document.querySelector("#pay-manage-btn").addEventListener("click", () => {
+  if (!membership) {
+    loginReturnView = "pay";
+    showView("login");
+    return;
+  }
+  openWebsitePricing(membership.plan);
+});
+document.querySelector("#usage-upgrade-btn").addEventListener("click", () => {
+  if (!membership) {
+    loginReturnView = "usage";
+    showView("login");
+    return;
+  }
+  openWebsitePricing(membership.plan);
 });
 
 // Logos we ship, for apps whose icon can't be extracted from a live
@@ -742,6 +1061,24 @@ document.querySelector("#profile-attach").addEventListener("click", () => {
 const APP_MARK_IMAGES = [
   [/\bexcel\b|xlsx?/i, "assets/excel.png"],
 ];
+
+// On startup, a previously-stored session token (OS keychain) skips
+// straight past the login view if it still checks out against /api/me;
+// otherwise the app falls back to today's "Continue without signing in"
+// demo path.
+async function restoreSession() {
+  const token = await invoke("get_session_token").catch(() => null);
+  if (token && (await refreshMembership(token))) {
+    showView("home");
+  } else {
+    // refreshMembership already calls applyMembership(null) on a failed
+    // token; call it here too for the no-token case so the guest badge/
+    // Upgrade button are initialized before "Continue without signing in"
+    // is even clicked, not left at the HTML-default `hidden`.
+    if (!token) applyMembership(null);
+    fitWindow("login");
+  }
+}
 
 function setFallbackMark(el, appName, size = 40) {
   const logo = APP_MARK_IMAGES.find(([pattern]) => pattern.test(appName ?? ""));
@@ -1000,12 +1337,45 @@ async function loadPersistedSkills() {
 // brief + watch_for — goal-scoped facts only, nothing screen-specific);
 // substeps are generated later, lazily, once the user actually reaches
 // each step (see openStep/the per-step chat view below).
+// Quota unit is a new skill (docs/business/pricing.md) — flat 1 per ask,
+// charged via /api/skills/start after Research succeeds (not before:
+// no point spending someone's quota on a call that might fail). Skipped
+// entirely when signed out — "Continue without signing in" stays the
+// unmetered demo path, per restoreSession's fallback above. Returns
+// false only on a real 403 (quota actually exhausted server-side); a
+// network hiccup here doesn't block a skill someone already researched.
+async function chargeForNewSkill() {
+  if (!currentSessionToken) return true;
+  try {
+    const res = await fetch(`${WEBSITE_BASE_URL}/api/skills/start`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${currentSessionToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ cost: 1 }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (membership) applyMembership({ ...membership, ...payload });
+    return res.ok;
+  } catch (err) {
+    console.error("skills/start failed, allowing the skill through", err);
+    return true;
+  }
+}
+
 async function submitNewGoal() {
   const input = document.querySelector("#new-goal-input");
   const button = document.querySelector("#new-goal-send");
   const errorEl = document.querySelector("#new-goal-error");
   const goal = input.value.trim();
   if (!goal) return;
+
+  // Client-side pre-check against the cached /api/me numbers — saves a
+  // Research call outright when it's obviously going to be blocked.
+  // chargeForNewSkill() still re-checks server-side after Research
+  // succeeds (this cache can be stale — another device, another chat).
+  if (membership && membership.skills_remaining !== null && membership.skills_remaining < 1) {
+    openPayView("You've used your free new skill — upgrade to keep going.");
+    return;
+  }
 
   input.disabled = true;
   button.disabled = true;
@@ -1059,6 +1429,12 @@ async function submitNewGoal() {
         substeps: [],
       })),
     };
+
+    if (!(await chargeForNewSkill())) {
+      openPayView("This skill needs more than you have left — upgrade to keep going.");
+      return;
+    }
+
     SKILLS.push(skill);
     // Saved and listed before the step list opens, not after: this is what
     // makes a brand-new chat show up under "Previous chats" even if the
@@ -1098,6 +1474,132 @@ async function submitNewGoal() {
 document.querySelector("#new-goal-send").addEventListener("click", submitNewGoal);
 document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") submitNewGoal();
+});
+
+// Speech-to-text for the goal box, via Aqua Voice's Avalon API — proxied
+// through the website Worker's /api/voice/transcribe (worker/voice.ts),
+// not called directly: AQUA_VOICE_API_KEY lives only as a Worker secret,
+// same posture as ANTHROPIC_API_KEY on /api/vision. An earlier version of
+// this called a local Python script with a key from .env, which only
+// worked on the developer's own machine — see docs/features/voice.md's
+// git history. Click to start, click again to stop: a hold-to-talk button
+// would need the mouse to stay down for the whole utterance, which
+// doesn't fit this window's small footprint. `MAX_RECORDING_SECONDS`
+// auto-stops a forgotten recording — otherwise nothing bounds how long
+// (and how expensive) a single clip could get.
+const micButton = document.querySelector("#new-goal-mic");
+micButton.innerHTML = MicIcon({ size: 16 });
+
+const MIC_MIME_CANDIDATES = ["audio/webm", "audio/mp4"];
+const MAX_RECORDING_SECONDS = 60;
+
+let activeRecorder = null;
+
+async function startVoiceRecording() {
+  const errorEl = document.querySelector("#new-goal-error");
+  errorEl.textContent = "";
+
+  if (!currentSessionToken) {
+    errorEl.textContent = "Sign in to use voice input.";
+    return;
+  }
+
+  // Quota already exhausted (checked client-side off the same /api/me
+  // numbers the usage view renders) — skip straight to the paywall instead
+  // of recording a clip the server will just 403 on. Matters most for free
+  // accounts, whose one-minute lifetime trial (voice.ts's
+  // FREE_TRIAL_SECONDS) is otherwise gone the first time someone talks.
+  if (membership && (membership.voice_seconds_used ?? 0) >= (membership.voice_seconds_included ?? 0)) {
+    openPayView(
+      membership.plan === "free"
+        ? "Your free voice trial is used up — upgrade for more."
+        : "This month's voice budget is used up.",
+    );
+    return;
+  }
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    errorEl.textContent = `Couldn't access the microphone: ${err.message || err}`;
+    return;
+  }
+
+  const mimeType = MIC_MIME_CANDIDATES.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  const chunks = [];
+  const recordingStartedAt = Date.now();
+  recorder.addEventListener("dataavailable", (e) => {
+    if (e.data.size > 0) chunks.push(e.data);
+  });
+
+  const autoStopTimer = setTimeout(() => {
+    if (activeRecorder === recorder) recorder.stop();
+  }, MAX_RECORDING_SECONDS * 1000);
+
+  recorder.addEventListener("stop", async () => {
+    clearTimeout(autoStopTimer);
+    stream.getTracks().forEach((track) => track.stop());
+    activeRecorder = null;
+    micButton.classList.remove("recording");
+
+    const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
+    if (blob.size === 0) return; // stopped before any audio was captured
+
+    const goalInput = document.querySelector("#new-goal-input");
+    micButton.disabled = true;
+    goalInput.disabled = true;
+    const priorValue = goalInput.value;
+    const priorPlaceholder = goalInput.placeholder;
+    goalInput.value = "";
+    let dots = 0;
+    goalInput.placeholder = "Transcribing";
+    const dotTimer = setInterval(() => {
+      dots = (dots + 1) % 4;
+      goalInput.placeholder = "Transcribing" + ".".repeat(dots);
+    }, 400);
+    try {
+      const durationSeconds = (Date.now() - recordingStartedAt) / 1000;
+      const form = new FormData();
+      form.set("audio", blob, "clip");
+      form.set("duration_seconds", String(durationSeconds));
+      const res = await withStatus("Transcribing…", () =>
+        fetch(`${WEBSITE_BASE_URL}/api/voice/transcribe`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${currentSessionToken}` },
+          body: form,
+        }),
+      );
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+      goalInput.value = payload.text || priorValue;
+    } catch (err) {
+      console.error("voice transcribe failed", err);
+      errorEl.textContent = `Couldn't transcribe that: ${err}`;
+      goalInput.value = priorValue;
+    } finally {
+      clearInterval(dotTimer);
+      goalInput.placeholder = priorPlaceholder;
+      goalInput.disabled = false;
+      micButton.disabled = false;
+      goalInput.focus();
+    }
+  });
+
+  activeRecorder = recorder;
+  micButton.classList.add("recording");
+  micButton.setAttribute("aria-pressed", "true");
+  recorder.start();
+}
+
+micButton.addEventListener("click", () => {
+  if (activeRecorder) {
+    activeRecorder.stop();
+    micButton.setAttribute("aria-pressed", "false");
+  } else {
+    startVoiceRecording();
+  }
 });
 
 function openSkill(skill, { fade = false } = {}) {
@@ -1243,7 +1745,14 @@ function renderPath() {
       for (const sub of step.substeps) {
         const subRow = document.createElement("div");
         subRow.className = `substep-row origin-${sub.origin}`;
-        const preview = sub.origin === "user" ? sub.question : sub.target_description;
+        // instruction_text, not target_description: target_description is
+        // plan_step's plain-text locate target ("the 'Yes, I trust the
+        // authors' button in the Workspace Trust popup dialog (if it
+        // appears)") — accurate for the vision call, but a verbose,
+        // hedge-qualified sentence when used as a row's name. This is
+        // also what the chat view shows once you open the row, so the
+        // preview now says the same thing you see next.
+        const preview = sub.origin === "user" ? sub.question : sub.instruction_text;
         subRow.innerHTML = `
           <span class="substep-dot"></span>
           <span class="substep-text">
@@ -1277,8 +1786,28 @@ function renderPath() {
 
 // ---------- Chat / step view ----------
 
+// Set whenever openStep is given a specific substep id (a row clicked in
+// the step's substep-list preview) — narrows the chat view to just that
+// one substep's own thread (renderChatParts). null when opened via the
+// step's "Open chat →" button instead, which still shows every substep.
+let chatScopeSubstepId = null;
+
 function openStep(step, scrollToSubstepId) {
   currentStep = step;
+
+  if (scrollToSubstepId) {
+    const clicked = step.substeps.find((s) => s.id === scrollToSubstepId);
+    // A "You asked" row scopes to the AI substep it replied to — that's
+    // the thread this question belongs to — rather than to itself, which
+    // no AI substep would ever match and would render an empty view.
+    chatScopeSubstepId = clicked?.origin === "user" ? (clicked.respondingTo ?? null) : scrollToSubstepId;
+    // A typed follow-up should land on the substep you actually opened,
+    // not whatever resolveRespondingTo's "last AI substep" fallback picks.
+    if (chatScopeSubstepId) focusedSubstepId = chatScopeSubstepId;
+  } else {
+    chatScopeSubstepId = null;
+  }
+
   renderChat();
   showView("chat");
 
@@ -1286,48 +1815,6 @@ function openStep(step, scrollToSubstepId) {
     const el = document.querySelector(`[data-substep-id="${scrollToSubstepId}"]`);
     if (el) el.scrollIntoView({ block: "center" });
   }
-}
-
-// A schematic box, not a real overlay: a small diagram (aspect-ratio
-// matched to the reference resolution the coordinates were produced at)
-// with a red rectangle at the proportional position of last_known_bbox.
-// Nothing is drawn on the real screen — see the file-header comment.
-function schematicHtml(bbox) {
-  const w = bbox.image_width;
-  const h = bbox.image_height;
-  const leftPct = (bbox.x0 / w) * 100;
-  const topPct = (bbox.y0 / h) * 100;
-  const widthPct = ((bbox.x1 - bbox.x0) / w) * 100;
-  const heightPct = ((bbox.y1 - bbox.y0) / h) * 100;
-  return `
-    <div class="schematic" style="aspect-ratio: ${w} / ${h}">
-      <div class="schematic-box" style="left:${leftPct}%; top:${topPct}%; width:${widthPct}%; height:${heightPct}%"></div>
-    </div>
-    <div class="schematic-caption">Roughly where this sits on a ${w}×${h} screen — not drawn on your real screen.</div>
-  `;
-}
-
-// Three actions per substep, all icon-only (icons.js — the shared pool):
-//
-// - eye (EyeIcon/EyeOffIcon): draws the real on-screen overlay for this
-//   substep — a highlight box plus the instruction as a text callout,
-//   positioned over the actual target app (see overlay.js). Toggles, and
-//   only one substep can be shown at a time, so pressing a second one
-//   moves the overlay rather than stacking two boxes.
-// - target (TargetIcon): runs a live locate_element to recompute the bbox
-//   against the window's *current* size, so a stale box after a resize is
-//   one press away from correct (see the CaptureScope re-resolve in
-//   lib.rs).
-// - note (NoteIcon): the in-panel schematic — kept as the fallback for
-//   when the real overlay can't draw (no live window rect on this
-//   platform, e.g. a Wayland session on GNOME/KDE), and as a quick
-//   "roughly where" that doesn't take over the screen.
-//
-// User-asked substeps (sendChatMessage) carry `question`, not
-// `target_description` — that's what locate_element needs as its plain-
-// text target either way, so fall back to it.
-function locateTarget(sub) {
-  return sub.target_description || sub.question || "";
 }
 
 // Everything Research/plan_step already knows about this step, folded
@@ -1355,9 +1842,6 @@ function locateContext(sub) {
   return lines.length > 0 ? lines.join("\n") : null;
 }
 
-// Which substep's overlay is currently on screen, if any.
-let overlaidSubstepId = null;
-
 // Which AI substep a typed-in-the-box follow-up question will attach to
 // (see docs/features/skills.md's reactive-substep scoping, resolved
 // 2026-08-29). Set by clicking a substep bubble, or implicitly by "Ask
@@ -1371,31 +1855,12 @@ let focusedSubstepId = null;
 // something left on and forgotten for the next one.
 let includeScreenshotForNextQuestion = false;
 
-function actionsHtml(sub) {
-  const eye = sub.last_known_bbox
-    ? `<button class="bubble-icon-btn" data-overlay="${sub.id}" type="button" title="Show on my real screen">${
-        overlaidSubstepId === sub.id ? EyeOffIcon({ size: 15 }) : EyeIcon({ size: 15 })
-      }</button>`
-    : "";
-  const locate = locateTarget(sub)
-    ? `<button class="bubble-icon-btn" data-locate="${sub.id}" type="button" title="Find this on screen now">${TargetIcon({ size: 15 })}</button>`
-    : "";
-  const schematic = sub.last_known_bbox
-    ? `<button class="bubble-icon-btn" data-show="${sub.id}" type="button" title="Show a rough diagram instead">${NoteIcon({ size: 15 })}</button>`
-    : "";
-  if (!eye && !locate && !schematic) return "";
-  return `<div class="bubble-actions">${eye}${locate}${schematic}</div>`;
-}
-
 // "Check my work" — a manual, per-substep AI verify against
 // expected_outcome (plan_step's own field, see plan_step.py). Absolute
 // checks only for now ("Exposure ≈ +0.5"); a relative/before-after check
 // would need a screenshot at the substep's *start*, which contradicts
 // Verify's whole premise that a screenshot only happens on this button
 // press — deferred to BL-011 in docs/BACKLOG.md rather than solved here.
-// Separate from the eye/target/note icon row above: this one costs an
-// API call and changes what's shown below it, so it's a labeled button,
-// not an icon.
 function verifyHtml(sub) {
   if (!sub.expected_outcome) return "";
   const button = `<button class="bubble-verify-btn" data-verify="${sub.id}" type="button">${CheckIcon({
@@ -1407,32 +1872,30 @@ function verifyHtml(sub) {
   const askHelp = matches
     ? ""
     : `<button class="verify-ask-help" data-ask-help="${sub.id}" type="button">Ask for help</button>`;
+  // Verdict leads, expected/observed follows as the one-line reasoning
+  // behind it — not two labeled rows ahead of the verdict they explain.
   return `
     ${button}
     <div class="verify-result ${matches ? "match" : "mismatch"}">
-      <div class="verify-result-row">
-        <span class="verify-result-label">Expected</span>
-        <span>${sub.expected_outcome}</span>
-      </div>
-      <div class="verify-result-row">
-        <span class="verify-result-label">Observed</span>
-        <span>${observed}</span>
-      </div>
       <div class="verify-result-verdict">${matches ? "✓ Looks right" : "✗ Doesn't match yet"}</div>
+      <div class="verify-result-reasoning">Expected ${sub.expected_outcome} — saw ${observed}</div>
       ${askHelp}
     </div>
   `;
 }
 
+// target_description isn't shown here — it's what plan_step wrote to
+// describe *where* the target is for the vision call (locateContext,
+// answerContext), and instruction_text almost always says the same thing
+// in the form a person reads ("Click 'Yes, I trust the authors'..." vs.
+// "the 'Yes, I trust the authors' button in the ... dialog"). Showing
+// both read as the same sentence twice.
 function substepBubbleHtml(sub) {
   if (sub.origin === "ai") {
     return `
       <div class="bubble-ai" data-substep-id="${sub.id}">
-        <div class="bubble-target">${sub.target_description}</div>
         <div class="bubble-instruction">${sub.instruction_text}</div>
-        ${actionsHtml(sub)}
         ${verifyHtml(sub)}
-        <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     `;
   }
@@ -1441,32 +1904,10 @@ function substepBubbleHtml(sub) {
       <div class="bubble-question">${sub.question}</div>
       <div class="bubble-answer">
         <div class="bubble-instruction">${sub.instruction_text}</div>
-        ${actionsHtml(sub)}
         ${verifyHtml(sub)}
-        <div class="schematic-slot" data-slot="${sub.id}"></div>
       </div>
     </div>
   `;
-}
-
-// Sends this substep's bbox + copy to the overlay window, which owns all
-// the coordinate math and the re-poll that keeps the box glued to the
-// target window as it moves (see overlay.js's file header).
-async function showOverlayFor(sub) {
-  overlaidSubstepId = sub.id;
-  await emit("tutoria:show-overlay", {
-    bbox: sub.last_known_bbox,
-    targetDescription: sub.target_description ?? "",
-    instructionText: sub.instruction_text ?? "",
-  });
-  renderChat();
-}
-
-async function hideOverlay() {
-  if (overlaidSubstepId === null) return;
-  overlaidSubstepId = null;
-  await emit("tutoria:hide-overlay");
-  renderChat();
 }
 
 // Groups each reactive (pink) substep under the AI substep it's tied to
@@ -1475,6 +1916,12 @@ async function hideOverlay() {
 // `respondingTo` — a legacy substep from before this existed, or one
 // whose target substep is somehow gone — falls back to rendering at the
 // end, same as the old behavior, rather than silently vanishing.
+//
+// When chatScopeSubstepId is set (opened from one substep-list row, not
+// the step's "Open chat →" button), only that one AI substep and its own
+// replies render — every other substep in the step is left out entirely,
+// not just scrolled past, per the request that clicking one substep opens
+// a dialog for that substep alone.
 function renderChatParts() {
   const subs = currentStep.substeps;
   const repliesByTarget = new Map();
@@ -1490,15 +1937,22 @@ function renderChatParts() {
     }
   }
 
+  const aiSubs = subs.filter(
+    (s) => s.origin === "ai" && (!chatScopeSubstepId || s.id === chatScopeSubstepId),
+  );
+
   const parts = [];
-  for (const sub of subs) {
-    if (sub.origin !== "ai") continue;
+  for (const sub of aiSubs) {
     parts.push(substepBubbleHtml(sub));
     for (const reply of repliesByTarget.get(sub.id) ?? []) {
       parts.push(`<div class="bubble-reply">${substepBubbleHtml(reply)}</div>`);
     }
   }
-  for (const reply of orphanReplies) parts.push(substepBubbleHtml(reply));
+  // Orphan replies have no substep of their own to scope under, so they
+  // only make sense in the whole-step view.
+  if (!chatScopeSubstepId) {
+    for (const reply of orphanReplies) parts.push(substepBubbleHtml(reply));
+  }
   return parts.join("");
 }
 
@@ -1509,57 +1963,11 @@ function renderChat() {
   body.querySelectorAll(".bubble-ai").forEach((el) => {
     el.classList.toggle("focused", el.dataset.substepId === focusedSubstepId);
     el.addEventListener("click", (e) => {
-      // Don't steal focus from a click that was actually on one of the
-      // bubble's own action buttons (eye/target/note/verify).
+      // Don't steal focus from a click that was actually on the bubble's
+      // own verify button.
       if (e.target.closest("button")) return;
       focusedSubstepId = el.dataset.substepId;
       renderChat();
-    });
-  });
-
-  body.querySelectorAll("[data-overlay]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.overlay);
-      if (!sub || !sub.last_known_bbox) return;
-      if (overlaidSubstepId === sub.id) hideOverlay();
-      else showOverlayFor(sub);
-    });
-  });
-
-  body.querySelectorAll("[data-show]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.show);
-      if (!sub || !sub.last_known_bbox) return;
-      const slot = body.querySelector(`[data-slot="${sub.id}"]`);
-      slot.innerHTML = slot.innerHTML ? "" : schematicHtml(sub.last_known_bbox);
-    });
-  });
-
-  body.querySelectorAll("[data-locate]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const sub = currentStep.substeps.find((s) => s.id === btn.dataset.locate);
-      if (!sub) return;
-      btn.disabled = true;
-      btn.classList.add("busy");
-      try {
-        sub.last_known_bbox = await invoke("locate_element", {
-          target: locateTarget(sub),
-          scope: currentCaptureScope(),
-          context: locateContext(sub),
-        });
-        // Already-visible overlay for this substep should jump to the new
-        // box rather than keep showing the old one.
-        if (overlaidSubstepId === sub.id) await showOverlayFor(sub);
-        else renderChat();
-      } catch (err) {
-        btn.classList.remove("busy");
-        btn.classList.add("failed");
-        btn.title = `Couldn't locate: ${err}`;
-        setTimeout(() => {
-          btn.classList.remove("failed");
-          btn.disabled = false;
-        }, 2500);
-      }
     });
   });
 
@@ -1742,4 +2150,4 @@ listen("tutoria:quit", () => getCurrentWindow().close());
 // can't be rendered correctly until this resolves.
 initCaptureBackend();
 loadPersistedSkills();
-fitWindow("login");
+restoreSession();

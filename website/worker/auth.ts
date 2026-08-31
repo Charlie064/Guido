@@ -1,18 +1,39 @@
+import type { createAuth } from "./better-auth";
+
 export type Plan = "free" | "starter" | "plus" | "owner";
 export type MembershipStatus = "active" | "expired";
+
+// The Workers rate-limiting binding. Declared here rather than pulled in
+// from @cloudflare/workers-types, which this project doesn't install —
+// the worker's .ts is bundled by esbuild, which strips types without
+// checking them, so the ambient globals below (Fetcher, D1Database) are
+// already unchecked and one more local shape costs nothing.
+export interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
 
 export interface Env {
   ASSETS: Fetcher;
   DB: D1Database;
-  GOOGLE_CLIENT_ID?: string;
-  GOOGLE_CLIENT_SECRET?: string;
+  BETTER_AUTH_SECRET: string;
+  OWNER_EMAILS?: string;
+  // Set with `wrangler secret put AQUA_VOICE_API_KEY` — never in `vars`,
+  // never in the repo, and never shipped to the desktop app. See
+  // worker/voice.ts and docs/features/voice.md.
+  AQUA_VOICE_API_KEY?: string;
+  VOICE_LIMITER: RateLimit;
+  // Set with `wrangler secret put ANTHROPIC_API_KEY` — never in `vars`,
+  // never in the repo, and never shipped to the desktop app. See
+  // worker/vision.ts and docs/features/vision.md.
+  ANTHROPIC_API_KEY?: string;
+  VISION_LIMITER: RateLimit;
 }
 
 export interface MembershipRow {
+  user_id: string;
   email: string;
   plan: Plan;
   status: MembershipStatus;
-  user_id: number;
 }
 
 export function corsHeaders(): HeadersInit {
@@ -29,7 +50,10 @@ export function json(data: unknown, status = 200): Response {
 
 export function includedFor(plan: Plan): number | null {
   if (plan === "owner") return null;
-  if (plan === "free") return 5;
+  // Free: 1 new skill, lifetime — changed 2026-08-29 from the 5 docs/business/pricing.md
+  // originally specified, at Charlie's request. Update that doc's "Is 5 a
+  // reasonable free trial?" section to match if this sticks.
+  if (plan === "free") return 1;
   return 30;
 }
 
@@ -37,57 +61,66 @@ export function canSaveSkills(plan: Plan): boolean {
   return plan === "plus" || plan === "owner";
 }
 
-export function parseLoopback(raw: string | null): string | null {
-  if (!raw) return null;
-  let parsed: URL;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return null;
-  }
-  if (parsed.protocol !== "http:") return null;
-  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") return null;
-  if (parsed.pathname !== "/callback") return null;
-  return `${parsed.origin}${parsed.pathname}`;
-}
-
-function bytesToBase64Url(buf: Uint8Array): string {
-  let binary = "";
-  for (const byte of buf) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export async function sha256Base64Url(plain: string): Promise<string> {
-  const data = new TextEncoder().encode(plain);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return bytesToBase64Url(new Uint8Array(hash));
-}
-
-export function randomUrlToken(byteCount = 32): string {
-  const buf = new Uint8Array(byteCount);
-  crypto.getRandomValues(buf);
-  return bytesToBase64Url(buf);
-}
-
+// Sums `cost` rather than counting rows: pricing.md's canonical model
+// charges a flat 1 per new skill (no per-step/per-locate metering, so
+// every /api/skills/start call today passes cost=1) — the column exists
+// so a future variable-cost skill doesn't need a schema change, not
+// because anything charges more than 1 yet.
 export async function countSkillRuns(
   db: D1Database,
-  userId: number,
+  userId: string,
   plan: Plan,
 ): Promise<number> {
   if (plan === "free") {
     const row = await db
-      .prepare("SELECT COUNT(*) AS n FROM skill_runs WHERE user_id = ?")
+      .prepare("SELECT COALESCE(SUM(cost), 0) AS n FROM skill_runs WHERE user_id = ?")
       .bind(userId)
       .first<{ n: number }>();
     return Number(row?.n ?? 0);
   }
   const row = await db
     .prepare(
-      "SELECT COUNT(*) AS n FROM skill_runs WHERE user_id = ? AND created_at >= date('now', 'start of month')",
+      "SELECT COALESCE(SUM(cost), 0) AS n FROM skill_runs WHERE user_id = ? AND created_at >= date('now', 'start of month')",
     )
     .bind(userId)
     .first<{ n: number }>();
   return Number(row?.n ?? 0);
+}
+
+// Free is a one-shot lifetime trial (mirrors countSkillRuns's free-plan
+// branch above), not a monthly allowance — a free account that used its
+// trial last month shouldn't get a fresh one this month. Paid plans keep
+// the calendar-month window, since voice.ts's cap there is a recurring
+// cost-control measure rather than a trial.
+export async function voiceSecondsUsed(db: D1Database, userId: string, plan: Plan): Promise<number> {
+  if (plan === "free") {
+    const row = await db
+      .prepare("SELECT COALESCE(SUM(duration_seconds), 0) AS s FROM voice_transcriptions WHERE user_id = ?")
+      .bind(userId)
+      .first<{ s: number }>();
+    return Number(row?.s ?? 0);
+  }
+  const row = await db
+    .prepare(
+      "SELECT COALESCE(SUM(duration_seconds), 0) AS s FROM voice_transcriptions WHERE user_id = ? AND created_at >= date('now', 'start of month')",
+    )
+    .bind(userId)
+    .first<{ s: number }>();
+  return Number(row?.s ?? 0);
+}
+
+// Sum of vision_calls.cost_micro_usd this calendar month — see
+// PLAN_CEILING_MICRO_USD (vision.ts), a per-plan $ ceiling like skill
+// quotas rather than voice's single flat cap, since vision cost varies
+// far more by call kind (research's web search vs. a plain verify).
+export async function visionCostUsedMicroUsd(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      "SELECT COALESCE(SUM(cost_micro_usd), 0) AS c FROM vision_calls WHERE user_id = ? AND created_at >= date('now', 'start of month')",
+    )
+    .bind(userId)
+    .first<{ c: number }>();
+  return Number(row?.c ?? 0);
 }
 
 export function remainingFor(plan: Plan, used: number): number | null {
@@ -96,22 +129,24 @@ export function remainingFor(plan: Plan, used: number): number | null {
   return Math.max(0, included - used);
 }
 
+// Validates the `Authorization: Bearer <token>` header via Better Auth's
+// own session lookup (the bearer plugin — see better-auth.ts), then joins
+// to our own `memberships` table by the session's user id. Returns null
+// for a missing/expired/invalid token or a user with no active
+// membership row, same as the old Google-only membershipFromBearer did.
 export async function membershipFromBearer(
+  auth: ReturnType<typeof createAuth>,
   request: Request,
   db: D1Database,
 ): Promise<MembershipRow | null> {
-  const header = request.headers.get("Authorization") ?? "";
-  const match = /^Bearer\s+(\S+)$/i.exec(header);
-  if (!match) return null;
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return null;
 
-  return db
-    .prepare(
-      `SELECT users.id AS user_id, users.email AS email, memberships.plan AS plan, memberships.status AS status
-       FROM sessions
-       JOIN users ON users.id = sessions.user_id
-       JOIN memberships ON memberships.user_id = users.id
-       WHERE sessions.token = ? AND sessions.expires_at > datetime('now') AND memberships.status = 'active'`,
-    )
-    .bind(match[1])
-    .first<MembershipRow>();
+  const row = await db
+    .prepare("SELECT plan, status FROM memberships WHERE user_id = ? AND status = 'active'")
+    .bind(session.user.id)
+    .first<{ plan: Plan; status: MembershipStatus }>();
+  if (!row) return null;
+
+  return { user_id: session.user.id, email: session.user.email, plan: row.plan, status: row.status };
 }

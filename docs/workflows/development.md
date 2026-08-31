@@ -216,6 +216,30 @@ that specific call normally takes.
   Then open `/tmp/shot.png` — a blank or black image means the frame grab
   failed even though the portal handshake worked.
 
+## Releasing the desktop app
+
+Push a version tag; CI builds installers and attaches them to the GitHub
+Release under fixed names:
+
+```sh
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+Release CI lives on `claudev/charlie/website-download-button`
+(`.github/workflows/release.yml`), not on this branch, and uploads
+`Guido_mac.dmg`, `Guido_windows.exe`, and `Guido_linux.AppImage`. Those
+names are load-bearing — `website/src/Download.jsx` links to
+`github.com/Charlie064/Guido/releases/latest/download/<name>`.
+
+Installed apps check for updates once per launch (`checkForUpdate` at the
+bottom of `sidebar.js`) via Tauri's `updater` plugin, comparing against
+`latest.json` at `releases/latest/download/` — see
+`website-download-button`'s copy of this doc for how that pipeline (app
+versioning, the signing keypair, the JS updater shim) actually works;
+this branch only consumes the resulting release URLs, it doesn't build
+them.
+
 ### 4. Website (Cloudflare Workers + D1)
 
 Scope owned by Pauline — see [website-v0.md](../planning/website-v0.md).
@@ -232,14 +256,25 @@ npm run dev
 `npm run dev` is the Vite landing page (Pauline’s Guido site) at
 `http://localhost:5173`. API routes live on the Worker — in another
 terminal run `npm run dev:api` (`wrangler dev` on :8787). Vite proxies
-`/api` and `/auth` to that port so the waitlist form works.
+`/api`, `/auth`, and `/internal` to that port so the waitlist form and
+the waitlist admin work.
 
 `npm run build` writes the SPA to `website/dist/`. `npm run deploy`
 builds then runs `wrangler deploy`, which serves `dist/` as assets plus
-`worker/index.ts`. Browser navigations to `/api/*` and `/auth/*` run
-the Worker first (`run_worker_first` in `wrangler.jsonc`) so the SPA
-fallback does not swallow Google login. **No Cloudflare login needed for local `dev` /
-`dev:api`** — `wrangler dev` uses local D1.
+`worker/index.ts`. Browser navigations to `/api/*`, `/auth/*`, and
+`/internal/*` run the Worker first (`run_worker_first` in
+`wrangler.jsonc`) so the SPA fallback does not swallow Google login or
+the waitlist admin. Desktop Better Auth (`/api/auth/*`) and Aqua Voice
+(`/api/voice/transcribe`) also run on this Worker. **No Cloudflare
+login needed for local `dev` / `dev:api`** — `wrangler dev` uses local D1.
+
+`GET /internal/waitlist` (and `GET /internal/waitlist/export` for CSV)
+is served by the Worker, not the React app, and is not linked from the
+public site. Localhost is open. On `guidotutor.com` / `workers.dev` the
+Worker returns 404 unless Cloudflare Access set
+`Cf-Access-Authenticated-User-Email`. Put Access in front of
+`/internal/waitlist*` before relying on the live URL. Locally, open
+`http://localhost:8787/internal/waitlist` on `wrangler dev`.
 
 **If you built your site separately** (your own localhost project, not
 started from this scaffold), bringing it in is a copy, not a rewrite:
@@ -249,9 +284,24 @@ The live landing page is Pauline’s Guido Vite app in `website/src/`
 `privacy.html`) go in `website/public/`. The Worker is
 `website/worker/index.ts`; on deploy it serves `website/dist/`.
 
-**Keep the waitlist working:** the footer form in `website/src/Landing.jsx`
-POSTs JSON to `/api/waitlist`. The Worker validates and inserts into D1
-(`worker/index.ts` + `migrations/0001_create_waitlist.sql`).
+**Keep the waitlist working:** the header and bottom “Join the waitlist”
+buttons open the multi-step glass modal (`website/src/Waitlist.jsx`).
+**Download** (header + bottom) opens Charlie's platform modal
+(`website/src/Download.jsx`) and hits the latest GitHub Release assets.
+`/waitlist?ref=` opens the same overlay. `/pricing` is the same chrome
+plus Free and Guido Pro cards; those CTAs open the waitlist, not
+a download. Desktop Upgrade/Manage opens `/pricing.html` (Charlie's
+Free/Starter/Plus billing copy) so the static file does not steal the
+public `/pricing` route. Assets use `html_handling: none` for that. `GET /api/geo` returns `{ country }` from Cloudflare so
+Guido Pro can show a local sticker converted from €7.99. It POSTs JSON (`name`,
+`email`, `apps`, `appsOther`, `role`, `ref`) to `/api/waitlist`. The
+Worker validates and inserts into D1 (`worker/index.ts` +
+`migrations/0001_create_waitlist.sql`,
+`0003_add_waitlist_profile_fields.sql`, and
+`0004_waitlist_apps_and_referral.sql`). Desktop Better Auth / quota
+tables live in `0002_create_auth_and_quotas.sql`; Aqua Voice usage is
+`0005_create_voice_usage.sql`. Do not add Next.js, Framer Motion, or
+Supabase — the site stays Vite + the existing Worker.
 
 Local D1 migrations (only needed once, or after a schema change):
 
@@ -259,15 +309,15 @@ Local D1 migrations (only needed once, or after a schema change):
 npm run db:migrate:local
 ```
 
-Google login (desktop loopback + Worker) lives on the same Worker:
-branded `/login` (Guido fonts/buttons), then `/auth/google/start`,
-`/auth/google/callback`, `/api/me`, `/api/skills/start`. Copy `website/.dev.vars.example` to
-`website/.dev.vars` and fill `GOOGLE_CLIENT_ID` /
-`GOOGLE_CLIENT_SECRET`. Register the exact callback
-`http://localhost:8787/auth/google/callback` (local) or
-`https://tutoria-website.guidotutor.workers.dev/auth/google/callback`
-(production) on the Google OAuth client. The privacy policy Google
-requires is `website/public/privacy.html` (`/privacy.html`). Quota
+Desktop login is Better Auth email+password on this same Worker
+(`/api/auth/*`, `/api/me`, `/api/skills/start`, `/api/voice/transcribe`) —
+see [features/auth.md](../features/auth.md). Copy
+`website/.dev.vars.example` to `website/.dev.vars` and fill
+`BETTER_AUTH_SECRET` (`npx auth secret` or `openssl rand -base64 32`).
+The public site stays waitlist chrome: branded `/login` is a pointer
+back to the desktop app, not a second download landing. Privacy is
+`website/public/privacy.html` (`/privacy.html`). Terms are
+`website/public/terms.html` (`/terms.html`). Quota
 rules are in [business/pricing.md](../business/pricing.md).
 
 Deploying live:
@@ -276,7 +326,24 @@ Deploying live:
 npm run deploy
 ```
 
-This needs `wrangler login` once, and needs you to actually be a member
+A Vercel static deploy of `website/` is optional (`website/vercel.json`).
+It serves the same Vite app; `/api` and `/auth` rewrite to
+`https://guidotutor.com` so the waitlist still writes D1. The live
+product host is Cloudflare, not Vercel.
+
+Production is `https://guidotutor.com` (and `www`) on the Tutoria
+Cloudflare account, via custom domains on the `tutoria-website` Worker.
+**Production must stay the waitlist Worker** from
+`claudev/quentin/glass-waitlist` (Join the waitlist top-right, Usecases,
+working `/pricing` with Free + Guido Pro, first-visit intro). That
+Worker also carries Charlie's Better Auth, quota, and Aqua Voice
+routes for the desktop app. Do not `npm run deploy` from `main`, from
+`claudev/charlie/desktop-google-login`, or from any download-landing
+tree — that overwrites `tutoria-website` for everyone and puts
+"Download for free" back on guidotutor.com. Charlie's Stripe checkout
+lives on the desktop branch; it is not the public marketing site.
+`npm run deploy` attaches those hostnames from `wrangler.jsonc`. This
+needs `wrangler login` once, and needs you to actually be a member
 of the Tutoria Cloudflare account — invites went out 2026-08-29 (see
 [reference/team.md](../reference/team.md)); check your email/spam if you
 haven't accepted yours yet.

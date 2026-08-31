@@ -6,10 +6,12 @@
   owns “monthly subscription”; this file owns the four `plan` values
   and what each unlocks.
 - D1 `memberships.plan`: `free` | `starter` | `plus` | `owner`.
-  `status`: `active` | `expired`. New Google users start as `free` /
-  `active`. MVP: set `plan` by hand in D1 — no Stripe yet. Starter
-  overage (Claude-style) is specified here; wiring meters + charges is
-  a follow-up to [login-membership-plan.md](../planning/login-membership-plan.md).
+  `status`: `active` | `expired`. New accounts start as `free` /
+  `active` (or `owner` if their email is on the `OWNER_EMAILS` allowlist)
+  — see [features/auth.md](../features/auth.md). MVP: set `plan` by hand
+  in D1 for `starter`/`plus` — no Stripe yet. Starter overage
+  (Claude-style) is specified here; wiring meters + charges is a
+  follow-up.
 - Quota unit is a **new skill** (one goal → one Research + the locates
   for that run), not a raw locate. Skill persistence is owned by
   [features/skills.md](../features/skills.md); this file only says
@@ -24,7 +26,11 @@ why save is the Plus unlock, not extra locates.
 
 ### Is 5 a reasonable free trial?
 
-**Yes — if 5 means 5 complete new skills, not 5 locates or 5 steps.**
+Originally scoped as 5 — see the reasoning below — but tightened to
+**1 new skill, lifetime** in `worker/auth.ts`'s `includedFor()` at
+Charlie's request (2026-08-29). The 5-skill reasoning is kept here since
+it's still the right way to think about the unit; only the number
+changed.
 
 - 5 locates ≈ one step. Not enough to judge the product.
 - 5 steps ≈ one tutorial. Enough for a single sitting, thin if they
@@ -34,14 +40,15 @@ why save is the Plus unlock, not extra locates.
   feel Goal → Research → See → Guide more than once.
 
 Lifetime, not monthly: this is “try the feature,” not a perpetual
-hobby tier. After 5, the app stops new Research and points at Starter.
+hobby tier. After the free allowance, the app stops new Research and
+points at Starter.
 
 ### `free` — Simple
 
-- **5 new skills, lifetime.** Hard stop after that. No overage.
+- **1 new skill, lifetime.** Hard stop after that. No overage.
 - **No saved skills.** The path exists for the session; it is not in
   the skills list after quit (persistence is a Plus/Owner feature).
-- `plan=free`, `status=active` until the 5th skill completes, then
+- `plan=free`, `status=active` until the 1st skill completes, then
   still `free` / `active` but `/api/me` reports `skills_remaining: 0`.
 
 ### `starter`

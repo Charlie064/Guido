@@ -11,3 +11,5 @@ supersedes it and note the supersession in both files.
 - [0004 — Cloudflare for hosting, domain, database, and account validation](0004-cloudflare-infrastructure-proposal.md)
 - [0005 — Window-anchored coordinates for a future real overlay](0005-window-anchored-overlay-coordinates.md)
 - [0006 — Restore the real on-screen overlay, click-through set once](0006-restore-real-on-screen-overlay.md)
+- [0007 — Desktop portal as the capture and window-pick backend on Wayland](0007-portal-capture-backend-wayland.md)
+- [0008 — Better Auth email+password, not Google OAuth](0008-better-auth-email-password.md)
