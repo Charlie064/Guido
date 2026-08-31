@@ -11,24 +11,35 @@ See [planning/overnight-2026-08-30-release-and-verify.md](docs/planning/overnigh
 for the full plan and branch survey this graduated from — delete that doc
 once this section and the actual release supersede it.
 
-- **`claudev/charlie/env-cleanup` is release-ready, not pushed.** Now 12
-  commits past `v0.1.5-rc1` (a prerelease that already built successfully
-  on macOS/Windows/Linux runners in CI — confirmed via `gh run list`,
-  not assumed). Picked up two small fixes from otherwise-superseded
-  branches: `portal-window-capture-freeze`'s fix for window-scoped portal
-  captures stalling on idle windows, and `layer-shell-sidebar`'s BL-013
-  sidebar layer-shell promotion (resolved a real merge conflict in
-  `lib.rs`, `cargo check` clean after). A code review the same night
-  flagged that the cherry-pick had dropped BL-013's original "kept
-  isolated, not merged, unsure it works" caution — re-gated behind
-  `GUIDO_LAYER_SHELL_SIDEBAR=1` (unset by default) so the code ships
-  without changing any real Sway/Hyprland/KDE user's default behavior
-  until it's verified on real hardware; see BL-013 in
-  `docs/BACKLOG.md`. Version bumped to `0.1.6` in
+- **`claudev/charlie/env-cleanup` pushed; `v0.1.6-rc1` built successfully
+  in CI. Real `v0.1.6` tag still pending a human launch check.** Branch
+  picked up two small fixes from otherwise-superseded branches:
+  `portal-window-capture-freeze`'s fix for window-scoped portal captures
+  stalling on idle windows, and `layer-shell-sidebar`'s BL-013 sidebar
+  layer-shell promotion (resolved a real merge conflict in `lib.rs`,
+  `cargo check` clean after). A code review the same night found four
+  real bugs — all fixed and re-verified before push: the download-button
+  placeholder only covered one of three entry points (now all three go
+  through one `DownloadButton` component); `ensureCaptureScope()` didn't
+  handle a cancelled capture-source picker (now throws instead of passing
+  `scope: null` through); `portal_capture.py`'s buffer-count logic assumed
+  `source_type` is always present (now falls back safely on `position`);
+  and BL-013's cherry-pick had dropped its origin branch's "kept isolated,
+  unsure it works" caution — re-gated behind `GUIDO_LAYER_SHELL_SIDEBAR=1`
+  (unset by default). Version bumped to `0.1.6` in
   `tauri.conf.json`/`package.json` so a future real tag doesn't reuse
-  `0.1.5-rc1`'s number. **Not pushed, no tag cut, nothing deployed** — by
-  design, per this session's instructions; someone still needs to review
-  and push this branch, then tag a real release.
+  `0.1.5-rc1`'s number.
+  **`v0.1.6-rc1` (prerelease, doesn't touch `releases/latest/download/*`,
+  the live website, or any install's auto-updater) pushed and built
+  clean on all three OS runners** (confirmed via `gh run list` and
+  `gh release view v0.1.6-rc1` — `prerelease: true`, all five assets
+  present: `Guido_mac.dmg`, `Guido_mac.app.tar.gz`, `Guido_windows.exe`,
+  `Guido_linux.AppImage`, `latest.json`). **Not yet done: a human actually
+  launching the macOS build** — the specific thing this whole rc-first
+  approach exists to check, since the macOS launch failure that prompted
+  disabling the website's download button was never reconfirmed fixed.
+  Once that's confirmed, promote to a real `v0.1.6` tag (which *does* go
+  live to the website/auto-updater) and re-enable the download button.
 - **Website download button disabled, not deployed.** `Landing.jsx`'s
   desktop download now shows a static "coming soon" state instead of
   opening the platform-picker modal — Charlie recalled the macOS build
