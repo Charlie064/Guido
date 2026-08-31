@@ -112,9 +112,8 @@ async function callClaude(
 ): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs);
-  let res: Response;
   try {
-    res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -130,11 +129,33 @@ async function callClaude(
       }),
       signal: controller.signal,
     });
+
+    if (!res.ok) {
+      console.error("anthropic error", res.status, await res.text().catch(() => ""));
+      throw new Error(`Claude request failed (${res.status})`);
+    }
+
+    const data = await res.json<{
+      content: { type: string; text?: string }[];
+      usage: { input_tokens: number; output_tokens: number };
+    }>();
+
+    const textBlocks = data.content.filter((b) => b.type === "text").map((b) => (b.text ?? "").trim());
+    const joined = textBlocks.filter(Boolean).join("");
+    if (!joined) throw new Error("Claude returned no text (likely truncated by max_tokens)");
+
+    return { text: joined, inputTokens: data.usage.input_tokens, outputTokens: data.usage.output_tokens };
   } catch (err) {
     // AbortController's own error ("The operation was aborted") gives no
     // hint that this was a bounded timeout rather than a real crash —
     // callers (and whoever reads the resulting 502) need that distinction
     // to tell "Claude/network is slow" from "something is actually broken".
+    // This has to wrap the body read too (res.json()), not just fetch()
+    // itself — the timeout can just as easily fire while a large research
+    // response is still streaming in as while waiting on headers, and an
+    // abort there used to escape unwrapped as the raw "operation was
+    // aborted" message (the exact 502 this comment used to only guard
+    // against for the fetch() call).
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Claude request timed out after ${opts.timeoutMs / 1000}s`);
     }
@@ -142,22 +163,6 @@ async function callClaude(
   } finally {
     clearTimeout(timeout);
   }
-
-  if (!res.ok) {
-    console.error("anthropic error", res.status, await res.text().catch(() => ""));
-    throw new Error(`Claude request failed (${res.status})`);
-  }
-
-  const data = await res.json<{
-    content: { type: string; text?: string }[];
-    usage: { input_tokens: number; output_tokens: number };
-  }>();
-
-  const textBlocks = data.content.filter((b) => b.type === "text").map((b) => (b.text ?? "").trim());
-  const joined = textBlocks.filter(Boolean).join("");
-  if (!joined) throw new Error("Claude returned no text (likely truncated by max_tokens)");
-
-  return { text: joined, inputTokens: data.usage.input_tokens, outputTokens: data.usage.output_tokens };
 }
 
 // Ported from every script's identical "```json ... ```" stripping.
