@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
 import { BRAND, FLASH_BLUE, FLASH_PINK, Logo } from "./brand.jsx";
+import WaitlistOverlay from "./Waitlist.jsx";
 
 const MODE_COLORS = {
   teach: { accent: "#3B82F6", text: "#ffffff" }, // blue — Notion
@@ -444,6 +445,7 @@ export default function Landing() {
   const [shaking, setShaking] = useState(false);
   const [demoExpanded, setDemoExpanded] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
+  const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [touchPointer] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
   );
@@ -498,19 +500,28 @@ export default function Landing() {
             <a href="#demo" className="hover:text-black transition-colors">How it works</a>
             <a href="#works-with" className="hover:text-black transition-colors">Works with</a>
           </nav>
-          <button
-            type="button"
-            onClick={() => setDownloadOpen(true)}
-            className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
-            style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
-            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
-          >
-            Download
-            <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400 border border-black/15 rounded-full px-1.5 py-0.5">
-              Early access
-            </span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setWaitlistOpen(true)}
+              className="hidden sm:inline-flex items-center rounded-full font-semibold px-4 py-2 text-sm text-neutral-600 hover:text-black transition-colors"
+            >
+              Join waitlist
+            </button>
+            <button
+              type="button"
+              onClick={() => setDownloadOpen(true)}
+              className="inline-flex items-center gap-2 rounded-full font-semibold px-5 py-2 text-sm bg-white border border-black/15 text-[#0A0A0A] transition-all duration-200 hover:scale-105 hover:border-black/30"
+              style={{ boxShadow: "0 0 0 rgba(196,181,253,0)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 24px 6px rgba(196,181,253,0.35)")}
+              onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 0 rgba(196,181,253,0)")}
+            >
+              Download
+              <span className="text-[9px] font-bold uppercase tracking-wide text-neutral-400 border border-black/15 rounded-full px-1.5 py-0.5">
+                Early access
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -754,6 +765,8 @@ export default function Landing() {
           </div>
         </div>
       )}
+
+      <WaitlistOverlay open={waitlistOpen} onClose={() => setWaitlistOpen(false)} />
 
       {/* Footer */}
       <footer className="border-t border-black/[0.06]">
