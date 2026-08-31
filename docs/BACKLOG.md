@@ -251,50 +251,45 @@ point — this file should never pose as a source of truth for what's done.
   new in-app drag mechanism (distinct from the two already tried and
   rejected).
 - **BL-014 — Native capture-exclusion + always-on-top on macOS/Windows.**
-  **Linux/Wayland part superseded — see
-  [ADR 0009](decisions/0009-window-scoped-capture-excludes-sidebar.md).**
-  This entry originally claimed Linux had no path to drop the hide/show
-  dance ("no Wayland-portal equivalent to `WDA_EXCLUDEFROMCAPTURE` exists
-  for an ordinary client to call on itself") and would keep it
-  indefinitely. Measured and found incomplete: true that no explicit
-  exclusion API exists, but a `Window`-scoped portal capture on GNOME/
-  Wayland is already isolated from anything on top of it (tested 5/5 with
-  `spikes/vision-detect/test_window_isolation.py`), so no such API is
-  needed for that scope — the hide/show can be dropped there too, same as
-  macOS/Windows below. `Region`/`Monitor`-scoped captures still need it
-  (they composite the whole screen). Remaining scope of this item:
-  macOS/Windows native APIs below (still unverified — same test method
-  needs to be re-run against each), plus re-verifying Linux X11
-  (`XCompositeNameWindowPixmap`) and Hyprland/wlroots
-  (`hyprland-toplevel-export-v1`) the same way before trusting them
-  un-tested.
-
-  Both macOS and Windows have real OS APIs to keep Guido visibly pinned on
-  top *and* invisible to any screen capture at the same time — not a
-  trade-off between the two the way Linux/Wayland is:
-  - **Always-on-top**: plain `alwaysOnTop`, already the fallback path
-    `init_layer_shell`'s doc comment names for macOS/Windows (X11 too) —
-    unlike Wayland, these platforms let a client request top-of-stack
-    directly.
-  - **Capture exclusion**: macOS `NSWindow.sharingType = .none`; Windows
-    `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)` (10 2004+).
-    Both hide the window from screen recorders, video calls, and this
-    app's own capture calls, while it stays fully visible and interactive
-    on-screen for the user.
-  - Together these let macOS/Windows builds **drop the hide()/show()
-    dance entirely** (`sidebar.hide()`/`.show()` around every capture
-    site in `lib.rs` — `locate_element`, `verify_substep`,
-    `answer_question`, `identify_app`, `pick_portal_source`): no more
-    flicker, sidebar just never appears in a captured frame. **Outdated:
-    this paragraph previously said Linux keeps the hide/show approach
-    unconditionally — see the correction and ADR 0009 link above.** Linux
-    still has no `WDA_EXCLUDEFROMCAPTURE` equivalent for an ordinary
-    client, but `Window`-scoped portal capture doesn't need one; only
-    `Region`/`Monitor`-scoped Linux captures still require hide/show.
-  - Needs Tauri-side platform-conditional code (`#[cfg(target_os =
-    "macos")]` / `"windows"`), likely via `raw-window-handle` to reach
-    the native `NSWindow`/`HWND`, since neither is exposed by Tauri's
-    window API directly.
+  **Windows done, verified live (2026-08-31) — see `STATUS.md`.** Real OS
+  APIs keep Guido visibly pinned on top *and* invisible to any screen
+  capture at the same time (a screenshot, a screen recorder, a video call,
+  and this app's own capture calls) — not a trade-off between the two the
+  way Linux/Wayland is:
+  - **Windows**: `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`
+    (10 2004+), set once at startup (`exclude_sidebar_from_capture` in
+    `src-tauri/src/lib.rs`), never toggled.
+    `hide_for_capture`/`show_after_capture` (replacing every direct
+    `sidebar.hide()`/`.show()` call across `lib.rs` —
+    `locate_element`, `verify_substep`, `answer_question`, `identify_app`,
+    `pick_portal_source`) now no-op on Windows once that call is confirmed
+    to have actually succeeded (a runtime `CAPTURE_EXCLUDED` flag, not just
+    a platform check) — a failed call still falls back to the old
+    hide/show dance rather than silently leaving the sidebar always
+    visible in a capture. Verified: `cargo check`/`cargo test` clean, and
+    the hide/show flicker confirmed gone in the running app.
+  - **macOS**: written the same session (`NSWindow.setSharingType(.none)`
+    via a direct Objective-C message, since neither `NSWindow` nor `HWND`
+    is exposed by Tauri's window API as a typed binding) — same
+    set-once-at-startup pattern. **Unverified** — no macOS hardware in
+    this dev environment.
+  - **Always-on-top**: plain `alwaysOnTop` already covers both (and X11)
+    — unlike Wayland, these platforms let a client request top-of-stack
+    directly. No change needed here.
+  - **Linux/Wayland part superseded — see
+    [ADR 0009](decisions/0009-window-scoped-capture-excludes-sidebar.md).**
+    This entry originally claimed Linux had no path to drop the hide/show
+    dance at all. Measured and found incomplete: true that no explicit
+    exclusion API exists for an ordinary client, but a `Window`-scoped
+    portal capture on GNOME/Wayland is already isolated from anything on
+    top of it (tested 5/5 with
+    `spikes/vision-detect/test_window_isolation.py`), so hide/show can be
+    dropped for that one scope too — not yet coded. `Region`/`Monitor`-
+    scoped Linux captures still composite the whole screen and keep
+    needing hide/show indefinitely. Also still open: re-verifying Linux
+    X11 (`XCompositeNameWindowPixmap`) and Hyprland/wlroots
+    (`hyprland-toplevel-export-v1`) the same way before trusting them
+    un-tested.
 - **BL-015 — Require email verification before an account is usable.**
   Login switched from Google OAuth to Better Auth email+password
   (`website/worker/better-auth.ts`, decided 2026-08-29 to avoid Google's

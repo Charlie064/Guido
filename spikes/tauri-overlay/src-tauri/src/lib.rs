@@ -178,11 +178,94 @@ fn vision_command(dir: &std::path::Path, stem: &str) -> Command {
 
 // sidebar is the only real (non-click-through) window now — but a screen
 // *capture* still shouldn't see it, since it'd otherwise show up in the
-// exact frame sent to the vision model. Hiding it here, right around the
-// capture, rather than leaving it to each JS call site, keeps every caller
-// of this command correct automatically. show() runs even if capture/
-// locate fails, so a crashed call can't leave the sidebar permanently
-// hidden.
+// exact frame sent to the vision model. On Windows/macOS this is handled
+// once and for all at startup (see exclude_sidebar_from_capture) via a real
+// OS-level "invisible to any capture" flag, so hide_for_capture/
+// show_after_capture below become no-ops there once that flag is
+// confirmed set — nothing to hide, the window was never going to appear in
+// the frame regardless of on-top/z-order. Linux has no equivalent
+// client-side exclusion API for an ordinary window (BL-014 in
+// docs/BACKLOG.md) — see the ADR-0009 exception for portal Window-scoped
+// captures, which are naturally isolated instead — so it keeps actually
+// hiding the window right around the capture, same as before, rather than
+// leaving it to each JS call site to remember. show_after_capture runs
+// even if capture/locate fails, so a crashed call can't leave the sidebar
+// permanently hidden.
+//
+// Whether the OS-level exclusion actually took, not just whether we're on
+// a platform that offers it: if exclude_sidebar_from_capture's own API
+// call fails at runtime (an old Windows build predating the 2004 update,
+// some future AppKit change, ...), the sidebar isn't excluded from
+// anything, and silently no-op'ing hide/show on the strength of the
+// platform alone would leave it visible in every capture with no
+// fallback — worse than doing nothing. Set at most once, from run()'s
+// setup(); stays false forever on Linux, which never calls
+// exclude_sidebar_from_capture at all, so the two functions below fall
+// through to the real hide()/show() there automatically with no `#[cfg]`
+// needed on this flag itself.
+static CAPTURE_EXCLUDED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+fn hide_for_capture(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if CAPTURE_EXCLUDED.get().copied().unwrap_or(false) {
+        return Ok(());
+    }
+    window.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))
+}
+
+fn show_after_capture(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if CAPTURE_EXCLUDED.get().copied().unwrap_or(false) {
+        return Ok(());
+    }
+    window.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))
+}
+
+// Windows: SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) — makes the
+// window fully visible and interactive on the real screen but invisible to
+// any capture API (available since the Windows 10 2004/build 19041
+// update). Called once at startup (see run()'s setup()), never toggled:
+// same reasoning as the `overlay` window's click-through setting above —
+// a permanent flag has no stuck state to reach if a capture call panics or
+// is interrupted mid-flight, unlike a per-capture toggle that could leave
+// the sidebar wrongly hidden or wrongly excluded. UNVERIFIED beyond
+// `cargo check` — no Windows hardware in this dev environment to confirm
+// the window actually disappears from a real screenshot/recording.
+#[cfg(target_os = "windows")]
+fn exclude_sidebar_from_capture(window: &tauri::WebviewWindow) -> Result<(), String> {
+    // windows061, not window_provider.rs's plain `windows` — see Cargo.toml's
+    // comment on why tauri's own HWND needs the exact version it's pinned to.
+    use windows061::Win32::UI::WindowsAndMessaging::{SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE};
+
+    let hwnd = window.hwnd().map_err(|e| format!("couldn't get sidebar HWND: {e}"))?;
+    unsafe { SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) }
+        .map_err(|e| format!("SetWindowDisplayAffinity failed: {e}"))
+}
+
+// macOS: NSWindow.sharingType = .none (NSWindowSharingNone) — the same
+// trick password-manager-style apps use to keep a sensitive window out of
+// a screen share/recording while it stays fully visible and interactive
+// for the user. `ns_window()` hands back an `NSWindow*` as an opaque
+// pointer; `setSharingType:` sends the Objective-C message directly
+// (objc's msg_send!) since no typed AppKit binding for it is already in
+// the tree. Same "set once at startup, never toggle" reasoning as the
+// Windows path above. UNVERIFIED beyond `cargo check` — no macOS hardware
+// in this dev environment to confirm on real pixels.
+#[cfg(target_os = "macos")]
+fn exclude_sidebar_from_capture(window: &tauri::WebviewWindow) -> Result<(), String> {
+    use objc::runtime::Object;
+    use objc::{msg_send, sel, sel_impl};
+
+    let ns_window = window.ns_window().map_err(|e| format!("couldn't get sidebar NSWindow: {e}"))?;
+    if ns_window.is_null() {
+        return Err("sidebar NSWindow is null".to_string());
+    }
+    // NSWindowSharingNone = 0 (AppKit's NSWindow.h) — the type isn't worth
+    // pulling in a binding crate for one integer constant.
+    unsafe {
+        let _: () = msg_send![ns_window as *mut Object, setSharingType: 0isize];
+    }
+    Ok(())
+}
+
 // `async fn` + spawn_blocking, not a plain synchronous fn: a plain
 // #[tauri::command] runs inline on the IPC-invoke thread, which on this
 // platform is the same thread pumping the window's event loop — so a
@@ -219,7 +302,7 @@ fn locate_element_blocking(
     let sidebar = app
         .get_webview_window("sidebar")
         .expect("\"sidebar\" window declared in tauri.conf.json must exist");
-    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+    hide_for_capture(&sidebar)?;
 
     // For a Window scope, re-resolve the window's rect right now — never
     // trust whatever rect the caller cached from when it was picked. This
@@ -245,7 +328,7 @@ fn locate_element_blocking(
             let win = match window_provider::get_window_rect(&id) {
                 Ok(w) => w,
                 Err(e) => {
-                    let _ = sidebar.show();
+                    let _ = show_after_capture(&sidebar);
                     return Err(format!("selected window is no longer available: {e}"));
                 }
             };
@@ -260,7 +343,7 @@ fn locate_element_blocking(
         b
     });
 
-    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+    show_after_capture(&sidebar)?;
 
     result
 }
@@ -308,7 +391,7 @@ fn verify_substep_blocking(
     let sidebar = app
         .get_webview_window("sidebar")
         .expect("\"sidebar\" window declared in tauri.conf.json must exist");
-    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+    hide_for_capture(&sidebar)?;
 
     let mut portal_scope: Option<String> = None;
     let region = match scope {
@@ -321,7 +404,7 @@ fn verify_substep_blocking(
         Some(CaptureScope::Window { id }) => match window_provider::get_window_rect(&id) {
             Ok(w) => Some(Region { x: w.x, y: w.y, width: w.width, height: w.height }),
             Err(e) => {
-                let _ = sidebar.show();
+                let _ = show_after_capture(&sidebar);
                 return Err(format!("selected window is no longer available: {e}"));
             }
         },
@@ -329,7 +412,7 @@ fn verify_substep_blocking(
 
     let result = run_verify(expected_outcome, &region, portal_scope.as_deref(), context);
 
-    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+    show_after_capture(&sidebar)?;
 
     result
 }
@@ -414,7 +497,7 @@ fn answer_question_with_screenshot_blocking(
     let sidebar = app
         .get_webview_window("sidebar")
         .expect("\"sidebar\" window declared in tauri.conf.json must exist");
-    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+    hide_for_capture(&sidebar)?;
 
     let mut portal_scope: Option<String> = None;
     let region = match scope {
@@ -427,7 +510,7 @@ fn answer_question_with_screenshot_blocking(
         Some(CaptureScope::Window { id }) => match window_provider::get_window_rect(&id) {
             Ok(w) => Some(Region { x: w.x, y: w.y, width: w.width, height: w.height }),
             Err(e) => {
-                let _ = sidebar.show();
+                let _ = show_after_capture(&sidebar);
                 return Err(format!("selected window is no longer available: {e}"));
             }
         },
@@ -435,7 +518,7 @@ fn answer_question_with_screenshot_blocking(
 
     let result = run_answer(question, region.as_ref(), portal_scope.as_deref(), context);
 
-    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+    show_after_capture(&sidebar)?;
 
     result
 }
@@ -506,7 +589,7 @@ fn identify_app_blocking(app: &tauri::AppHandle, scope: Option<CaptureScope>) ->
     let sidebar = app
         .get_webview_window("sidebar")
         .expect("\"sidebar\" window declared in tauri.conf.json must exist");
-    sidebar.hide().map_err(|e| format!("failed to hide sidebar before capture: {e}"))?;
+    hide_for_capture(&sidebar)?;
 
     let mut portal_scope: Option<String> = None;
     let region = match scope {
@@ -519,7 +602,7 @@ fn identify_app_blocking(app: &tauri::AppHandle, scope: Option<CaptureScope>) ->
         Some(CaptureScope::Window { id }) => match window_provider::get_window_rect(&id) {
             Ok(w) => Some(Region { x: w.x, y: w.y, width: w.width, height: w.height }),
             Err(e) => {
-                let _ = sidebar.show();
+                let _ = show_after_capture(&sidebar);
                 return Err(format!("selected window is no longer available: {e}"));
             }
         },
@@ -527,7 +610,7 @@ fn identify_app_blocking(app: &tauri::AppHandle, scope: Option<CaptureScope>) ->
 
     let result = run_identify_app(&region, portal_scope.as_deref());
 
-    sidebar.show().map_err(|e| format!("failed to re-show sidebar after capture: {e}"))?;
+    show_after_capture(&sidebar)?;
 
     result
 }
@@ -668,7 +751,10 @@ async fn window_icon(
         // desktop-entry lookup needs nothing but the name, which
         // identify_app can now supply on any session.
         let by_name = || match window_provider::icon_for_app_name(&app_name) {
-            Ok(Some(found)) => Ok(Some(found.data_uri)),
+            Ok(Some(found)) => {
+                eprintln!("icon_for_app_name({app_name}) -> {}", found.source);
+                Ok(Some(found.data_uri))
+            }
             Ok(None) => Ok(None),
             // A missing/unreadable icon theme is a "no icon", not a
             // failure the user can do anything about.
@@ -723,8 +809,10 @@ struct PortalPick {
 
 // Runs the compositor's picker (the one prompt in the whole flow) and
 // stores a restore token so later captures are silent. The sidebar is
-// hidden for the duration so the user is picking from their real desktop,
-// and so this app's own window isn't the obvious thing to click.
+// hidden for the duration (via hide_for_capture — a no-op on Windows/macOS,
+// same as every other capture site, since this portal path is Linux/
+// Wayland-only in practice anyway) so the user is picking from their real
+// desktop, and so this app's own window isn't the obvious thing to click.
 // Can block up to five minutes (see PortalSession's timeout in
 // portal_capture.py) waiting on the user to click the compositor's own
 // share dialog — the single most important command to get off the main
@@ -739,11 +827,11 @@ async fn pick_portal_source(app: tauri::AppHandle, scope: Option<String>) -> Res
         let sidebar = app
             .get_webview_window("sidebar")
             .expect("\"sidebar\" window declared in tauri.conf.json must exist");
-        sidebar.hide().map_err(|e| format!("failed to hide sidebar before pick: {e}"))?;
+        hide_for_capture(&sidebar)?;
 
         let result = run_portal_pick(&scope);
 
-        sidebar.show().map_err(|e| format!("failed to re-show sidebar after pick: {e}"))?;
+        show_after_capture(&sidebar)?;
         result
     })
     .await
@@ -1192,6 +1280,20 @@ pub fn run() {
             }
 
             sidebar.show()?;
+
+            // See CAPTURE_EXCLUDED's own comment: only flips
+            // hide_for_capture/show_after_capture to no-ops once this is
+            // confirmed to have actually succeeded, not merely attempted.
+            // A failure here is logged, not propagated — it just means
+            // every capture site falls back to hide()/show() on this
+            // platform too, not a reason to refuse to start the app.
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
+            match exclude_sidebar_from_capture(&sidebar) {
+                Ok(()) => {
+                    let _ = CAPTURE_EXCLUDED.set(true);
+                }
+                Err(e) => eprintln!("failed to exclude sidebar from screen capture: {e}"),
+            }
 
             // getUserMedia (the mic button — see startVoiceRecording in
             // sidebar.js) needs the OS webview to actually grant the

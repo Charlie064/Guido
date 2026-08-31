@@ -66,6 +66,11 @@ webkit2gtk = "2.0"
 # so this doesn't depend on that crate's own symbol names.
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation = "0.10"
+# NSWindow.setSharingType: (exclude_sidebar_from_capture in src/lib.rs) —
+# not exposed by any typed AppKit binding already in the tree, so this
+# sends the Objective-C message directly rather than pulling in a full
+# AppKit crate for one selector.
+objc = "0.2"
 
 # EnumWindows/DwmGetWindowAttribute/QueryFullProcessImageNameW
 # (window_provider.rs).
@@ -75,5 +80,16 @@ windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Dwm",
     "Win32_System_Threading",
+] }
+# tauri-runtime (and so tauri::WebviewWindow::hwnd(), used by
+# exclude_sidebar_from_capture in src/lib.rs) is pinned to windows 0.61,
+# not the 0.58 above — HWND is a distinct nominal type per windows-core
+# version despite identical layout, so calling SetWindowDisplayAffinity on
+# the HWND tauri hands back needs *this* crate, not the 0.58 one already
+# used by window_provider.rs, or the trait bound doesn't resolve (found by
+# a real `cargo check` failure on the 0.58 attempt, not guessed at).
+# Aliased since Cargo can't have two unrenamed deps both named "windows".
+windows061 = { package = "windows", version = "=0.61.3", features = [
+    "Win32_UI_WindowsAndMessaging",
 ] }
 

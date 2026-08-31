@@ -1985,7 +1985,25 @@ function renderChatParts() {
   return parts.join("");
 }
 
+// The chat-hint's wording depends on which capture backend this skill was
+// created under (see deriveScopeFromGlobals/selectPortalSource above): only
+// a Wayland portal window-share (kind: "portal", screen: false) falls back
+// to the in-panel schematic — every other scope (a real screen, or an
+// OS-level window pick on macOS/Windows/X11) draws the real overlay, so
+// saying "not drawn on <app>" there would be false.
+function updateChatHint() {
+  const hint = document.querySelector("#chat-hint");
+  const appName = currentSkill?.appName ?? selectedAppName();
+  const appLabel = appName ?? "your screen";
+  const scope = currentCaptureScope();
+  const isSchematic = scope?.kind === "portal" && !scope.screen;
+  hint.textContent = isSchematic
+    ? `${appLabel} — Locate finds the control on your real window, but your desktop can't share exactly where that window is, so the box here is a schematic, not drawn on ${appLabel}.`
+    : `${appLabel} — Locate finds the control and draws the box right on your real screen.`;
+}
+
 function renderChat() {
+  updateChatHint();
   const body = document.querySelector("#chat-body");
   body.innerHTML = renderChatParts();
 

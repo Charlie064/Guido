@@ -3,7 +3,74 @@
 High-churn snapshot of what exists and what's next. Kept out of `CLAUDE.md`
 deliberately — that file should stay stable.
 
-_Last updated: 2026-08-30 (overnight session, release-and-verify pass)_
+_Last updated: 2026-08-31_
+
+## 2026-08-31: Windows end-to-end pass — no major problems found
+
+Charlie drove the desktop app live on real Windows hardware (`npx tauri dev`
+in `spikes/tauri-overlay`) through research, window-pick capture, and the
+Guide → Do → Verify loop. **No major problems** — the one thing worth
+tracking is that AI response quality (research plans, verify judgments,
+answers) has room to improve; that's a model/prompt-quality question, not a
+bug, and isn't blocking. Three real bugs were found and fixed along the way:
+
+- **`research` calls could fail with a raw, unhelpful 502** ("vision request
+  failed (502): The operation was aborted") instead of the clean "Claude
+  request timed out after 120s" the code already tried to produce.
+  Root cause in `website/worker/vision.ts`'s `callClaude`: the abort-timeout
+  guard only wrapped the `fetch()` call itself, not the subsequent
+  `res.json()` body read — `research`'s slow web-search responses could get
+  aborted mid-stream, past the point the clean error message was applied.
+  Fixed by widening the `try`/`catch` to cover the whole fetch-and-parse
+  sequence. **Deployed to production** (`guidotutor.com`, account
+  `06e757ca8ed84a9c592f859886811b41`) the same session.
+- **The chat view's hint text was hardcoded to "Excel context..." and to
+  always claim the highlight box is "a schematic, not drawn on Excel"** —
+  true only for a Wayland portal window-share, false on Windows (and every
+  other real-overlay case) and irrelevant to any app besides Excel. Now
+  computed per chat from the actual app name and capture scope
+  (`updateChatHint` in `sidebar.js`).
+- **`window_provider.rs`'s `FoundIcon.source` field was captured but never
+  read** outside tests, contradicting its own doc comment ("for logging
+  when a lookup picks something surprising"). Fixed by actually logging it
+  in `window_icon`'s by-name lookup path (`lib.rs`).
+
+**New this pass: Windows and macOS can now exclude the sidebar from screen
+capture at the OS level, instead of hiding/showing it around every capture.**
+See `BL-014` in `docs/BACKLOG.md`.
+- **Windows** — `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`,
+  set once at startup (`exclude_sidebar_from_capture` in `lib.rs`), never
+  toggled — same "permanent, not toggled" reasoning as the `overlay`
+  window's click-through setting (ADR 0006): no stuck state to reach if a
+  capture call panics mid-flight. **Verified live in this session**: `cargo
+  check`/`cargo test` clean, and Charlie confirmed the hide/show flicker is
+  gone in the running app. One real interop bug found and fixed getting
+  here: `tauri::WebviewWindow::hwnd()` returns an `HWND` from `windows`
+  crate v0.61 (`tauri-runtime`'s own pin) — a different, incompatible
+  nominal type from the v0.58 this project already depends on for
+  `window_provider.rs`, despite identical layout. Fixed with a second,
+  aliased `windows061` dependency pinned to the exact version tauri uses
+  (see `Cargo.toml`'s comment).
+- **macOS** — `NSWindow.setSharingType(.none)` via a direct Objective-C
+  message (new `objc` dependency, `msg_send!`), same set-once-at-startup
+  pattern. **UNVERIFIED** — no macOS hardware/toolchain in this dev
+  environment; written against the well-established pattern
+  password-manager-style apps use for the same purpose, not build- or
+  run-tested.
+- **Linux is unchanged** — still hides/shows the sidebar around every
+  capture. No OS-level exclusion API exists there for an ordinary client
+  (a deliberate Wayland security boundary, not a gap); see BL-014's
+  Linux-specific findings (`ADR 0009`'s Window-scoped-portal-capture
+  isolation already lets that one case skip hide/show too, unbuilt as of
+  this pass).
+- `hide_for_capture`/`show_after_capture` (replacing five direct
+  `sidebar.hide()`/`sidebar.show()` call-site pairs in `lib.rs`) check a
+  runtime `CAPTURE_EXCLUDED` flag that's only set once the OS call is
+  confirmed to have actually succeeded — not just "are we on a platform
+  that offers it" — so a failed `SetWindowDisplayAffinity`/
+  `setSharingType:` call falls back to the old hide/show behavior instead
+  of silently leaving the sidebar visible in every capture with no
+  fallback.
 
 ## 2026-08-30: release-and-verify overnight pass
 
