@@ -155,6 +155,72 @@
         display: none;
       }
 
+      /* Pin rail (docs/planning/minimal-step-mode.md, 5c): one node that
+         moves between two layout roles rather than two separate elements,
+         so its state (text, open/closed) can't drift out of sync between
+         a "pinned" copy and an "expanded" copy.
+         Named .pin-rail, not .step-rail — .step-rail already exists
+         further down (the step-list's per-row dot/connector column, a
+         different element entirely) and a same-name rule there was
+         silently overriding this one (later in the cascade wins),
+         squashing this into a 14px column. Don't reuse .step-rail here.
+         --docked: flex-shrink:0 sibling of .bar, sits above the .view
+         area, pinned regardless of which view is active underneath.
+         --inline: reparented (see pinStepRail/expandStepRail in
+         sidebar.js) into the top of whichever .view is currently active,
+         so it scrolls away with normal content instead of staying fixed. */
+      .pin-rail {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+      }
+
+      .pin-rail[hidden] {
+        display: none;
+      }
+
+      .pin-rail--docked {
+        flex-shrink: 0;
+        border-bottom: 1px solid var(--border);
+        background: #ffffff;
+        box-shadow: 0 6px 10px -8px rgba(0, 0, 0, 0.25);
+      }
+
+      .pin-rail--inline {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        margin: 14px;
+        background: #ffffff;
+      }
+
+      .pin-rail-text {
+        flex: 1;
+        min-width: 0;
+        font-size: 13px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .pin-rail-toggle {
+        flex-shrink: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: #ffffff;
+        color: var(--ink);
+        font-size: 13px;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .pin-rail-toggle:hover {
+        box-shadow: 0 0 0 4px var(--halo-bloom);
+      }
+
       .profile-menu {
         display: none;
         position: absolute;
@@ -646,6 +712,16 @@
 
       .view.active {
         display: flex;
+      }
+
+      /* Pin-rail spike (docs/planning/minimal-step-mode.md, 5c): pinning
+         the rail collapses whatever view is behind it, so "Ask" leaves
+         only the small prompt sliver on screen — not the rail sitting on
+         top of a still-full-size view. Two classes beats ".view.active"
+         alone in specificity regardless of source order, so this doesn't
+         need to chase where it sits in the file relative to that rule. */
+      .view.active.rail-collapsed {
+        display: none;
       }
 
       /* Added by showView() only when a caller asks for it (the hand-off
@@ -1727,6 +1803,16 @@
             <div class="profile-menu-meta" id="app-version"></div>
           </div>
         </div>
+      </div>
+
+      <!-- Step rail spike (docs/planning/minimal-step-mode.md, 5c). Hidden
+           until the first "Ask" press; pinStepRail()/expandStepRail() in
+           sidebar.js move this single node between the docked slot here
+           and the top of whichever .view is active. Text/step content
+           itself isn't wired yet — this is the pin/expand mechanic only. -->
+      <div id="step-rail" class="pin-rail pin-rail--docked" hidden>
+        <div class="pin-rail-text" id="step-rail-text"></div>
+        <button class="pin-rail-toggle" id="step-rail-toggle" type="button" title="Expand" aria-label="Expand" aria-expanded="false">⤢</button>
       </div>
 
       <!-- Email+password login (docs/planning/login-membership-plan.md):

@@ -1500,9 +1500,83 @@ async function submitNewGoal() {
   }
 }
 
-document.querySelector("#new-goal-send").addEventListener("click", submitNewGoal);
+// ---------- Step rail (docs/planning/minimal-step-mode.md, 5c) ----------
+// Pin/expand mechanic only — no step content wired to it yet. One DOM node
+// moved between two layout roles (see the CSS comment in sidebar.html)
+// rather than two elements, so text/open-state can't drift out of sync.
+const stepRailEls = {
+  el: document.querySelector("#step-rail"),
+  text: document.querySelector("#step-rail-text"),
+  toggle: document.querySelector("#step-rail-toggle"),
+};
+let stepRailExpanded = false;
+
+function pinStepRail(text) {
+  if (text !== undefined) stepRailEls.text.textContent = text;
+  const panel = document.querySelector("#panel");
+  const firstView = document.querySelector(".view");
+  panel.insertBefore(stepRailEls.el, firstView);
+  stepRailEls.el.classList.remove("pin-rail--inline");
+  stepRailEls.el.classList.add("pin-rail--docked");
+  stepRailEls.el.hidden = false;
+  stepRailExpanded = false;
+  stepRailEls.toggle.textContent = "⤢";
+  stepRailEls.toggle.title = "Expand";
+  stepRailEls.toggle.setAttribute("aria-expanded", "false");
+  // Decrease: whatever view is behind the rail collapses away too, so
+  // pinning leaves only the small prompt sliver on screen, not the rail
+  // sitting on top of a still-full-size view underneath it.
+  const activeView = document.querySelector(".view.active");
+  if (activeView) activeView.classList.add("rail-collapsed");
+}
+
+function expandStepRail() {
+  // Reparents into whichever view is on screen right now, so the rail
+  // scrolls away with that view's content instead of staying fixed —
+  // "no longer the fixed top element," per the ask. Un-collapsing the
+  // view here too: expand is the one action that both un-pins the rail
+  // and brings the rest of the content back.
+  const activeView = document.querySelector(".view.active");
+  if (!activeView) return;
+  activeView.classList.remove("rail-collapsed");
+  activeView.prepend(stepRailEls.el);
+  stepRailEls.el.classList.remove("pin-rail--docked");
+  stepRailEls.el.classList.add("pin-rail--inline");
+  stepRailExpanded = true;
+  stepRailEls.toggle.textContent = "⤡";
+  stepRailEls.toggle.title = "Pin to top";
+  stepRailEls.toggle.setAttribute("aria-expanded", "true");
+}
+
+stepRailEls.toggle.addEventListener("click", () => {
+  if (stepRailExpanded) {
+    pinStepRail();
+  } else {
+    expandStepRail();
+  }
+});
+
+// Rail-pin spike (docs/planning/minimal-step-mode.md, 5c): submitNewGoal()
+// below is unwired, not removed — its real research_goal invoke() call
+// also currently fails locally ("failed to run research.py: No such file
+// or directory"), unrelated to this spike. This stub only exercises the
+// pin/expand mechanic: home's goal row hides, the rail pins with the goal
+// text, and the existing research ticker shows a static loading state
+// that never resolves (no backend call is made). Swap the listeners back
+// to submitNewGoal to re-wire the real research call.
+function submitNewGoalStub() {
+  const input = document.querySelector("#new-goal-input");
+  const goal = input.value.trim();
+  if (!goal) return;
+
+  document.querySelector(".new-goal-row").hidden = true;
+  pinStepRail(goal);
+  startResearchTicker();
+}
+
+document.querySelector("#new-goal-send").addEventListener("click", submitNewGoalStub);
 document.querySelector("#new-goal-input").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") submitNewGoal();
+  if (e.key === "Enter") submitNewGoalStub();
 });
 
 // Speech-to-text for the goal box, via Aqua Voice's Avalon API — proxied
@@ -2232,4 +2306,11 @@ initCaptureBackend();
 loadPersistedSkills();
 restoreSession();
 showAppVersion();
-checkForUpdate();
+// Unwired for this branch's testing (not removed — see
+// docs/planning/minimal-step-mode.md): checkForUpdate() calls relaunch()
+// on finding a newer release, which kills this dev process and starts
+// whatever got installed to the system app path instead — a separate
+// packaged build with none of this branch's edits. That was silently
+// swapping out the app mid-test tonight. Re-enable by uncommenting once
+// this branch is done being tested against a live dev build.
+// checkForUpdate();
