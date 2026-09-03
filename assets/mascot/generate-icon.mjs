@@ -2,6 +2,7 @@
 // glass-mascot artwork used in GlassMascot.jsx / generate-svgs.mjs, so the
 // icon never drifts from the in-app character.
 import { writeFileSync, mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import sharp from "sharp"; // npm install sharp
 
 const INK = "#2a2233";
@@ -38,7 +39,7 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${S
   <g clip-path="url(#squircle)">
     <rect x="0" y="0" width="${SIZE}" height="${SIZE}" fill="url(#bg)"/>
 
-    <g transform="translate(106,88) scale(1.5)">
+    <g transform="translate(-2.825,-29.6) scale(2.55)">
       <ellipse cx="100" cy="205" rx="52" ry="10" fill="#5b4b63" opacity="0.16" filter="url(#shadowblur)"/>
       <ellipse cx="76" cy="182" rx="15" ry="11" fill="url(#body)" fill-opacity="0.9"/>
       <ellipse cx="124" cy="182" rx="15" ry="11" fill="url(#body)" fill-opacity="0.9"/>
@@ -74,6 +75,6 @@ for (const size of sizes) {
   await sharp(Buffer.from(svg.replace(`width="${SIZE}" height="${SIZE}"`, `width="${size}" height="${size}"`)))
     .resize(size, size)
     .png()
-    .toFile(outPath.pathname);
+    .toFile(fileURLToPath(outPath));
   console.log("wrote app-icon-" + size + ".png");
 }
