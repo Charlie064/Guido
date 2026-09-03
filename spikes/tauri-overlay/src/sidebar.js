@@ -11,7 +11,7 @@
 // command are unused by this file now but not deleted — a real cleanup
 // pass on those is a separate, larger change. See substepBubbleHtml.
 import { SKILLS } from "./fake-skill.js";
-import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon } from "./icons.js";
+import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon, HomeIcon } from "./icons.js";
 import { check as checkUpdate, relaunch } from "./vendor/tauri-updater.js";
 
 // Registered before anything below gets a chance to throw — including
@@ -1500,78 +1500,386 @@ async function submitNewGoal() {
   }
 }
 
-// ---------- Step rail (docs/planning/minimal-step-mode.md, 5c) ----------
-// Pin/expand mechanic only — no step content wired to it yet. One DOM node
-// moved between two layout roles (see the CSS comment in sidebar.html)
-// rather than two elements, so text/open-state can't drift out of sync.
-const stepRailEls = {
-  el: document.querySelector("#step-rail"),
-  text: document.querySelector("#step-rail-text"),
-  toggle: document.querySelector("#step-rail-toggle"),
+// ---------- Minimized substep view ("mini rail") ----------
+// docs/planning/minimal-step-mode.md 5c/5f, reworked 2026-09-02: entered
+// by clicking a step button in the steps menu (view-path) — see
+// renderPath's click handler — not by pressing Ask. Ask now leads into
+// the menu exactly like the pre-existing flow always did (openSkill),
+// just backed by fake data (see submitNewGoalStub) since research_goal/
+// verify_substep still don't run locally. Per 5f, a step is the only
+// unit now — no separate substep-generation phase, every step already
+// carries its one instruction from the moment Research (faked) returns
+// it. "Back" is the only way out, and always lands back on the menu —
+// see closeMiniRailToMenu. The separate pin toggle only flips
+// always-on-top; it never changes view or size, unlike Back.
+const miniRailEls = {
+  el: document.querySelector("#mini-rail"),
+  back: document.querySelector("#mini-rail-back"),
+  pin: document.querySelector("#mini-rail-pin"),
+  timeline: document.querySelector("#mini-rail-timeline"),
+  desc: document.querySelector("#mini-rail-desc"),
+  splitbar: document.querySelector("#mini-rail-splitbar"),
+  prev: document.querySelector("#mini-rail-prev"),
+  next: document.querySelector("#mini-rail-next"),
+  done: document.querySelector("#mini-rail-done"),
+  check: document.querySelector("#mini-rail-check"),
+  checkResult: document.querySelector("#mini-rail-check-result"),
+  question: document.querySelector("#mini-rail-question"),
+  chat: document.querySelector("#mini-rail-chat"),
+  history: document.querySelector("#mini-rail-history"),
+  input: document.querySelector("#mini-rail-input"),
+  send: document.querySelector("#mini-rail-send"),
 };
-let stepRailExpanded = false;
+// icons.js hands back an SVG string, not markup usable statically in the
+// HTML — see the icon-pool note in CLAUDE.md (check the pool before
+// drawing a new one; HomeIcon was added there for this).
+miniRailEls.back.innerHTML = HomeIcon({ size: 14 });
 
-function pinStepRail(text) {
-  if (text !== undefined) stepRailEls.text.textContent = text;
-  const panel = document.querySelector("#panel");
-  const firstView = document.querySelector(".view");
-  panel.insertBefore(stepRailEls.el, firstView);
-  stepRailEls.el.classList.remove("pin-rail--inline");
-  stepRailEls.el.classList.add("pin-rail--docked");
-  stepRailEls.el.hidden = false;
-  stepRailExpanded = false;
-  stepRailEls.toggle.textContent = "⤢";
-  stepRailEls.toggle.title = "Expand";
-  stepRailEls.toggle.setAttribute("aria-expanded", "false");
-  // Decrease: whatever view is behind the rail collapses away too, so
-  // pinning leaves only the small prompt sliver on screen, not the rail
-  // sitting on top of a still-full-size view underneath it.
-  const activeView = document.querySelector(".view.active");
-  if (activeView) activeView.classList.add("rail-collapsed");
+// Two-finger/trackpad swipes and a plain vertical mouse wheel both scroll
+// this strip horizontally (2026-09-02 review) — an overflow-x-only
+// element doesn't get that for free, since both gestures normally report
+// as deltaY. Already-horizontal input (deltaX dominant) is left alone so
+// native handling still applies there.
+function wheelScrollsHorizontally(el) {
+  el.addEventListener(
+    "wheel",
+    (e) => {
+      if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    },
+    { passive: false },
+  );
 }
 
-function expandStepRail() {
-  // Reparents into whichever view is on screen right now, so the rail
-  // scrolls away with that view's content instead of staying fixed —
-  // "no longer the fixed top element," per the ask. Un-collapsing the
-  // view here too: expand is the one action that both un-pins the rail
-  // and brings the rest of the content back.
-  const activeView = document.querySelector(".view.active");
-  if (!activeView) return;
-  activeView.classList.remove("rail-collapsed");
-  activeView.prepend(stepRailEls.el);
-  stepRailEls.el.classList.remove("pin-rail--docked");
-  stepRailEls.el.classList.add("pin-rail--inline");
-  stepRailExpanded = true;
-  stepRailEls.toggle.textContent = "⤡";
-  stepRailEls.toggle.title = "Pin to top";
-  stepRailEls.toggle.setAttribute("aria-expanded", "true");
+// Flashes a scrollbar into view while actively scrolling (2026-09-02
+// review, alongside making the scrollbars themselves thin/overlay-style
+// — see the CSS) — covers a swipe/wheel scroll that starts before the
+// cursor happens to be resting over the element, which :hover alone
+// wouldn't catch.
+function flashScrollbarOnScroll(el) {
+  let hideTimer;
+  el.addEventListener(
+    "scroll",
+    () => {
+      el.classList.add("scrolling");
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => el.classList.remove("scrolling"), 600);
+    },
+    { passive: true },
+  );
 }
 
-stepRailEls.toggle.addEventListener("click", () => {
-  if (stepRailExpanded) {
-    pinStepRail();
-  } else {
-    expandStepRail();
+wheelScrollsHorizontally(miniRailEls.timeline);
+flashScrollbarOnScroll(miniRailEls.timeline);
+flashScrollbarOnScroll(miniRailEls.desc);
+flashScrollbarOnScroll(miniRailEls.history);
+flashScrollbarOnScroll(document.querySelector("#path-body"));
+
+// Split bar (2026-09-02 review, second pass): question-mode-only drag
+// handle between the description and the chat/history area — see the CSS
+// on .mini-rail-splitbar and #mini-rail.chat-open .mini-rail-desc. Drags
+// set an explicit inline height on .mini-rail-desc, which naturally wins
+// over that class rule's `height: auto`; resetMiniRailDescHeight below
+// clears the override so the next substep (or the next time chat opens)
+// starts back at the auto-fit default rather than inheriting whatever
+// height was last dragged to.
+const MINI_DESC_MIN_HEIGHT = 24; // ~one line
+const MINI_DESC_MAX_HEIGHT = 160; // roughly as far above the auto-fit default as the min is below it
+
+function resetMiniRailDescHeight() {
+  miniRailEls.desc.style.height = "";
+}
+
+miniRailEls.splitbar.addEventListener("mousedown", (downEvent) => {
+  downEvent.preventDefault();
+  const startY = downEvent.clientY;
+  const startHeight = miniRailEls.desc.getBoundingClientRect().height;
+  miniRailEls.splitbar.classList.add("dragging");
+
+  function onMove(moveEvent) {
+    const next = startHeight + (moveEvent.clientY - startY);
+    miniRailEls.desc.style.height = `${Math.min(MINI_DESC_MAX_HEIGHT, Math.max(MINI_DESC_MIN_HEIGHT, next))}px`;
   }
+  function onUp() {
+    miniRailEls.splitbar.classList.remove("dragging");
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+  }
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
 });
 
-// Rail-pin spike (docs/planning/minimal-step-mode.md, 5c): submitNewGoal()
-// below is unwired, not removed — its real research_goal invoke() call
-// also currently fails locally ("failed to run research.py: No such file
-// or directory"), unrelated to this spike. This stub only exercises the
-// pin/expand mechanic: home's goal row hides, the rail pins with the goal
-// text, and the existing research ticker shows a static loading state
-// that never resolves (no backend call is made). Swap the listeners back
-// to submitNewGoal to re-wire the real research call.
+// Which substep of currentStep is showing. Separate from focusedSubstepId
+// (the full chat view's own concept) since the two views can be scoped to
+// different substeps if the user bounces between them via "Open chat →".
+let minimizedSubstepId = null;
+let miniRailPinned = true;
+let miniRailChatOpen = false;
+
+// Two fixed sizes — header-only vs. header+chat — rather than one that
+// grows with content: the window has to actually resize with it (see
+// setMiniRailWindowState), and an unbounded size defeats "minimized."
+// History still scrolls internally past MINI_RAIL_CHAT_SIZE's height.
+const MINI_RAIL_SIZE = [340, 148];
+const MINI_RAIL_CHAT_SIZE = [340, 420];
+
+async function setMiniRailWindowState() {
+  try {
+    const LogicalSize = window.__TAURI__.dpi?.LogicalSize ?? window.__TAURI__.window.LogicalSize;
+    const win = getCurrentWindow();
+    const [w, h] = miniRailChatOpen ? MINI_RAIL_CHAT_SIZE : MINI_RAIL_SIZE;
+    await win.setSize(new LogicalSize(w, h));
+    // Global always-on-top, not "on top of just the selected/taught
+    // window" — the latter needs real per-platform z-order code (Win32
+    // SetWindowPos relative-insert, X11 sibling restacking, no equivalent
+    // at all on Wayland) and was deliberately deferred, not attempted
+    // here.
+    await win.setAlwaysOnTop(miniRailPinned);
+  } catch {
+    // Browser preview / missing Tauri API — leave the window as-is.
+  }
+}
+
+function currentMinimizedSubstep() {
+  return currentStep?.substeps.find((s) => s.id === minimizedSubstepId) ?? null;
+}
+
+function renderMiniRailHeader(direction) {
+  const sub = currentMinimizedSubstep();
+  miniRailEls.desc.textContent = sub ? sub.instruction_text : "";
+  // Swipe feel on every step change — see the CSS comment on
+  // .mini-rail-desc.slide-fwd/.slide-back. Remove-then-reflow-then-add so
+  // the animation replays even if the same direction fired last time too.
+  if (direction) {
+    miniRailEls.desc.classList.remove("slide-fwd", "slide-back");
+    void miniRailEls.desc.offsetWidth;
+    miniRailEls.desc.classList.add(direction === "back" ? "slide-back" : "slide-fwd");
+  }
+  miniRailEls.done.setAttribute("aria-pressed", String(!!sub?.completed));
+  miniRailEls.done.disabled = false; // in case a previous Done click's flash delay left it disabled
+  // A step is the only unit now (5f) — ‹/› walk currentSkill.steps
+  // directly, not substeps within a step (every step has exactly one).
+  const stepIdx = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
+  miniRailEls.prev.disabled = stepIdx === 0;
+  miniRailEls.next.disabled = stepIdx === currentSkill.steps.length - 1;
+  miniRailEls.checkResult.hidden = true;
+}
+
+// Whole-skill progress (per the 2026-09-02 review, replacing the old
+// single done-badge tick): one node per top-level step — green check
+// (step.completed), the Guido mascot (currentStep), gray otherwise — plus
+// a connecting line so it still reads as a path, not a scattered row of
+// dots. Auto-scrolls the current node into view since the strip can
+// overflow the rail's fixed width on a longer skill.
+function renderMiniRailTimeline() {
+  const parts = [];
+  currentSkill.steps.forEach((step, i) => {
+    if (i > 0) parts.push(`<div class="mini-rail-tl-line ${currentSkill.steps[i - 1].completed ? "done" : ""}"></div>`);
+    if (step.id === currentStep.id) {
+      parts.push(
+        `<div class="mini-rail-tl-node current" data-step-id="${step.id}"><img src="assets/mascot/mascot-idle.svg" alt="" /></div>`,
+      );
+    } else if (step.completed) {
+      parts.push(`<div class="mini-rail-tl-node done" data-step-id="${step.id}"></div>`);
+    } else {
+      parts.push(`<div class="mini-rail-tl-node" data-step-id="${step.id}"></div>`);
+    }
+  });
+  miniRailEls.timeline.innerHTML = parts.join("");
+  const currentNode = miniRailEls.timeline.querySelector(".mini-rail-tl-node.current");
+  currentNode?.scrollIntoView({ block: "nearest", inline: "center" });
+}
+
+// Reactive (pink) substeps tied to this one via respondingTo, same shape
+// renderChatParts groups by in the full chat view — a question asked here
+// shows up there too, and vice versa, since both just read/write
+// currentStep.substeps. Labeled "You"/"Guido" per the 2026-09-02 review,
+// same pairing the rest of the app uses for user vs. AI content.
+function renderMiniRailHistory() {
+  const replies = currentStep.substeps.filter((s) => s.origin === "user" && s.respondingTo === minimizedSubstepId);
+  miniRailEls.history.innerHTML = replies
+    .map(
+      (r) => `
+        <div class="mini-rail-bubble mini-rail-bubble-user">
+          <span class="mini-rail-bubble-label">You</span>${r.question}
+        </div>
+        <div class="mini-rail-bubble mini-rail-bubble-ai">
+          <span class="mini-rail-bubble-label">Guido</span>${r.instruction_text}
+        </div>
+      `,
+    )
+    .join("");
+  miniRailEls.history.scrollTop = miniRailEls.history.scrollHeight;
+}
+
+// `direction` ("fwd"/"back") only drives the slide animation on the
+// description text (renderMiniRailHeader) — omit it (as the substep-row
+// click handler in renderPath does, opening cold rather than "arriving
+// from" anywhere) to show the new content with no animation.
+function openMinimizedSubstep(step, substepId, direction) {
+  currentStep = step;
+  minimizedSubstepId = substepId ?? step.substeps[0]?.id ?? null;
+  document.querySelector(".bar").hidden = true;
+  const activeView = document.querySelector(".view.active");
+  if (activeView) activeView.classList.add("rail-collapsed");
+  miniRailEls.el.hidden = false;
+  miniRailChatOpen = false;
+  miniRailEls.chat.hidden = true;
+  miniRailEls.el.classList.remove("chat-open");
+  resetMiniRailDescHeight();
+  miniRailEls.question.setAttribute("aria-pressed", "false");
+  miniRailPinned = true;
+  miniRailEls.pin.setAttribute("aria-pressed", "true");
+  miniRailEls.pin.title = "Unpin from top";
+  renderMiniRailHeader(direction);
+  renderMiniRailHistory();
+  renderMiniRailTimeline();
+  setMiniRailWindowState();
+}
+
+// The important one: always gets back to the steps menu, with the step
+// this substep belongs to expanded — never a dead end regardless of which
+// substep or how the chat section was left.
+function closeMiniRailToMenu() {
+  miniRailEls.el.hidden = true;
+  document.querySelector(".bar").hidden = false;
+  document.querySelectorAll(".view.rail-collapsed").forEach((v) => v.classList.remove("rail-collapsed"));
+  renderPath();
+  showView("path"); // resizes back to normal via fitWindow
+  // Maximized has no top-level overlay — only the minimized view is sticky.
+  getCurrentWindow().setAlwaysOnTop(false).catch(() => {});
+}
+
+miniRailEls.back.addEventListener("click", closeMiniRailToMenu);
+
+// Unstick from always-on-top without leaving the minimized view — a
+// separate action from Back, which also changes view/size.
+miniRailEls.pin.addEventListener("click", () => {
+  miniRailPinned = !miniRailPinned;
+  miniRailEls.pin.setAttribute("aria-pressed", String(miniRailPinned));
+  miniRailEls.pin.title = miniRailPinned ? "Unpin from top" : "Pin to top";
+  getCurrentWindow().setAlwaysOnTop(miniRailPinned).catch(() => {});
+});
+
+// ‹/› — bottom-left, pure navigation between steps (5f: a step is the
+// only unit now, so this is just an index walk — no more "substeps
+// within a step" case to check first). Neither marks or unmarks
+// anything; that's Done's job, below.
+miniRailEls.prev.addEventListener("click", () => {
+  const stepIdx = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
+  const prevStep = currentSkill.steps[stepIdx - 1];
+  if (!prevStep) return; // nothing before this — button is already disabled
+  openMinimizedSubstep(prevStep, prevStep.substeps[0]?.id ?? null, "back");
+});
+
+miniRailEls.next.addEventListener("click", () => {
+  const stepIdx = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
+  const nextStep = currentSkill.steps[stepIdx + 1];
+  if (!nextStep) return; // skill complete — button is already disabled
+  openMinimizedSubstep(nextStep, nextStep.substeps[0]?.id ?? null, "fwd");
+});
+
+// Confirms and advances in one press: flashes green first — aria-pressed
+// swaps the keycap's color immediately — then, after a beat so that
+// registers, wipes to the next step the same way › does. Disabled for
+// the pause so a second click mid-animation can't double-advance. Every
+// step has exactly one substep now (5f), so marking it done also marks
+// the step done outright — no more "every substep done" check.
+miniRailEls.done.addEventListener("click", async () => {
+  const sub = currentMinimizedSubstep();
+  if (!sub) return;
+  sub.completed = true;
+  currentStep.completed = true;
+  miniRailEls.done.setAttribute("aria-pressed", "true");
+  miniRailEls.done.disabled = true;
+  await new Promise((r) => setTimeout(r, 380));
+
+  const stepIdx = currentSkill.steps.findIndex((s) => s.id === currentStep.id);
+  const nextStep = currentSkill.steps[stepIdx + 1];
+  if (!nextStep) {
+    renderMiniRailTimeline(); // reflect the final step's green check
+    miniRailEls.done.disabled = false;
+    return; // skill complete — nothing further to wipe to
+  }
+  openMinimizedSubstep(nextStep, nextStep.substeps[0]?.id ?? null, "fwd");
+});
+
+// Fake — verify_substep needs a real vision call this branch can't make
+// locally (see submitNewGoalStub). Shows a canned pass so the rail's
+// layout is demoable now; swap for the real invoke("verify_substep", ...)
+// call (see the full chat view's [data-verify] handler) once that's
+// runnable again.
+miniRailEls.check.addEventListener("click", () => {
+  miniRailEls.check.disabled = true;
+  miniRailEls.checkResult.hidden = false;
+  miniRailEls.checkResult.textContent = "Checking…";
+  setTimeout(() => {
+    miniRailEls.checkResult.textContent = "✓ Looks right (fake check — no vision call wired yet)";
+    miniRailEls.check.disabled = false;
+  }, 500);
+});
+
+miniRailEls.question.addEventListener("click", () => {
+  miniRailChatOpen = !miniRailChatOpen;
+  miniRailEls.chat.hidden = !miniRailChatOpen;
+  miniRailEls.question.setAttribute("aria-pressed", String(miniRailChatOpen));
+  // Lets .mini-rail-desc grow to fit the question (up to a cap) instead
+  // of staying pinned at its collapsed 54px while the newly-opened
+  // window's extra height goes only to history — see the CSS comment on
+  // #mini-rail.chat-open .mini-rail-desc. Reset on close too — otherwise
+  // a dragged (see the split bar below) inline height would outrank the
+  // collapsed state's fixed 54px, since inline style always wins.
+  miniRailEls.el.classList.toggle("chat-open", miniRailChatOpen);
+  if (!miniRailChatOpen) resetMiniRailDescHeight();
+  if (miniRailChatOpen) miniRailEls.input.focus();
+  setMiniRailWindowState();
+});
+
+// Fake reply, same shape a real reactive substep would take (origin:
+// "user", respondingTo) — so this is still consistent data if the same
+// substep later gets opened in the full chat view via "Open chat →".
+function sendMinimizedQuestion() {
+  const text = miniRailEls.input.value.trim();
+  if (!text || !minimizedSubstepId) return;
+  miniRailEls.input.value = "";
+  miniRailEls.input.disabled = true;
+  setTimeout(() => {
+    currentStep.substeps.push({
+      id: `${minimizedSubstepId}-q${Date.now()}`,
+      origin: "user",
+      question: text,
+      instruction_text: "(fake reply — no answer_step call wired yet) Here's a placeholder answer.",
+      respondingTo: minimizedSubstepId,
+    });
+    miniRailEls.input.disabled = false;
+    renderMiniRailHistory();
+  }, 500);
+}
+
+miniRailEls.send.addEventListener("click", sendMinimizedQuestion);
+miniRailEls.input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") sendMinimizedQuestion();
+});
+
+// Ask → fake "research" (research_goal fails locally — see below) that
+// hands back a fixture skill, then opens the menu exactly like the real
+// flow always has (openSkill). Skips the real hasCaptureSource() gating
+// ("steps ready — pick your window") deliberately: that's a separate,
+// already-real feature, not part of what this stub is exercising.
 function submitNewGoalStub() {
   const input = document.querySelector("#new-goal-input");
   const goal = input.value.trim();
   if (!goal) return;
 
-  document.querySelector(".new-goal-row").hidden = true;
-  pinStepRail(goal);
+  input.disabled = true;
   startResearchTicker();
+  setTimeout(() => {
+    input.disabled = false;
+    input.value = "";
+    stopResearchTicker();
+    openSkill(SKILLS[0]);
+  }, 600);
 }
 
 document.querySelector("#new-goal-send").addEventListener("click", submitNewGoalStub);
@@ -1761,128 +2069,46 @@ async function generateStepSubsteps(step) {
 
 // ---------- Path view ----------
 
+// Flattened per docs/planning/minimal-step-mode.md 5f (2026-09-02): a
+// step is the only unit now, Research hands back the whole list already
+// generated, and there's nothing nested to expand into — so every row is
+// just a button straight into the minimized view (openMinimizedSubstep),
+// no accordion, no lock/generate states, no per-step substep list. The
+// old two-level version of this function (accordion, .step-open "Open
+// chat →" into the full transcript view) is gone, not hidden — see the
+// git history on this branch if it's ever needed as reference. openStep/
+// view-chat themselves are left in place, just unreached from here now.
 function renderPath() {
   const body = document.querySelector("#path-body");
   body.innerHTML = "";
 
   currentSkill.steps.forEach((step, i) => {
     const isLast = i === currentSkill.steps.length - 1;
-    const expanded = expandedStepId === step.id;
+    const sub = step.substeps[0];
 
     const row = document.createElement("div");
     row.className = "step-row";
 
     const rail = document.createElement("div");
     rail.className = "step-rail";
-    // Guido replaces the plain dot only on the one step currently open —
-    // the accordion guarantees there's at most one "current" step at a
-    // time, so this never has to pick among several candidates.
-    const marker = expanded
-      ? `<img class="step-mascot" src="assets/mascot/mascot-${step.planning ? "thinking" : "idle"}.svg" alt="" />`
-      : `<div class="step-dot ${step.completed ? "completed" : step.generated ? "" : "locked"}"></div>`;
-    rail.innerHTML = `${marker}${isLast ? "" : '<div class="step-line"></div>'}`;
+    rail.innerHTML = `<div class="step-dot ${step.completed ? "completed" : ""}"></div>${isLast ? "" : '<div class="step-line"></div>'}`;
     row.appendChild(rail);
 
-    const main = document.createElement("div");
-    main.className = "step-main";
-
-    const head = document.createElement("div");
-    head.className = `step-head ${step.generated ? "" : "locked"}`;
-    head.innerHTML = `
-      <span class="step-chevron ${expanded ? "expanded" : ""}">▸</span>
-      <span class="step-title ${step.generated ? "" : "locked"}">${i + 1}. ${step.title}</span>
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "step-btn";
+    // instruction_text, not target_description: target_description is
+    // the plain-text locate target for the vision call ("the 'Yes, I
+    // trust the authors' button in the Workspace Trust popup dialog (if
+    // it appears)") — accurate for that, but a verbose, hedge-qualified
+    // sentence to show as this row's own description.
+    btn.innerHTML = `
+      <span class="step-btn-title">${i + 1}. ${step.title}</span>
+      <span class="step-btn-desc">${sub?.instruction_text ?? ""}</span>
     `;
-    if (step.generated) {
-      head.addEventListener("click", () => {
-        expandedStepId = expandedStepId === step.id ? null : step.id;
-        renderPath();
-      });
-    } else if (!step.planning) {
-      // First reach: plan_step generates this step's AI substeps lazily,
-      // per docs/features/skills.md's "Per-step loop" — never speculatively
-      // for the whole skill up front.
-      head.addEventListener("click", () => generateStepSubsteps(step));
-    }
-    main.appendChild(head);
+    btn.addEventListener("click", () => openMinimizedSubstep(step, sub?.id ?? null));
+    row.appendChild(btn);
 
-    if (!step.generated) {
-      // step.brief/watch_for come from Research (goal-scoped facts, no
-      // screenshot involved) — internal now, not rendered here at all:
-      // they're an input to the vision call instead (see locateContext),
-      // read alongside the screenshot when a substep's element is
-      // located, rather than shown to the user as prose. "Details" for a
-      // locked step used to expand this text; there's nothing left for it
-      // to show until the step is actually generated, at which point
-      // clicking the step head (above) already expands the real substep
-      // list — that's the "Details expand shows substeps" behavior, and
-      // it needs no separate control since one already exists.
-      // Substep placeholder — the actual per-substep bubbles only exist
-      // once plan_step has run (see generateStepSubsteps), which is a
-      // separate, deferred concern from having something to show here in
-      // the meantime. Suppressed while a plan is in flight or failed,
-      // since those states render their own message right below.
-      if (!step.planning && !step.planError) {
-        const placeholder = document.createElement("div");
-        placeholder.className = "step-caption step-substep-placeholder";
-        placeholder.textContent = "Substeps not generated yet — click to generate.";
-        main.appendChild(placeholder);
-      }
-      if (step.planning) {
-        const status = document.createElement("div");
-        status.className = "step-caption";
-        status.textContent = "Planning this step…";
-        main.appendChild(status);
-      }
-      if (step.planError) {
-        const error = document.createElement("div");
-        error.className = "step-caption step-error";
-        error.textContent = `Couldn't plan this step: ${step.planError}`;
-        main.appendChild(error);
-      }
-    }
-
-    if (step.generated && expanded) {
-      const substepList = document.createElement("div");
-      substepList.className = "substep-list";
-
-      for (const sub of step.substeps) {
-        const subRow = document.createElement("div");
-        subRow.className = `substep-row origin-${sub.origin}`;
-        // instruction_text, not target_description: target_description is
-        // plan_step's plain-text locate target ("the 'Yes, I trust the
-        // authors' button in the Workspace Trust popup dialog (if it
-        // appears)") — accurate for the vision call, but a verbose,
-        // hedge-qualified sentence when used as a row's name. This is
-        // also what the chat view shows once you open the row, so the
-        // preview now says the same thing you see next.
-        const preview = sub.origin === "user" ? sub.question : sub.instruction_text;
-        subRow.innerHTML = `
-          <span class="substep-dot"></span>
-          <span class="substep-text">
-            <span class="label">${sub.origin === "user" ? "You asked" : "AI step"}</span>
-            ${preview}
-          </span>
-        `;
-        subRow.addEventListener("click", (e) => {
-          e.stopPropagation();
-          openStep(step, sub.id);
-        });
-        substepList.appendChild(subRow);
-      }
-      main.appendChild(substepList);
-
-      const openBtn = document.createElement("button");
-      openBtn.className = "step-open";
-      openBtn.type = "button";
-      openBtn.textContent = "Open chat →";
-      openBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openStep(step);
-      });
-      main.appendChild(openBtn);
-    }
-
-    row.appendChild(main);
     body.appendChild(row);
   });
 }

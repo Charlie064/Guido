@@ -60,6 +60,16 @@ export const SKILLS = [
     goal: "How do I make a chart in Excel?",
     appName: "Excel",
     createdAt: "2026-08-27T14:05:00.000Z",
+    // Flattened per docs/planning/minimal-step-mode.md 5f (2026-09-02):
+    // one step = one question = one instruction, no nested substeps
+    // array of its own. Every step carries `generated: true` since
+    // Research (faked — see submitNewGoalStub in sidebar.js) now returns
+    // the whole list already filled in, not a coarse title generated
+    // lazily later. 20 steps on purpose — enough to force both the menu
+    // list (.path-body) and the mini rail's top timeline to scroll. s5,
+    // s12, and s19 carry deliberately long instruction_text to exercise
+    // the mini rail's fixed-height, scrollable description box
+    // (.mini-rail-desc) without relying on live user questions for it.
     steps: [
       {
         id: "s1",
@@ -74,39 +84,30 @@ export const SKILLS = [
             action: "select",
             last_known_bbox: bbox(220, 260, 640, 560),
           },
-          {
-            id: "s1-2",
-            origin: "ai",
-            target_description: "the header row of your table",
-            instruction_text: "Double check the first row has labels like “Month” and “Revenue” — the chart uses these as its legend.",
-            action: "none",
-            last_known_bbox: bbox(220, 260, 640, 292),
-          },
         ],
       },
       {
         id: "s2",
-        title: "Insert the chart",
+        title: "Open the Insert tab",
         generated: true,
         substeps: [
           {
             id: "s2-1",
             origin: "ai",
             target_description: "the Insert tab in the ribbon",
-            instruction_text: "Click the Insert tab at the top of the window.",
+            instruction_text: "Click the Insert tab at the top of the window — if the ribbon is collapsed, click the small ⌃ arrow in the top-right corner first to expand it.",
             action: "click",
             last_known_bbox: bbox(176, 84, 250, 118),
           },
+        ],
+      },
+      {
+        id: "s3",
+        title: "Choose a recommended chart",
+        generated: true,
+        substeps: [
           {
-            id: "s2-2",
-            origin: "user",
-            question: "I don't have an Insert tab, where is it?",
-            instruction_text: "It's in the ribbon at the very top, next to Home — if the ribbon is collapsed, click the small ⌃ arrow in the top-right corner first to expand it.",
-            action: "none",
-            last_known_bbox: bbox(1780, 20, 1860, 52),
-          },
-          {
-            id: "s2-3",
+            id: "s3-1",
             origin: "ai",
             target_description: "the Recommended Charts button in the Charts group",
             instruction_text: "Click Recommended Charts, then pick the bar chart Excel suggests.",
@@ -116,10 +117,263 @@ export const SKILLS = [
         ],
       },
       {
-        id: "s3",
+        id: "s4",
         title: "Style your chart",
-        generated: false,
-        substeps: [],
+        generated: true,
+        substeps: [
+          {
+            id: "s4-1",
+            origin: "ai",
+            target_description: "the Chart Styles gallery",
+            instruction_text: "With the chart selected, open the paintbrush icon next to it and pick a style from the gallery.",
+            action: "click",
+            last_known_bbox: bbox(1000, 200, 1060, 400),
+          },
+        ],
+      },
+      {
+        id: "s5",
+        title: "Format the axis labels",
+        generated: true,
+        substeps: [
+          {
+            id: "s5-1",
+            origin: "ai",
+            target_description: "the vertical (value) axis of the chart",
+            instruction_text:
+              "Right-click directly on the numbers running up the left-hand side of the chart — this is the vertical, or value, axis — and choose “Format Axis…” from the context menu that appears. A panel will open on the right-hand side of the window with a wrench-and-bars icon at the top; that panel controls the numeric formatting, the minimum and maximum bounds, the major and minor tick intervals, and the label orientation for this axis. If your revenue figures are large, open the “Number” section inside that panel and switch the category from “General” to “Currency” or “Number”, then reduce the decimal places to zero so the axis doesn't get cluttered with unnecessary trailing digits. You can also expand “Labels” further down the same panel to change how far the text sits from the axis line, or to rotate it if the numbers start overlapping once the chart is resized smaller.",
+            action: "click",
+            expected_outcome: "the axis numbers show as whole currency values with no decimals",
+            last_known_bbox: bbox(140, 200, 180, 560),
+          },
+        ],
+      },
+      {
+        id: "s6",
+        title: "Add a chart title",
+        generated: true,
+        substeps: [
+          {
+            id: "s6-1",
+            origin: "ai",
+            target_description: "the chart title placeholder",
+            instruction_text: "Double-click “Chart Title” at the top of the chart and type a real one.",
+            action: "click",
+            last_known_bbox: bbox(600, 60, 900, 100),
+          },
+        ],
+      },
+      {
+        id: "s7",
+        title: "Change the chart colors",
+        generated: true,
+        substeps: [
+          {
+            id: "s7-1",
+            origin: "ai",
+            target_description: "the Change Colors button in Chart Design",
+            instruction_text: "Open Chart Design → Change Colors and pick a palette that matches your deck.",
+            action: "click",
+            last_known_bbox: bbox(850, 30, 920, 70),
+          },
+        ],
+      },
+      {
+        id: "s8",
+        title: "Add a trendline",
+        generated: true,
+        substeps: [
+          {
+            id: "s8-1",
+            origin: "ai",
+            target_description: "the plus (+) chart elements button",
+            instruction_text: "Click the + next to the chart, then check Trendline.",
+            action: "click",
+            last_known_bbox: bbox(1080, 200, 1110, 230),
+          },
+        ],
+      },
+      {
+        id: "s9",
+        title: "Resize and position the chart",
+        generated: true,
+        substeps: [
+          {
+            id: "s9-1",
+            origin: "ai",
+            target_description: "the chart's corner resize handle",
+            instruction_text: "Drag the bottom-right corner handle to resize, or drag the chart body to move it.",
+            action: "drag",
+            last_known_bbox: bbox(980, 560, 1010, 590),
+          },
+        ],
+      },
+      {
+        id: "s10",
+        title: "Add data labels",
+        generated: true,
+        substeps: [
+          {
+            id: "s10-1",
+            origin: "ai",
+            target_description: "the Data Labels option under chart elements",
+            instruction_text: "Click the + next to the chart, then check Data Labels to show the value on each bar.",
+            action: "click",
+            last_known_bbox: bbox(1080, 230, 1110, 260),
+          },
+        ],
+      },
+      {
+        id: "s11",
+        title: "Adjust the legend position",
+        generated: true,
+        substeps: [
+          {
+            id: "s11-1",
+            origin: "ai",
+            target_description: "the Legend option under chart elements",
+            instruction_text: "Click the + next to the chart, hover Legend, and pick Bottom or Right.",
+            action: "click",
+            last_known_bbox: bbox(1080, 260, 1110, 290),
+          },
+        ],
+      },
+      {
+        id: "s12",
+        title: "Switch row/column orientation",
+        generated: true,
+        substeps: [
+          {
+            id: "s12-1",
+            origin: "ai",
+            target_description: "the Switch Row/Column button in Chart Design",
+            instruction_text:
+              "If the chart is plotting your data the wrong way round — months along the legend instead of along the bottom axis, for instance — open the Chart Design tab and look for the “Switch Row/Column” button in the Data group, usually near the middle of the ribbon. Clicking it swaps what Excel treats as a data series versus a category: everything that was previously grouped as separate lines or bars becomes the axis labels, and vice versa. This is a toggle, not a one-way conversion, so it's safe to click it again if the first press makes things look worse rather than better — there's no dialog to confirm, and undo (Ctrl+Z) also reverts it instantly. It's most useful right after inserting a chart from a wide table (many columns, few rows), which Excel tends to guess wrong on more often than a tall table (many rows, few columns).",
+            action: "click",
+            last_known_bbox: bbox(300, 30, 420, 70),
+          },
+        ],
+      },
+      {
+        id: "s13",
+        title: "Add a secondary axis",
+        generated: true,
+        substeps: [
+          {
+            id: "s13-1",
+            origin: "ai",
+            target_description: "Format Data Series' secondary axis option",
+            instruction_text: "Right-click the series that needs its own scale, choose Format Data Series, then select Secondary Axis.",
+            action: "click",
+            last_known_bbox: bbox(400, 300, 700, 400),
+          },
+        ],
+      },
+      {
+        id: "s14",
+        title: "Group categories together",
+        generated: true,
+        substeps: [
+          {
+            id: "s14-1",
+            origin: "ai",
+            target_description: "the outline grouping controls on the row headers",
+            instruction_text: "Select the rows to group, then Data → Group, or Shift+Alt+Right Arrow.",
+            action: "click",
+            last_known_bbox: bbox(20, 260, 60, 400),
+          },
+        ],
+      },
+      {
+        id: "s15",
+        title: "Highlight a specific data point",
+        generated: true,
+        substeps: [
+          {
+            id: "s15-1",
+            origin: "ai",
+            target_description: "a single bar or point within the chart series",
+            instruction_text: "Click the series once to select it all, then click again on just the one point to select only that point, and change its fill color.",
+            action: "click",
+            last_known_bbox: bbox(500, 300, 540, 500),
+          },
+        ],
+      },
+      {
+        id: "s16",
+        title: "Add gridlines",
+        generated: true,
+        substeps: [
+          {
+            id: "s16-1",
+            origin: "ai",
+            target_description: "the Gridlines option under chart elements",
+            instruction_text: "Click the + next to the chart, then check Gridlines → Major Horizontal.",
+            action: "click",
+            last_known_bbox: bbox(1080, 290, 1110, 320),
+          },
+        ],
+      },
+      {
+        id: "s17",
+        title: "Save a chart template",
+        generated: true,
+        substeps: [
+          {
+            id: "s17-1",
+            origin: "ai",
+            target_description: "Save as Template in the chart's right-click menu",
+            instruction_text: "Right-click the chart border and choose “Save as Template…” so future charts can reuse this look.",
+            action: "click",
+            last_known_bbox: bbox(400, 550, 700, 600),
+          },
+        ],
+      },
+      {
+        id: "s18",
+        title: "Export the chart as an image",
+        generated: true,
+        substeps: [
+          {
+            id: "s18-1",
+            origin: "ai",
+            target_description: "Copy as Picture in the chart's right-click menu",
+            instruction_text: "Right-click the chart, Copy, then Paste Special → Picture into an image editor or Paint.",
+            action: "click",
+            last_known_bbox: bbox(400, 550, 700, 600),
+          },
+        ],
+      },
+      {
+        id: "s19",
+        title: "Copy the chart into PowerPoint",
+        generated: true,
+        substeps: [
+          {
+            id: "s19-1",
+            origin: "ai",
+            target_description: "the paste options menu after pasting into PowerPoint",
+            instruction_text:
+              "Select the whole chart in Excel (click once on its border, not inside it, so handles appear on all four corners) and copy it with Ctrl+C. Switch to PowerPoint and paste with Ctrl+V onto the slide you want it on — a small clipboard icon will appear just below and to the right of the pasted chart for a few seconds. Click that icon to choose how the paste behaves: “Use Destination Theme & Embed Workbook” makes the chart match the PowerPoint deck's colors and carries a full copy of the underlying data with it (bigger file, but self-contained); “Keep Source Formatting & Embed Workbook” keeps Excel's original colors instead; and the two “Link Data” options keep the slide's chart tied to the original Excel file on disk, so it updates automatically if that file changes later but breaks if the file is moved, renamed, or not present on whatever machine opens the slide next.",
+            action: "click",
+            last_known_bbox: bbox(700, 500, 780, 560),
+          },
+        ],
+      },
+      {
+        id: "s20",
+        title: "Save the workbook",
+        generated: true,
+        substeps: [
+          {
+            id: "s20-1",
+            origin: "ai",
+            target_description: "the save icon in the title bar or quick access toolbar",
+            instruction_text: "Press Ctrl+S, or click the disk icon in the top-left, and keep the .xlsx format.",
+            action: "click",
+            last_known_bbox: bbox(10, 10, 40, 40),
+          },
+        ],
       },
     ],
   },
@@ -153,14 +407,32 @@ export const SKILLS = [
       {
         id: "s2",
         title: "Insert the pivot table",
-        generated: false,
-        substeps: [],
+        generated: true,
+        substeps: [
+          {
+            id: "s2-1",
+            origin: "ai",
+            target_description: "the PivotTable button in the Insert tab",
+            instruction_text: "With your data selected, go to Insert → PivotTable, then click OK on the dialog.",
+            action: "click",
+            last_known_bbox: bbox(200, 90, 280, 130),
+          },
+        ],
       },
       {
         id: "s3",
         title: "Choose rows, columns and values",
-        generated: false,
-        substeps: [],
+        generated: true,
+        substeps: [
+          {
+            id: "s3-1",
+            origin: "ai",
+            target_description: "the PivotTable Fields panel on the right",
+            instruction_text: "Drag fields into Rows, Columns, and Values in the panel that opened on the right.",
+            action: "drag",
+            last_known_bbox: bbox(1600, 100, 1900, 700),
+          },
+        ],
       },
     ],
   },
@@ -174,20 +446,47 @@ export const SKILLS = [
       {
         id: "s1",
         title: "Select the ellipse tool",
-        generated: false,
-        substeps: [],
+        generated: true,
+        substeps: [
+          {
+            id: "s1-1",
+            origin: "ai",
+            target_description: "the ellipse/circle tool in the left toolbar",
+            instruction_text: "Click the ellipse tool in the toolbar on the left, or press E.",
+            action: "click",
+            last_known_bbox: bbox(10, 140, 40, 170),
+          },
+        ],
       },
       {
         id: "s2",
         title: "Draw the circle",
-        generated: false,
-        substeps: [],
+        generated: true,
+        substeps: [
+          {
+            id: "s2-1",
+            origin: "ai",
+            target_description: "the canvas area",
+            instruction_text: "Click and drag on the canvas, holding Ctrl to keep it a perfect circle.",
+            action: "drag",
+            last_known_bbox: bbox(400, 300, 700, 600),
+          },
+        ],
       },
       {
         id: "s3",
         title: "Fill it with blue",
-        generated: false,
-        substeps: [],
+        generated: true,
+        substeps: [
+          {
+            id: "s3-1",
+            origin: "ai",
+            target_description: "a blue swatch in the color palette at the bottom",
+            instruction_text: "With the circle selected, click a blue swatch in the palette at the bottom of the window.",
+            action: "click",
+            last_known_bbox: bbox(600, 780, 630, 800),
+          },
+        ],
       },
     ],
   },

@@ -168,6 +168,15 @@ export function CardStarIcon({ size = 32, color = CARD_GOLD } = {}) {
   </svg>`;
 }
 
+export function HomeIcon({ size = 18, color = "currentColor" } = {}) {
+  return svg(
+    size,
+    `<path d="M4.5 11.5 12 5.2l7.5 6.3" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+     <path d="M6.5 10v9h11v-9" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+     <path d="M10 19v-5.5h4V19" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" />`,
+  );
+}
+
 export function FolderIcon({ size = 18, color = "currentColor" } = {}) {
   return svg(
     size,
@@ -443,6 +452,7 @@ export const ICONS = {
   LightbulbIcon,
   PaidIcon,
   CheckIcon,
+  HomeIcon,
   MenuIcon,
   ChevronDownIcon,
   SidebarToggleIcon,
