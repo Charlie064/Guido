@@ -103,6 +103,10 @@ windows = { version = "0.58", features = [
     # above still needed this to find it (shell:AppsFolder\<AUMID>, not
     # the exe path — see extract_pid_icon in window_provider.rs).
     "Win32_Storage_Packaging_Appx",
+    # SendInput/INPUT/MOUSEINPUT (cursor_control.rs) — synthesizes a real
+    # input event rather than just poking SetCursorPos's tracked position,
+    # since the latter was reported to visibly do nothing on a VM.
+    "Win32_UI_Input_KeyboardAndMouse",
 ] }
 # tauri-runtime (and so tauri::WebviewWindow::hwnd(), used by
 # exclude_sidebar_from_capture in src/lib.rs) is pinned to windows 0.61,

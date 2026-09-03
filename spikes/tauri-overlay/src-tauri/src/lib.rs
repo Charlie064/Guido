@@ -2,6 +2,7 @@ use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 
+mod cursor_control;
 mod window_provider;
 
 // x0..y1 are always fractions-of-`image_width`/`image_height` in spirit
@@ -673,6 +674,18 @@ async fn window_at_point(x: i64, y: i64) -> Result<window_provider::WindowInfo, 
         .map_err(|e| format!("window_at_point task panicked: {e}"))?
 }
 
+// x/y are absolute screen px, same coordinate space window_at_point above
+// takes — see cursor_control.rs for the per-OS implementation and
+// verification status. Async + spawn_blocking for the same reason
+// list_windows is above it: the Linux path opens an X11 connection, which
+// can stall exactly like a slow subprocess can.
+#[tauri::command]
+async fn move_cursor(x: i32, y: i32) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || cursor_control::move_cursor(x, y))
+        .await
+        .map_err(|e| format!("move_cursor task panicked: {e}"))?
+}
+
 // The picked window's app icon, as a PNG data URI ready for an <img src>.
 //
 // Cached on disk per app rather than per window, keyed by app name: the
@@ -1235,6 +1248,7 @@ pub fn run() {
             save_skills_json,
             refresh_window_rect,
             window_at_point,
+            move_cursor,
             window_icon,
             identify_app,
             store_session_token,
