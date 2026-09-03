@@ -55,12 +55,18 @@ pub fn window_icon(id: &str) -> Result<Option<IconImage>, String> {
     {
         linux_x11::window_icon(id)
     }
-    // macOS (NSRunningApplication.icon via the window's owner pid) and
-    // Windows (WM_GETICON / ExtractIconEx off the exe path) are the
-    // BL-004 paths and are not wired up yet — reported as "no icon"
-    // rather than an error so the picker degrades to the letter avatar
-    // instead of surfacing a failure the user can't act on.
-    #[cfg(not(target_os = "linux"))]
+    // BL-004's Windows path (ExtractIconExW off the window's exe path) —
+    // wired up 2026-09-02, was previously reporting "no icon" for every
+    // app (msedge, Windows Terminal, ...) on this platform.
+    #[cfg(target_os = "windows")]
+    {
+        windows_backend::window_icon(id)
+    }
+    // macOS (NSRunningApplication.icon via the window's owner pid) is
+    // BL-004's remaining unwired path — reported as "no icon" rather than
+    // an error so the picker degrades to the letter avatar instead of
+    // surfacing a failure the user can't act on.
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         let _ = id;
         Ok(None)
@@ -319,9 +325,7 @@ mod windows_backend {
     use windows::Win32::System::Threading::{
         OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible};
     use windows::core::PWSTR;
 
     fn window_rect(hwnd: HWND) -> Option<RECT> {
@@ -338,25 +342,238 @@ mod windows_backend {
         Some(rect)
     }
 
-    fn process_name(hwnd: HWND) -> String {
+    fn pid_for_hwnd(hwnd: HWND) -> u32 {
+        let mut pid = 0u32;
         unsafe {
-            let mut pid = 0u32;
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
-            let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
-                return String::new();
-            };
+        }
+        pid
+    }
+
+    fn exe_path_for_pid(pid: u32) -> Option<String> {
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
             let mut buf = [0u16; 512];
             let mut len = buf.len() as u32;
             let ok = QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
             let _ = CloseHandle(handle);
             if ok.is_err() {
-                return String::new();
+                return None;
             }
-            let path = OsString::from_wide(&buf[..len as usize]);
-            std::path::Path::new(&path)
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
-                .unwrap_or_default()
+            Some(OsString::from_wide(&buf[..len as usize]).to_string_lossy().into_owned())
+        }
+    }
+
+    fn process_exe_path(hwnd: HWND) -> Option<String> {
+        exe_path_for_pid(pid_for_hwnd(hwnd))
+    }
+
+    fn process_name(hwnd: HWND) -> String {
+        process_exe_path(hwnd)
+            .and_then(|path| {
+                std::path::Path::new(&path)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().into_owned())
+            })
+            .unwrap_or_default()
+    }
+
+    // BL-004's Windows icon path. `id` first has to resolve back to a live
+    // window so its process's exe path is even known; a window that's
+    // since closed yields "no icon" like any other unreachable-icon case,
+    // not an error.
+    pub fn window_icon(id: &str) -> Result<Option<super::IconImage>, String> {
+        let raw: isize = id.parse().map_err(|e| format!("bad window id {id}: {e}"))?;
+        let hwnd = HWND(raw as _);
+        let Some(path) = process_exe_path(hwnd) else {
+            return Ok(None);
+        };
+        Ok(extract_exe_icon(&path))
+    }
+
+    // Shared tail for every icon source below (ExtractIconExW's HICON, via
+    // hicon_to_image; IShellItemImageFactory's HBITMAP directly) — once
+    // there's a color HBITMAP in hand, reading it into RGBA8 is identical
+    // regardless of which API produced it.
+    fn hbitmap_to_image(bmp_handle: windows::Win32::Graphics::Gdi::HBITMAP) -> Option<super::IconImage> {
+        use windows::Win32::Graphics::Gdi::{
+            BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC, GetDIBits, GetObjectW,
+        };
+
+        let mut bmp = BITMAP::default();
+        let wrote = unsafe {
+            GetObjectW(bmp_handle, std::mem::size_of::<BITMAP>() as i32, Some(&mut bmp as *mut _ as *mut _))
+        };
+        if wrote == 0 {
+            return None;
+        }
+        let (width, height) = (bmp.bmWidth, bmp.bmHeight);
+
+        let dc = unsafe { CreateCompatibleDC(None) };
+        let mut bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height, // negative = top-down, so rows come out in normal reading order
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: 0, // BI_RGB
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut buf = vec![0u8; (width * height * 4) as usize];
+        let copied = unsafe {
+            GetDIBits(dc, bmp_handle, 0, height as u32, Some(buf.as_mut_ptr() as *mut _), &mut bmi, DIB_RGB_COLORS)
+        };
+        unsafe {
+            let _ = DeleteDC(dc);
+        }
+        if copied == 0 {
+            return None;
+        }
+
+        // BGRA (the DIB's native order) -> straight RGBA, in place. Some
+        // icons carry a real alpha channel here; ones that don't (alpha 0
+        // across every pixel — legacy AND-mask-only icons) are treated as
+        // fully opaque rather than fully invisible, since an all-zero
+        // alpha channel is never an intentional blank icon.
+        let mut has_alpha = false;
+        for px in buf.chunks_exact_mut(4) {
+            px.swap(0, 2); // BGRA -> RGBA (B<->R), alpha already last
+            has_alpha |= px[3] != 0;
+        }
+        if !has_alpha {
+            for px in buf.chunks_exact_mut(4) {
+                px[3] = 255;
+            }
+        }
+
+        Some(super::IconImage { width: width as u32, height: height as u32, rgba: buf })
+    }
+
+    fn hicon_to_image(icon: windows::Win32::UI::WindowsAndMessaging::HICON) -> Option<super::IconImage> {
+        use windows::Win32::Graphics::Gdi::DeleteObject;
+        use windows::Win32::UI::WindowsAndMessaging::GetIconInfo;
+
+        if icon.is_invalid() {
+            return None;
+        }
+
+        // Neither HICON nor ICONINFO derives Default in windows-rs (unlike
+        // BITMAP/BITMAPINFO in hbitmap_to_image) — ICONINFO is a
+        // plain-old-data FFI struct GetIconInfo fully overwrites on
+        // success, so zeroing it by hand is correct here, not a shortcut
+        // around a real init.
+        let mut info: windows::Win32::UI::WindowsAndMessaging::ICONINFO = unsafe { std::mem::zeroed() };
+        unsafe { GetIconInfo(icon, &mut info).ok()? };
+        // ICONINFO always owns hbmMask too, even for a color icon — freed
+        // alongside hbmColor below regardless of what happens in between,
+        // so every early return here still cleans up.
+        let (color_bmp, mask_bmp) = (info.hbmColor, info.hbmMask);
+        let image = hbitmap_to_image(color_bmp);
+        unsafe {
+            let _ = DeleteObject(color_bmp);
+            let _ = DeleteObject(mask_bmp);
+        }
+        image
+    }
+
+    fn extract_exe_icon(path: &str) -> Option<super::IconImage> {
+        use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
+
+        let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+
+        if let Some(icon) = extract_icon_ex(&wide).filter(|i| !i.is_invalid()) {
+            let image = hicon_to_image(icon);
+            unsafe {
+                let _ = DestroyIcon(icon);
+            }
+            if image.is_some() {
+                return image;
+            }
+        }
+
+        // Falls through here for MSIX/UWP-packaged apps (Store apps —
+        // Calculator, the Store app itself, ...): confirmed 2026-09-02
+        // against a real installed Calculator that their exe carries *no*
+        // classic PE icon resource at all — ExtractIconExW correctly
+        // reports 0 icons in the file, not a bug in that call. Their real
+        // icon comes from the package manifest instead.
+        //
+        // SHGetFileInfoW (BL-004's own original plan for this fallback)
+        // was tried first and empirically does NOT resolve it either —
+        // confirmed 2026-09-02 that it silently returns Windows' generic
+        // "unknown file type" icon, byte-for-byte identical, for both a
+        // real Calculator and the Store app itself. shell_item_icon below
+        // (IShellItemImageFactory) is the shell API that actually walks
+        // the package manifest the way Explorer itself does.
+        shell_item_icon(&wide)
+    }
+
+    // The modern COM shell API (Explorer's own icon-resolution path,
+    // unlike ExtractIconExW/SHGetFileInfoW above) — the only one of the
+    // three confirmed 2026-09-02 to resolve an MSIX/UWP-packaged app's
+    // real per-app icon rather than a generic fallback.
+    fn shell_item_icon(wide_path: &[u16]) -> Option<super::IconImage> {
+        use windows::Win32::Foundation::SIZE;
+        use windows::Win32::Graphics::Gdi::DeleteObject;
+        use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
+        use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_ICONONLY};
+        use windows::core::PCWSTR;
+
+        // COM apartment state is per-thread. This runs on one of tokio's
+        // blocking-pool threads (see window_icon's spawn_blocking caller
+        // in lib.rs) — never previously touched COM, so this should
+        // always succeed cleanly, but the result is deliberately ignored
+        // rather than propagated: worst case it was already initialized a
+        // different way (RPC_E_CHANGED_MODE), and the SHCreateItemFromParsingName
+        // call below fails on its own if there's genuinely no usable
+        // apartment, which is a fine degrade (None, same as "no icon").
+        // Never paired with CoUninitialize — tokio's blocking-pool threads
+        // are reused across calls, and leaving the thread COM-initialized
+        // permanently is the safer failure mode for a pooled thread versus
+        // risking an uninitialize racing a future call that assumed the
+        // apartment was still live.
+        let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+
+        let factory: IShellItemImageFactory =
+            unsafe { SHCreateItemFromParsingName(PCWSTR(wide_path.as_ptr()), None) }.ok()?;
+        // 32x32: matches ExtractIconExW's own "large icon" size above, so
+        // callers see one consistent resolution regardless of which path
+        // actually produced the image.
+        let bitmap = unsafe { factory.GetImage(SIZE { cx: 32, cy: 32 }, SIIGBF_ICONONLY) }.ok()?;
+        let image = hbitmap_to_image(bitmap);
+        unsafe {
+            let _ = DeleteObject(bitmap);
+        }
+        image
+    }
+
+    // The exe's own primary icon resource (index 0 is always that,
+    // regardless of how many the file has) — `None` covers both "this
+    // exe genuinely has none" (a normal outcome for an MSIX-packaged app,
+    // see extract_exe_icon's fallback) and any extraction failure; the
+    // caller doesn't need to tell those apart.
+    fn extract_icon_ex(wide_path: &[u16]) -> Option<windows::Win32::UI::WindowsAndMessaging::HICON> {
+        use windows::Win32::UI::Shell::ExtractIconExW;
+        use windows::Win32::UI::WindowsAndMessaging::HICON;
+        use windows::core::PCWSTR;
+
+        // Neither HICON nor ICONINFO derives Default in windows-rs — an
+        // all-zero HICON is still a valid "null handle" bit pattern, so
+        // zeroing it by hand here is correct, not a shortcut around a
+        // real init.
+        let mut large = HICON(std::ptr::null_mut());
+        // Count of icons *in the file*, not whether extraction into
+        // `large` succeeded — checked via the handle itself, since a >0
+        // count with a still-null handle is possible on a malformed
+        // resource.
+        let found = unsafe { ExtractIconExW(PCWSTR(wide_path.as_ptr()), 0, Some(&mut large), None, 1) };
+        if found == 0 {
+            None
+        } else {
+            Some(large)
         }
     }
 

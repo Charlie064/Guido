@@ -80,6 +80,23 @@ windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Dwm",
     "Win32_System_Threading",
+    # BL-004's Windows icon path (window_icon in window_provider.rs):
+    # Win32_UI_Shell for ExtractIconExW/SHGetFileInfoW (the latter is the
+    # fallback for MSIX/UWP-packaged apps, whose exe carries no classic PE
+    # icon resource for ExtractIconExW to find), Win32_Graphics_Gdi for
+    # GetIconInfo/ICONINFO and the GDI calls that turn an HICON's HBITMAP
+    # into raw pixels, Win32_Storage_FileSystem for SHGetFileInfoW's
+    # (unused, since SHGFI_USEFILEATTRIBUTES is never passed) attributes
+    # parameter type.
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
+    # IShellItemImageFactory/SHCreateItemFromParsingName/CoInitializeEx —
+    # the fallback within the fallback: the only one of three tried icon
+    # sources that resolves an MSIX/UWP-packaged (Microsoft Store) app's
+    # real icon rather than a generic placeholder, since it's the same
+    # shell API Explorer itself uses to walk the package manifest.
+    "Win32_System_Com",
 ] }
 # tauri-runtime (and so tauri::WebviewWindow::hwnd(), used by
 # exclude_sidebar_from_capture in src/lib.rs) is pinned to windows 0.61,
