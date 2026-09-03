@@ -97,6 +97,12 @@ windows = { version = "0.58", features = [
     # real icon rather than a generic placeholder, since it's the same
     # shell API Explorer itself uses to walk the package manifest.
     "Win32_System_Com",
+    # GetApplicationUserModelId — investigated 2026-09-02: a packaged
+    # app's real icon is registered against its Start Menu tile identity
+    # (its AUMID), not its exe file, which is why IShellItemImageFactory
+    # above still needed this to find it (shell:AppsFolder\<AUMID>, not
+    # the exe path — see extract_pid_icon in window_provider.rs).
+    "Win32_Storage_Packaging_Appx",
 ] }
 # tauri-runtime (and so tauri::WebviewWindow::hwnd(), used by
 # exclude_sidebar_from_capture in src/lib.rs) is pinned to windows 0.61,

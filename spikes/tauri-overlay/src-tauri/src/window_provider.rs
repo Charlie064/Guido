@@ -325,7 +325,9 @@ mod windows_backend {
     use windows::Win32::System::Threading::{
         OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumChildWindows, EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+    };
     use windows::core::PWSTR;
 
     fn window_rect(hwnd: HWND) -> Option<RECT> {
@@ -364,8 +366,70 @@ mod windows_backend {
         }
     }
 
+    fn is_application_frame_host(path: &str) -> bool {
+        std::path::Path::new(path)
+            .file_name()
+            .is_some_and(|f| f.eq_ignore_ascii_case("ApplicationFrameHost.exe"))
+    }
+
+    // Every UWP/Microsoft Store app's visible top-level window (Calculator,
+    // the Store app itself, Photos, Mail, ...) is actually owned by a
+    // single shared OS process, ApplicationFrameHost.exe, not by the app —
+    // confirmed 2026-09-02 by dumping list_windows() output against a real
+    // Calculator and the Store app, both of which came back as
+    // app_name="ApplicationFrameHost". Before this fix, every Store app
+    // was indistinguishable from every other (same wrong app_name) and
+    // window_icon extracted the host's own icon instead of the app's. The
+    // actual app runs in its own process and hosts a child window inside
+    // the frame (usually a "Windows.UI.Core.CoreWindow") — found here by
+    // walking the frame's child windows for the first one owned by a
+    // *different* process, and using that process instead for everything
+    // downstream (name, icon). A plain (non-UWP) window has no children
+    // that satisfy this, so real_uwp_app_pid returns None and callers fall
+    // straight back to the frame's own process — this only ever changes
+    // behavior for the ApplicationFrameHost case.
+    fn real_uwp_app_pid(frame_hwnd: HWND, frame_pid: u32) -> Option<u32> {
+        struct Ctx {
+            frame_pid: u32,
+            found: Option<u32>,
+        }
+        extern "system" fn enum_child(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let ctx = unsafe { &mut *(lparam.0 as *mut Ctx) };
+            let pid = pid_for_hwnd(hwnd);
+            if pid != 0 && pid != ctx.frame_pid {
+                ctx.found = Some(pid);
+                return BOOL(0); // found it — stop enumerating
+            }
+            BOOL(1) // keep looking
+        }
+
+        let mut ctx = Ctx { frame_pid, found: None };
+        unsafe {
+            let _ = EnumChildWindows(frame_hwnd, Some(enum_child), LPARAM(&mut ctx as *mut _ as isize));
+        }
+        ctx.found
+    }
+
+    // Shared by process_name (below) and window_icon (below) — both need
+    // the real app pid behind a window, not necessarily the window's own
+    // owning process. Transparently redirects through ApplicationFrameHost
+    // — see real_uwp_app_pid above — so no caller has to know Store apps
+    // are a special case.
+    fn real_app_pid(hwnd: HWND) -> u32 {
+        let frame_pid = pid_for_hwnd(hwnd);
+        let Some(path) = exe_path_for_pid(frame_pid) else {
+            return frame_pid;
+        };
+        if is_application_frame_host(&path) {
+            if let Some(real_pid) = real_uwp_app_pid(hwnd, frame_pid) {
+                return real_pid;
+            }
+        }
+        frame_pid
+    }
+
     fn process_exe_path(hwnd: HWND) -> Option<String> {
-        exe_path_for_pid(pid_for_hwnd(hwnd))
+        exe_path_for_pid(real_app_pid(hwnd))
     }
 
     fn process_name(hwnd: HWND) -> String {
@@ -379,16 +443,71 @@ mod windows_backend {
     }
 
     // BL-004's Windows icon path. `id` first has to resolve back to a live
-    // window so its process's exe path is even known; a window that's
-    // since closed yields "no icon" like any other unreachable-icon case,
-    // not an error.
+    // window; a window that's since closed yields "no icon" like any
+    // other unreachable-icon case, not an error.
     pub fn window_icon(id: &str) -> Result<Option<super::IconImage>, String> {
         let raw: isize = id.parse().map_err(|e| format!("bad window id {id}: {e}"))?;
         let hwnd = HWND(raw as _);
-        let Some(path) = process_exe_path(hwnd) else {
-            return Ok(None);
-        };
-        Ok(extract_exe_icon(&path))
+        Ok(extract_pid_icon(real_app_pid(hwnd)))
+    }
+
+    // A packaged (MSIX/UWP — Microsoft Store) app has an
+    // ApplicationUserModelID; investigated 2026-09-02 after Calculator and
+    // the Store app itself both resolved to Windows' generic "unknown
+    // file type" icon via every exe-path-based lookup (ExtractIconExW:
+    // correctly finds no icon resource in the exe at all; SHGetFileInfoW
+    // and even IShellItemImageFactory *on the exe path*: both silently
+    // fall back to the same generic icon instead of erroring). The actual
+    // problem: a packaged app's real icon is registered against its Start
+    // Menu tile identity (its AUMID), not its exe file — parsing the raw
+    // exe path was never going to reach it regardless of which shell API
+    // did the parsing. `shell:AppsFolder\<AUMID>` is the documented shell
+    // namespace path that resolves to that same tile identity, and
+    // IShellItemImageFactory against *that* is confirmed (2026-09-02,
+    // against the real Calculator and Store app) to return their actual
+    // colored icons. A non-packaged process has no AUMID at all — GetApplicationUserModelId
+    // fails cleanly — so this falls through to the exe-path path below
+    // for every ordinary Win32 app, unchanged.
+    fn extract_pid_icon(pid: u32) -> Option<super::IconImage> {
+        if let Some(aumid) = application_user_model_id(pid) {
+            let shell_path: Vec<u16> =
+                format!("shell:AppsFolder\\{aumid}").encode_utf16().chain(std::iter::once(0)).collect();
+            if let Some(image) = shell_item_icon(&shell_path) {
+                return Some(image);
+            }
+        }
+        extract_exe_icon(&exe_path_for_pid(pid)?)
+    }
+
+    // `None` covers both "genuinely not a packaged app" (the overwhelmingly
+    // common case — msedge, Windows Terminal, Notepad, this app itself,
+    // ...) and any lookup failure; the caller doesn't need to tell those
+    // apart, since both mean "fall back to the exe path instead."
+    fn application_user_model_id(pid: u32) -> Option<String> {
+        use windows::Win32::Storage::Packaging::Appx::GetApplicationUserModelId;
+        use windows::core::PWSTR;
+
+        let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?;
+        // Standard Win32 "ask twice" pattern: a null buffer with length 0
+        // just reports how big a buffer is actually needed, in `len`.
+        let mut len = 0u32;
+        let _ = unsafe { GetApplicationUserModelId(handle, &mut len, PWSTR(std::ptr::null_mut())) };
+        if len == 0 {
+            unsafe {
+                let _ = CloseHandle(handle);
+            }
+            return None;
+        }
+        let mut buf = vec![0u16; len as usize];
+        let err = unsafe { GetApplicationUserModelId(handle, &mut len, PWSTR(buf.as_mut_ptr())) };
+        unsafe {
+            let _ = CloseHandle(handle);
+        }
+        if err.0 != 0 {
+            return None;
+        }
+        let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..end]))
     }
 
     // Shared tail for every icon source below (ExtractIconExW's HICON, via

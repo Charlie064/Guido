@@ -63,15 +63,74 @@ point — this file should never pose as a source of truth for what's done.
     The per-app grouping this entry describes is built too: the chat list
     is one card per app titled "<App> chats", ranked by its newest chat,
     with that app's chats inside it under the group's shared icon.
-    Remaining: the macOS (`NSRunningApplication.icon` off the window's
-    owner pid) and Windows (`WM_GETICON`/`ExtractIconEx`) backends.
-  - **Not verified against a real app.** The `_NET_WM_ICON` decode has
-    unit tests (`window_provider.rs`) but has never run on real pixels:
-    the dev machine is GNOME Wayland, where Mutter publishes no
-    `_NET_CLIENT_LIST`, so a walk of the whole X11 tree finds zero windows
-    carrying an icon even with `GDK_BACKEND=x11` forced. Needs an X11
-    login session (or the macOS/Windows backends) before it can be called
-    working.
+    **Windows window-pick path done (2026-09-02)**: `window_icon` in
+    `window_provider.rs`'s `windows_backend` module extracts the exe's own
+    primary icon via `ExtractIconExW` (the exe path comes from the
+    picked window's HWND → `QueryFullProcessImageNameW`, already resolved
+    for `WindowInfo.app_name`) and converts its HBITMAP to raw RGBA via
+    `GetIconInfo`/`GetDIBits` — same `IconImage` shape and disk cache the
+    Linux path already used, so nothing downstream needed to change.
+    `icon_for_app_name` (the *name-only*, no-window lookup a "Previous
+    chats" cold start needs) is still unbuilt on Windows — but since the
+    window-pick path caches per app name, any app picked live at least
+    once already has a working icon for that path too. Remaining:
+    macOS's window_icon (`NSRunningApplication.icon` off the window's
+    owner pid) and `icon_for_app_name` on both macOS and Windows.
+  - **Linux path not verified against a real app.** The `_NET_WM_ICON`
+    decode has unit tests (`window_provider.rs`) but has never run on
+    real pixels: the dev machine is GNOME Wayland, where Mutter publishes
+    no `_NET_CLIENT_LIST`, so a walk of the whole X11 tree finds zero
+    windows carrying an icon even with `GDK_BACKEND=x11` forced. Needs an
+    X11 login session before it can be called working.
+  - **Windows path verified 2026-09-02** against real running windows on
+    this dev machine (a throwaway test enumerated live windows, extracted
+    each one's icon, and saved it to a PNG for a visual check, then was
+    deleted): msedge.exe and WindowsTerminal.exe both came back as their
+    correct real 32×32 icons, not the letter-avatar fallback. Verified via
+    a standalone `list_windows`/`window_icon` call, not by clicking
+    through the app's own window-pick UI end to end — that path is the
+    same `window_icon` command either way, but hasn't been exercised
+    through the picker itself yet.
+  - **Microsoft Store apps investigated and fixed, 2026-09-02.** Reported
+    as "couldn't detect Microsoft Store" — root-caused rather than
+    patched around a symptom, in two separate layers that both had to be
+    fixed:
+    1. **Wrong app entirely.** Every UWP/MSIX app's visible window
+       (Calculator, the Store app itself, Photos, Mail, ...) is actually
+       owned by a single shared OS process, `ApplicationFrameHost.exe`,
+       not by the app — confirmed by dumping `list_windows()` against a
+       real Calculator and the Store app, both of which came back as
+       `app_name="ApplicationFrameHost"`. Every Store app was therefore
+       indistinguishable from every other, and `window_icon` extracted
+       the host's own icon instead of the app's. Fixed by walking the
+       frame's child windows (`EnumChildWindows`) for the first one owned
+       by a different process — `real_uwp_app_pid` in
+       `window_provider.rs` — and using that process for everything
+       downstream (name, icon) instead. A plain window has no such child,
+       so this only changes behavior for the `ApplicationFrameHost` case.
+    2. **Even with the right process, no icon on the exe itself.** A
+       packaged app's exe (e.g. `CalculatorApp.exe` under
+       `C:\Program Files\WindowsApps\...`) carries no classic PE icon
+       resource at all — confirmed `ExtractIconExW` correctly reports 0
+       icons there, not a bug in that call. Two further attempts
+       (`SHGetFileInfoW`, and `IShellItemImageFactory` called on the exe
+       path) were both tried and both empirically returned Windows'
+       generic "unknown file type" icon — identical bytes for Calculator
+       and the Store app, i.e. not really per-app icons at all — because
+       a packaged app's real icon is registered against its Start Menu
+       tile identity (its AppUserModelID), not its exe file, and parsing
+       the raw exe path was never going to reach it regardless of which
+       shell API did the parsing. Fixed by resolving the app's AUMID via
+       `GetApplicationUserModelId` and asking `IShellItemImageFactory`
+       for `shell:AppsFolder\<AUMID>` instead of the exe path — confirmed
+       against real running Calculator and Microsoft Store windows to
+       return their actual colored icons. A non-packaged process has no
+       AUMID (the lookup fails cleanly), so every ordinary Win32 app
+       still goes through the exe-path/`ExtractIconExW` path unchanged.
+    Both fixes are Windows-only (`extract_pid_icon`,
+    `application_user_model_id`, `real_uwp_app_pid`, all in
+    `windows_backend`); Linux and macOS are architecturally unaffected —
+    neither has (or needs) an `ApplicationFrameHost`/AUMID equivalent.
 - **BL-005 — Live window-rect tracking backend + window-picker capture +
   real on-screen overlay.** The actual OS calls behind
   [ADR 0005](decisions/0005-window-anchored-overlay-coordinates.md)'s
