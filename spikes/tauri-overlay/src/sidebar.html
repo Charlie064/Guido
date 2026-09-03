@@ -19,7 +19,11 @@
         --do: #A78BFA;
         --ink: #0A0A0A;
         --muted: #525252;
-        --bg: #ffffff;
+        /* FLASH_BLUE (--blue, #3B82F6 — website-design-system.md's
+           marketing blue) lightened ~80% toward white, per the 2026-09-02
+           review ("make the guido icon have the blue marketing colour...
+           and use it as the background for the app"). Was #ffffff. */
+        --bg: #D8E6FD;
         --panel-raised: #ffffff;
         /* Recessed ground for the history half of home — see .home-bottom. */
         --sunken: #E8E8E4;
@@ -41,7 +45,7 @@
       html, body {
         margin: 0;
         padding: 0;
-        background: #ffffff;
+        background: var(--bg);
         overflow: hidden;
         height: 100vh;
         width: 100vw;
@@ -76,6 +80,19 @@
         flex-shrink: 0;
       }
 
+      /* guido-icon.png ships as a pastel blue/purple/pink gradient — the
+         2026-09-02 review asked for the mark itself to read as FLASH_BLUE
+         (--blue, #3B82F6) instead, lightened. There's no source vector
+         for this specific asset to re-author directly (see the icon-pool
+         note in CLAUDE.md — that's for icons.js's hand-drawn SVG icons,
+         a separate system from this raster brand mark), so the recolor
+         is a CSS filter: grayscale+sepia neutralizes the original
+         gradient to one tone, hue-rotate retints it to FLASH_BLUE's hue
+         (~217°, sepia's own baseline is ~40°), saturate brings the color
+         back up since grayscale+sepia desaturates it, and brightness is
+         the "a little lighter." Same filter on .login-mark below —
+         couldn't verify the exact look in this session (no working
+         screenshot path), so treat the numbers as a starting point. */
       .bar-mark {
         width: 32px;
         height: 32px;
@@ -84,6 +101,7 @@
         border: 1.5px solid rgba(0, 0, 0, 0.10);
         box-shadow: 0 0 0 3px var(--halo);
         flex-shrink: 0;
+        filter: grayscale(1) sepia(1) hue-rotate(180deg) saturate(3) brightness(1.1);
       }
 
       /* This bar is on every view, so an unclamped long title/subtitle
@@ -1249,6 +1267,7 @@
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M20 15v10M15 20h10' stroke='%23000000' stroke-opacity='0.09' stroke-width='1.2'/%3E%3C/svg%3E");
       }
 
+      /* Same recolor as .bar-mark — see its comment. */
       .login-mark {
         width: 88px;
         height: 88px;
@@ -1257,6 +1276,7 @@
         border: 1.5px solid rgba(0, 0, 0, 0.10);
         box-shadow: 0 0 0 4px var(--halo), 0 4px 10px -2px rgba(0, 0, 0, 0.15);
         background: #ffffff;
+        filter: grayscale(1) sepia(1) hue-rotate(180deg) saturate(3) brightness(1.1);
       }
 
       .login-wordmark {
