@@ -11,7 +11,7 @@
 // command are unused by this file now but not deleted — a real cleanup
 // pass on those is a separate, larger change. See substepBubbleHtml.
 import { SKILLS } from "./fake-skill.js";
-import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon, HomeIcon } from "./icons.js";
+import { TrashIcon, ChevronDownIcon, CheckIcon, ImageIcon, MicIcon, HomeIcon, CursorIcon } from "./icons.js";
 import { check as checkUpdate, relaunch } from "./vendor/tauri-updater.js";
 
 // Registered before anything below gets a chance to throw — including
@@ -36,9 +36,47 @@ function reportUnexpectedError(context, err) {
 window.addEventListener("error", (e) => reportUnexpectedError("Unexpected error", e.error ?? e.message));
 window.addEventListener("unhandledrejection", (e) => reportUnexpectedError("Unexpected error", e.reason));
 
-const { getCurrentWindow } = window.__TAURI__.window;
+const { getCurrentWindow, currentMonitor, primaryMonitor } = window.__TAURI__.window;
 const { emit, listen } = window.__TAURI__.event;
 const { invoke } = window.__TAURI__.core;
+
+// Dev/test-only mode switch (2026-09-03 review: "make the ai wiring turn
+// on/off-able... so I can easily test UI or actually use the ai
+// endpoint"). Persisted across restarts; default off so a fresh checkout
+// never silently starts spending real API calls. Toggled from the
+// profile menu (#profile-ai-mode) — see setAiMode below.
+//
+// **What this does and doesn't cover** — the app was already a mix of
+// fully-real and fully-fake paths before this existed, not a single
+// on/off switch waiting to be flipped:
+// - `#view-chat`'s question box, `verify_substep`, `locate_element` were
+//   already unconditionally real (no fake fallback existed) — untouched.
+// - The mini rail's question box (`sendMinimizedQuestion`) was
+//   unconditionally fake — this is the one this toggle actually gates,
+//   calling the real `answer_question` the same way `#view-chat` does
+//   when on.
+// - The home goal box (`submitNewGoalStub`) stays unconditionally fake
+//   regardless of this toggle — deliberately, not an oversight. Wiring
+//   it for real needs `research_goal`/`research.py`'s response shape
+//   (`ResearchResult { title, steps: [{title, brief, watch_for}] }`,
+//   `lib.rs`) migrated to the flattened per-step shape
+//   `fake-skill.js`/the mini rail actually render today (`instruction_text`/
+//   `target_description`/`action` per step, no separate plan-then-expand
+//   phase) — see `planning/minimal-step-mode.md`'s 5f. That's a real
+//   product/schema pass, not a toggle-wiring job, and attempting a
+//   lossy bridge mapping here risked shipping something that silently
+//   half-breaks the schematic renderer instead of clearly not working.
+let useRealAi = localStorage.getItem("guido_ai_mode") === "real";
+
+function setAiMode(real) {
+  useRealAi = real;
+  localStorage.setItem("guido_ai_mode", real ? "real" : "fake");
+  const btn = document.querySelector("#profile-ai-mode");
+  if (btn) {
+    btn.setAttribute("aria-pressed", String(real));
+    btn.textContent = real ? "Use real AI (dev) — on" : "Use real AI (dev)";
+  }
+}
 
 // Capture scope: null means full screen (the default). Otherwise a live
 // OS window picked in setup — {id, app_name, title, x, y, width, height},
@@ -206,6 +244,8 @@ const els = {
   profileWrap: document.querySelector("#bar-profile-wrap"),
   profileBtn: document.querySelector("#bar-profile"),
   profileMenu: document.querySelector("#profile-menu"),
+  cursorTest: document.querySelector("#bar-cursor-test"),
+  barMarkFrame: document.querySelector("#bar-mark-frame"),
 };
 
 // Persistent status strip (outside every view — see sidebar.html's
@@ -364,6 +404,12 @@ function showView(name, { fade = false } = {}) {
   els.barBack.hidden = !backTarget;
   els.barBack.onclick = backTarget ? () => showView(backTarget) : null;
   els.profileWrap.hidden = name === "login";
+  // 2026-09-03 review: "the guido mascot should not be in the steps
+  // overview" — .bar-mark-frame is one shared element across every view
+  // .bar appears on (viewMeta only ever changes its title/subtitle), so
+  // this is the one place that can single out "path" (the step list)
+  // without duplicating the element per view.
+  els.barMarkFrame.hidden = name === "path";
   setProfileOpen(false);
   fitWindow(name);
 }
@@ -996,6 +1042,34 @@ document.querySelector("#login-form").addEventListener("submit", async (e) => {
   }
 });
 
+// Dev/test-only (docs/testing/manual-test-matrix.md, "Do mode: cursor
+// movement" row) — no real plan step drives move_cursor yet, so this is
+// the only way to exercise the per-platform backend (cursor_control.rs)
+// by hand. Target is *the primary monitor's* center, in physical screen
+// px — cursor_control.rs's SetCursorPos/XWarpPointer/CGWarpMouseCursorPosition
+// all work in that space. Deliberately primaryMonitor(), not
+// currentMonitor(): "center of the screen" means the one the user is
+// actually looking at, not whichever monitor this small window happens
+// to be sitting on right now if there's more than one display — using
+// currentMonitor() here previously moved the cursor to the center of the
+// wrong monitor in a multi-monitor setup, which looked exactly like
+// "nothing happened" if the user wasn't watching that other screen.
+// Errors surface visibly (not just console.error, invisible without
+// devtools open) via reportUnexpectedError, same path window.onerror
+// uses.
+els.cursorTest.innerHTML = CursorIcon({ size: 15 });
+els.cursorTest.addEventListener("click", async () => {
+  try {
+    const monitor = await primaryMonitor();
+    if (!monitor) throw new Error("no primary monitor reported");
+    const x = Math.round(monitor.position.x + monitor.size.width / 2);
+    const y = Math.round(monitor.position.y + monitor.size.height / 2);
+    await invoke("move_cursor", { x, y });
+  } catch (err) {
+    reportUnexpectedError("Couldn't move the cursor", err);
+  }
+});
+
 els.profileBtn.addEventListener("click", (e) => {
   e.stopPropagation();
   setProfileOpen(!els.profileMenu.classList.contains("open"));
@@ -1035,6 +1109,10 @@ document.querySelector("#profile-usage").addEventListener("click", () => {
   setProfileOpen(false);
   openUsageView();
 });
+document.querySelector("#profile-ai-mode").addEventListener("click", () => {
+  setAiMode(!useRealAi);
+});
+setAiMode(useRealAi); // reflect the persisted value in the button on load
 
 // No Stripe yet (docs/planning/login-membership-plan.md's "Open /
 // deferred") — the website's /pricing page (website/public/pricing.html)
@@ -1518,6 +1596,8 @@ const miniRailEls = {
   pin: document.querySelector("#mini-rail-pin"),
   timeline: document.querySelector("#mini-rail-timeline"),
   desc: document.querySelector("#mini-rail-desc"),
+  descText: document.querySelector("#mini-rail-desc-text"),
+  descMore: document.querySelector("#mini-rail-desc-more"),
   splitbar: document.querySelector("#mini-rail-splitbar"),
   prev: document.querySelector("#mini-rail-prev"),
   next: document.querySelector("#mini-rail-next"),
@@ -1528,12 +1608,30 @@ const miniRailEls = {
   chat: document.querySelector("#mini-rail-chat"),
   history: document.querySelector("#mini-rail-history"),
   input: document.querySelector("#mini-rail-input"),
+  mic: document.querySelector("#mini-rail-mic"),
+  screenshotToggle: document.querySelector("#mini-rail-screenshot-toggle"),
   send: document.querySelector("#mini-rail-send"),
 };
 // icons.js hands back an SVG string, not markup usable statically in the
 // HTML — see the icon-pool note in CLAUDE.md (check the pool before
 // drawing a new one; HomeIcon was added there for this).
 miniRailEls.back.innerHTML = HomeIcon({ size: 14 });
+miniRailEls.descMore.innerHTML = ChevronDownIcon({ size: 12 });
+
+// "More text below" cue (2026-09-03 review: "no scroll bar appears by
+// default and the text below is invisible") — the CSS thumb tweak alone
+// is the minimum fix; this is the "something else" on top of it. Recomputed
+// wherever .mini-rail-desc's content or height can change (new step
+// rendered, chat opened/closed, splitbar dragged) rather than left to a
+// generic resize observer, since a fixed-height box's own size doesn't
+// change when only its *content* does — only scrollHeight does, which
+// ResizeObserver doesn't watch.
+function updateMiniRailDescOverflow() {
+  const el = miniRailEls.desc;
+  const hasMore = el.scrollHeight - el.scrollTop - el.clientHeight > 2;
+  el.classList.toggle("has-more-below", hasMore);
+}
+miniRailEls.desc.addEventListener("scroll", updateMiniRailDescOverflow, { passive: true });
 
 // Two-finger/trackpad swipes and a plain vertical mouse wheel both scroll
 // this strip horizontally (2026-09-02 review) — an overflow-x-only
@@ -1550,6 +1648,39 @@ function wheelScrollsHorizontally(el) {
     },
     { passive: false },
   );
+}
+
+// Pointer-drag swipe (2026-09-03 review, "add two finger swiping to the
+// top node viewer") — wheelScrollsHorizontally above already covers a
+// deltaX-dominant trackpad swipe (left to native handling) and a plain
+// vertical wheel, but pointer events are what actually let a two-finger
+// touch/trackpad drag (and a plain mouse drag, for testing without a
+// trackpad) scroll the strip: there's no reliable way from JS to tell a
+// two-finger swipe apart from a one-finger one, or to require exactly
+// two fingers, so this treats any pointer drag the same way.
+// setPointerCapture keeps receiving move events even if the pointer
+// drifts off the strip mid-drag.
+function dragScrollsHorizontally(el) {
+  let dragging = false;
+  let startX = 0;
+  let startScrollLeft = 0;
+  el.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    startX = e.clientX;
+    startScrollLeft = el.scrollLeft;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("dragging");
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    el.scrollLeft = startScrollLeft - (e.clientX - startX);
+  });
+  const endDrag = () => {
+    dragging = false;
+    el.classList.remove("dragging");
+  };
+  el.addEventListener("pointerup", endDrag);
+  el.addEventListener("pointercancel", endDrag);
 }
 
 // Flashes a scrollbar into view while actively scrolling (2026-09-02
@@ -1571,6 +1702,7 @@ function flashScrollbarOnScroll(el) {
 }
 
 wheelScrollsHorizontally(miniRailEls.timeline);
+dragScrollsHorizontally(miniRailEls.timeline);
 flashScrollbarOnScroll(miniRailEls.timeline);
 flashScrollbarOnScroll(miniRailEls.desc);
 flashScrollbarOnScroll(miniRailEls.history);
@@ -1589,6 +1721,7 @@ const MINI_DESC_MAX_HEIGHT = 160; // roughly as far above the auto-fit default a
 
 function resetMiniRailDescHeight() {
   miniRailEls.desc.style.height = "";
+  updateMiniRailDescOverflow();
 }
 
 miniRailEls.splitbar.addEventListener("mousedown", (downEvent) => {
@@ -1600,6 +1733,7 @@ miniRailEls.splitbar.addEventListener("mousedown", (downEvent) => {
   function onMove(moveEvent) {
     const next = startHeight + (moveEvent.clientY - startY);
     miniRailEls.desc.style.height = `${Math.min(MINI_DESC_MAX_HEIGHT, Math.max(MINI_DESC_MIN_HEIGHT, next))}px`;
+    updateMiniRailDescOverflow();
   }
   function onUp() {
     miniRailEls.splitbar.classList.remove("dragging");
@@ -1617,29 +1751,94 @@ let minimizedSubstepId = null;
 let miniRailPinned = true;
 let miniRailChatOpen = false;
 
-// Two fixed sizes — header-only vs. header+chat — rather than one that
-// grows with content: the window has to actually resize with it (see
-// setMiniRailWindowState), and an unbounded size defeats "minimized."
-// History still scrolls internally past MINI_RAIL_CHAT_SIZE's height.
+// Fixed width, and a *default* chat height — not two fixed sizes anymore
+// (2026-09-03 review). Height in non-question mode is now user-driven:
+// miniRailStepHeight below is "the user defined expansion size," and
+// MINI_RAIL_CHAT_SIZE's height is only the floor question mode grows to
+// if that stored size is too small for it, not a size question mode
+// always snaps to. History still scrolls internally past whatever the
+// window's current height leaves it.
 const MINI_RAIL_SIZE = [340, 148];
 const MINI_RAIL_CHAT_SIZE = [340, 420];
+const MINI_RAIL_WIDTH = MINI_RAIL_SIZE[0];
+
+// The "user defined expansion size" (2026-09-03 review) — the window's
+// height while in non-question (step-only) mode, persisted across step
+// navigation (‹/›) and toggling question mode on and off, not reset back
+// to MINI_RAIL_SIZE's fixed 148 on every render the way it used to be.
+// Starts at that same default; from then on only the resize listener
+// below (a real manual drag, non-question mode only) changes it.
+let miniRailStepHeight = MINI_RAIL_SIZE[1];
 
 async function setMiniRailWindowState() {
   try {
     const LogicalSize = window.__TAURI__.dpi?.LogicalSize ?? window.__TAURI__.window.LogicalSize;
     const win = getCurrentWindow();
-    const [w, h] = miniRailChatOpen ? MINI_RAIL_CHAT_SIZE : MINI_RAIL_SIZE;
-    await win.setSize(new LogicalSize(w, h));
+    // Entering question mode never *shrinks* below its own default (a
+    // tiny step-only size still isn't enough room for chat) — but if the
+    // stored step-only size is already bigger than that default, the
+    // window stays exactly that size; only the internal split between
+    // .mini-rail-desc and .mini-rail-chat changes (see the CSS). Leaving
+    // question mode (closing it, or moving to the next/prev step, which
+    // always closes it — see openMinimizedSubstep) always goes back to
+    // the stored step-only height, discarding whatever question mode
+    // grew it to.
+    const targetHeight = miniRailChatOpen ? Math.max(miniRailStepHeight, MINI_RAIL_CHAT_SIZE[1]) : miniRailStepHeight;
+    await win.setSize(new LogicalSize(MINI_RAIL_WIDTH, targetHeight));
     // Global always-on-top, not "on top of just the selected/taught
     // window" — the latter needs real per-platform z-order code (Win32
     // SetWindowPos relative-insert, X11 sibling restacking, no equivalent
     // at all on Wayland) and was deliberately deferred, not attempted
     // here.
     await win.setAlwaysOnTop(miniRailPinned);
+    // 2026-09-03 review ("weird top bar in addition to the existing
+    // bottom bar"): the native OS titlebar (decorations: true in
+    // tauri.conf.json, needed for the full-size panel's WM-drag — see
+    // STATUS.md's GNOME dragging history) is oversized and redundant on
+    // this ~150px-tall minimized rail, which already has its own
+    // back/pin row. Dropped only while minimized; restored in
+    // closeMiniRailToMenu below. Window movement while undecorated comes
+    // from .mini-rail-swipe-handle's data-tauri-drag-region (see its CSS
+    // comment) rather than a native titlebar drag — unverified on
+    // Linux/GNOME, where undecorated+always-on-top+startDragging was
+    // previously unreliable for the full window (see
+    // docs/testing/manual-test-matrix.md).
+    await win.setDecorations(false);
   } catch {
     // Browser preview / missing Tauri API — leave the window as-is.
   }
 }
+
+// Tracks a manual OS-level resize (dragging the window's edge) into
+// miniRailStepHeight, so it becomes the new "user defined expansion
+// size" — see the CSS on .mini-rail-header/.mini-rail-desc for the half
+// of this that just lets the resize visually happen, and
+// setMiniRailWindowState above for how the stored value gets reapplied.
+// Guarded to only observe *this* window while the mini rail (not the
+// full-size panel) is showing and question mode is closed — every other
+// resize this listener sees is one of our own programmatic setSize calls
+// above (entering/leaving question mode, or re-applying the same stored
+// height on step navigation), not a user drag, and recording those would
+// either corrupt the stored value or just redundantly re-store the same
+// number. onResized's payload is PhysicalSize (unlike the LogicalSize
+// setSize above takes), so it's converted back via the window's own
+// scaleFactor rather than assumed to already match logical px.
+getCurrentWindow()
+  .onResized(async ({ payload: physicalSize }) => {
+    if (miniRailEls.el.hidden || miniRailChatOpen) return;
+    try {
+      const scaleFactor = await getCurrentWindow().scaleFactor();
+      miniRailStepHeight = Math.round(physicalSize.toLogical(scaleFactor).height);
+      // .mini-rail-desc's clientHeight just changed with the window (see
+      // its CSS) — recompute whether there's still more text below the
+      // fold rather than leaving the "more" cue in whatever state it was
+      // in before the resize.
+      updateMiniRailDescOverflow();
+    } catch {
+      // Browser preview / missing Tauri API — leave the stored height as-is.
+    }
+  })
+  .catch(() => {});
 
 function currentMinimizedSubstep() {
   return currentStep?.substeps.find((s) => s.id === minimizedSubstepId) ?? null;
@@ -1647,7 +1846,9 @@ function currentMinimizedSubstep() {
 
 function renderMiniRailHeader(direction) {
   const sub = currentMinimizedSubstep();
-  miniRailEls.desc.textContent = sub ? sub.instruction_text : "";
+  miniRailEls.descText.textContent = sub ? sub.instruction_text : "";
+  miniRailEls.desc.scrollTop = 0;
+  updateMiniRailDescOverflow();
   // Swipe feel on every step change — see the CSS comment on
   // .mini-rail-desc.slide-fwd/.slide-back. Remove-then-reflow-then-add so
   // the animation replays even if the same direction fired last time too.
@@ -1702,7 +1903,13 @@ function renderMiniRailHistory() {
     .map(
       (r) => `
         <div class="mini-rail-bubble mini-rail-bubble-user">
-          <span class="mini-rail-bubble-label">You</span>${r.question}
+          <span class="mini-rail-bubble-label">You</span>${r.question}${
+            // No real capture/vision call happens here yet (see
+            // sendMinimizedQuestion) — this just reflects that the
+            // screenshot toggle was on for this question, same as the
+            // full chat view would show once this is wired for real.
+            r.withScreenshot ? ` <span class="mini-rail-bubble-screenshot-tag" title="Sent with a screenshot">${ImageIcon({ size: 11 })}</span>` : ""
+          }
         </div>
         <div class="mini-rail-bubble mini-rail-bubble-ai">
           <span class="mini-rail-bubble-label">Guido</span>${r.instruction_text}
@@ -1749,6 +1956,9 @@ function closeMiniRailToMenu() {
   showView("path"); // resizes back to normal via fitWindow
   // Maximized has no top-level overlay — only the minimized view is sticky.
   getCurrentWindow().setAlwaysOnTop(false).catch(() => {});
+  // Restores the native titlebar setMiniRailWindowState dropped — the
+  // full-size panel still relies on it for WM dragging.
+  getCurrentWindow().setDecorations(true).catch(() => {});
 }
 
 miniRailEls.back.addEventListener("click", closeMiniRailToMenu);
@@ -1832,6 +2042,7 @@ miniRailEls.question.addEventListener("click", () => {
   // collapsed state's fixed 54px, since inline style always wins.
   miniRailEls.el.classList.toggle("chat-open", miniRailChatOpen);
   if (!miniRailChatOpen) resetMiniRailDescHeight();
+  updateMiniRailDescOverflow(); // chat-open's height:auto changes clientHeight even without a drag
   if (miniRailChatOpen) miniRailEls.input.focus();
   setMiniRailWindowState();
 });
@@ -1839,22 +2050,69 @@ miniRailEls.question.addEventListener("click", () => {
 // Fake reply, same shape a real reactive substep would take (origin:
 // "user", respondingTo) — so this is still consistent data if the same
 // substep later gets opened in the full chat view via "Open chat →".
-function sendMinimizedQuestion() {
+// Per-question opt-in, not a sticky mode — resets after every send, same
+// as includeScreenshotForNextQuestion/#chat-screenshot-toggle in the full
+// chat view.
+let includeScreenshotForMiniRailQuestion = false;
+
+function updateMiniRailScreenshotToggleUi() {
+  miniRailEls.screenshotToggle.classList.toggle("active", includeScreenshotForMiniRailQuestion);
+  miniRailEls.screenshotToggle.setAttribute("aria-pressed", String(includeScreenshotForMiniRailQuestion));
+}
+
+miniRailEls.mic.innerHTML = MicIcon({ size: 14 });
+miniRailEls.screenshotToggle.innerHTML = ImageIcon({ size: 14 });
+miniRailEls.screenshotToggle.addEventListener("click", () => {
+  includeScreenshotForMiniRailQuestion = !includeScreenshotForMiniRailQuestion;
+  updateMiniRailScreenshotToggleUi();
+});
+// #mini-rail-mic has no click handler — see the HTML comment on it for
+// why, and where the real one (#new-goal-mic) is if you're wiring this.
+
+// Real branch added 2026-09-03 alongside the AI_MODE toggle (see its
+// comment near the top of this file) — same shape sendChatMessage's
+// real answer_question call already uses (answerContext for the
+// context string, currentCaptureScope for the scope), just landing the
+// result into the mini rail's own substeps array/renderMiniRailHistory
+// instead of the full chat view's.
+async function sendMinimizedQuestion() {
   const text = miniRailEls.input.value.trim();
   if (!text || !minimizedSubstepId) return;
+  const withScreenshot = includeScreenshotForMiniRailQuestion;
   miniRailEls.input.value = "";
   miniRailEls.input.disabled = true;
-  setTimeout(() => {
+  includeScreenshotForMiniRailQuestion = false;
+  updateMiniRailScreenshotToggleUi();
+
+  const pushReply = (instruction_text) => {
     currentStep.substeps.push({
       id: `${minimizedSubstepId}-q${Date.now()}`,
       origin: "user",
       question: text,
-      instruction_text: "(fake reply — no answer_step call wired yet) Here's a placeholder answer.",
+      withScreenshot,
+      instruction_text,
       respondingTo: minimizedSubstepId,
     });
     miniRailEls.input.disabled = false;
     renderMiniRailHistory();
-  }, 500);
+  };
+
+  if (!useRealAi) {
+    setTimeout(() => pushReply("(fake reply — AI_MODE is off, see the profile menu) Here's a placeholder answer."), 500);
+    return;
+  }
+
+  try {
+    const result = await invoke("answer_question", {
+      question: text,
+      withScreenshot,
+      scope: withScreenshot ? currentCaptureScope() : null,
+      context: answerContext(currentMinimizedSubstep()),
+    });
+    pushReply(result.answer);
+  } catch (err) {
+    pushReply(`(error asking Guido: ${err?.message ?? err})`);
+  }
 }
 
 miniRailEls.send.addEventListener("click", sendMinimizedQuestion);

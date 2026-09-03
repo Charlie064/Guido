@@ -80,28 +80,72 @@
         flex-shrink: 0;
       }
 
-      /* guido-icon.png ships as a pastel blue/purple/pink gradient — the
-         2026-09-02 review asked for the mark itself to read as FLASH_BLUE
-         (--blue, #3B82F6) instead, lightened. There's no source vector
-         for this specific asset to re-author directly (see the icon-pool
-         note in CLAUDE.md — that's for icons.js's hand-drawn SVG icons,
-         a separate system from this raster brand mark), so the recolor
-         is a CSS filter: grayscale+sepia neutralizes the original
-         gradient to one tone, hue-rotate retints it to FLASH_BLUE's hue
-         (~217°, sepia's own baseline is ~40°), saturate brings the color
-         back up since grayscale+sepia desaturates it, and brightness is
-         the "a little lighter." Same filter on .login-mark below —
-         couldn't verify the exact look in this session (no working
-         screenshot path), so treat the numbers as a starting point. */
-      .bar-mark {
+      /* The frame carries the border/halo/corner-radius and clips
+         .bar-mark's overscale below. 2026-09-03 review ("make sure it
+         can move freely without being cut off"): the idle bob animates
+         *this* element now, not .bar-mark inside it — moving the whole
+         chip (border, shadow, and the clipped image together) as one
+         rigid unit means the crop boundary moves with the character
+         instead of staying fixed while the character slides underneath
+         it, which is what was visibly chopping the top of the bob
+         before. overflow: hidden still does real work: .bar-mark is
+         deliberately scaled up past this box's edges (see its comment)
+         to fill the frame edge-to-edge, and needs something to crop
+         that overscale into shape.
+         circle, not the earlier rounded-square (2026-09-03, "guido
+         still has the white background" follow-up): found by actually
+         screenshotting the running app (see cursor-control.md's
+         debugging note on why that's normally blind here) — there was
+         no background baked into any asset, `mascot-idle.svg` really is
+         fully transparent. What was visible was this frame's own
+         *corners*: the mascot's silhouette is round, a 9px-radius
+         square frame isn't, so the gap between the round character and
+         the frame's square corners showed the white .bar background
+         behind it, reading as "guido has a white background." A circle
+         frame has no corners for a round character to leave a gap in. */
+      .bar-mark-frame {
         width: 32px;
         height: 32px;
-        border-radius: 9px;
-        object-fit: cover;
+        border-radius: 50%;
         border: 1.5px solid rgba(0, 0, 0, 0.10);
         box-shadow: 0 0 0 3px var(--halo);
         flex-shrink: 0;
-        filter: grayscale(1) sepia(1) hue-rotate(180deg) saturate(3) brightness(1.1);
+        overflow: hidden;
+        display: block;
+        animation: bar-mark-bob 2.4s ease-in-out infinite;
+      }
+
+      .bar-mark-frame[hidden] {
+        display: none;
+      }
+
+      /* 2026-09-03 review: was guido-icon.png (a pre-composed pastel
+         square with the character already padded down to about half the
+         frame — see assets/mascot/README.md's regenerate steps for that
+         asset). Swapped for the actual mascot artwork (transparent
+         background, no baked-in padding) so object-fit: cover alone gets
+         most of the way to filling the frame; the extra scale(1.2)
+         closes the rest of the gap, cropped by .bar-mark-frame's
+         overflow: hidden above rather than distorting the art. Static
+         here — the idle bob is on .bar-mark-frame instead now (see its
+         comment), so this only ever holds the fixed cover+scale crop. */
+      .bar-mark {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transform: scale(1.2);
+        transform-origin: 50% 50%;
+      }
+
+      @keyframes bar-mark-bob {
+        0%,
+        100% {
+          transform: scale(1.2) translateY(0);
+        }
+        50% {
+          transform: scale(1.2) translateY(-1.5px);
+        }
       }
 
       /* This bar is on every view, so an unclamped long title/subtitle
@@ -173,6 +217,29 @@
         display: none;
       }
 
+      /* Dev/test-only, per docs/testing/manual-test-matrix.md's "Do mode:
+         cursor movement" row — exercises the move_cursor command
+         (cursor_control.rs) manually since no real plan step drives it
+         yet. Same round-icon shape as .bar-profile, undyed. */
+      .bar-cursor-test {
+        flex-shrink: 0;
+        width: 32px;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        border: 1.5px solid rgba(0, 0, 0, 0.10);
+        background: #ffffff;
+        color: var(--muted);
+        padding: 0;
+      }
+
+      .bar-cursor-test:hover {
+        color: var(--ink);
+        box-shadow: 0 0 0 4px var(--halo-bloom);
+      }
+
       /* Minimized substep view ("mini rail" — docs/planning/
          minimal-step-mode.md 5c, reworked 2026-09-02): entered by
          clicking a substep row in the steps menu (view-path), not by
@@ -203,21 +270,90 @@
         display: none;
       }
 
+      /* 2026-09-03 review: manually resizing the mini-rail window (it's
+         resizable — see tauri.conf.json) used to do nothing but add dead
+         white space, since nothing here claimed the extra height. Now a
+         flex column itself so .mini-rail-desc's flex:1 below can absorb
+         it, and flex:1 relative to its one sibling (.mini-rail-chat) so
+         it's the thing that grows when chat is closed and there's
+         nothing else competing for the space — reverts to content-sized
+         (flex: 0 1 auto, below) once chat opens, handing growth over to
+         .mini-rail-chat's own flex:1 instead. The actual "remember the
+         user's resize" logic (miniRailStepHeight, the window's
+         onResized listener, setMiniRailWindowState) lives in sidebar.js
+         — this is only the layout half of it. */
       .mini-rail-header {
-        flex-shrink: 0;
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
         padding: 10px 12px;
         border-bottom: 1px solid var(--border);
+      }
+
+      #mini-rail.chat-open .mini-rail-header {
+        flex: 0 1 auto;
       }
 
       /* Top-left cluster, per the 2026-09-02 review: back-to-menu, then
          pin to its right, then a done-badge that only appears once this
          substep has already been marked Done — so revisiting it shows
-         the tick without having to open the description. */
+         the tick without having to open the description.
+         2026-09-03 review ("make the bottom bar and top bar visually
+         separated from the text"): tinted background + border, bled out
+         to .mini-rail-header's own padding edges (the negative
+         margin/matching padding below) so the tint reads as a real
+         strip rather than a rounded patch floating inside the header. */
       .mini-rail-topbar {
+        flex-shrink: 0;
+        position: relative;
         display: flex;
         align-items: center;
         gap: 8px;
-        margin-bottom: 8px;
+        margin: -10px -12px 8px;
+        padding: 8px 12px;
+        background: var(--sunken);
+        border-bottom: 1px solid var(--border);
+      }
+
+      /* Swipe-affordance grabber (2026-09-03 review) — hidden until the
+         pointer is anywhere over the topbar, not just over the handle
+         itself, so it reads as "this whole strip swipes" rather than a
+         tiny target. Same pill shape as .mini-rail-splitbar::after
+         (the other drag handle in this view) but a little thicker and
+         about half its length, since this one only needs to gesture
+         "swipe" rather than double as a resize target.
+         Doubles as the window's move handle while minimized (see the
+         data-tauri-drag-region attribute in the HTML): the mini rail
+         drops its native titlebar (setMiniRailWindowState in
+         sidebar.js), so this is the only way left to reposition it.
+         pointer-events stays "none" while hidden so it can't steal
+         clicks meant for the back/pin buttons it overlaps in the
+         layout; flips to "auto" alongside opacity so it's only
+         draggable when actually visible. */
+      .mini-rail-swipe-handle {
+        position: absolute;
+        left: 50%;
+        /* 2 px from the top, not poking above the row anymore — the
+           topbar now bleeds its own background flush to the window's
+           top edge (2026-09-03 "separated from the text" review), so
+           the old negative offset would've pushed this past the actual
+           window bounds and clipped it off entirely. */
+        top: 2px;
+        transform: translateX(-50%);
+        width: 16px;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--border);
+        opacity: 0;
+        pointer-events: none;
+        cursor: grab;
+        transition: opacity 150ms ease;
+      }
+
+      .mini-rail-topbar:hover .mini-rail-swipe-handle {
+        opacity: 1;
+        pointer-events: auto;
       }
 
       .mini-rail-icon-btn {
@@ -248,9 +384,15 @@
       /* Per-step progress strip, replacing the single done-badge tick
          from the previous pass — scrolls on overflow rather than
          wrapping, since the window's width is fixed. Wheel/two-finger
-         scroll is remapped to horizontal in sidebar.js
+         trackpad scroll is remapped to horizontal in sidebar.js
          (wheelScrollsHorizontally) since a plain vertical wheel delta
-         does nothing on an overflow-x-only element by default. */
+         does nothing on an overflow-x-only element by default; a genuine
+         two-finger swipe (deltaX-dominant) is left to native handling
+         there, and dragScrollsHorizontally (2026-09-03 review) adds a
+         pointer-drag swipe on top for touch/trackpad input that doesn't
+         produce wheel events at all. touch-action: pan-x hands the
+         gesture to the browser's own horizontal-pan handling rather than
+         letting it fall through to page scroll/zoom. */
       .mini-rail-timeline {
         flex: 1;
         min-width: 0;
@@ -258,6 +400,12 @@
         align-items: center;
         overflow-x: auto;
         padding-bottom: 4px;
+        touch-action: pan-x;
+        cursor: grab;
+      }
+
+      .mini-rail-timeline.dragging {
+        cursor: grabbing;
       }
 
       /* Thin, overlay-style — see the .path-body comment on the same
@@ -330,16 +478,25 @@
         background: var(--brand);
       }
 
-      /* Fixed height + its own scrollbar, not a line-clamp (2026-09-02
-         review): a clamp hides overflow text with no way to read the
-         rest, and its rendered height wasn't reliably identical for the
-         action row below to sit at a fixed position on ("stationary...
-         you don't need to move your cursor" clicking ‹/›). This box's
-         height never changes regardless of content length while chat is
-         closed — long text scrolls inside it instead — since that's the
-         layout the ‹/› browsing stability actually depends on. */
+      /* Own scrollbar, not a line-clamp (2026-09-02 review): a clamp
+         hides overflow text with no way to read the rest, and the
+         action row below needs a fixed position to sit at
+         ("stationary... you don't need to move your cursor" clicking
+         ‹/›) — solved by .mini-rail-actions being flex-shrink:0 (a fixed
+         *floor*) rather than this box holding a fixed height itself.
+         2026-09-03 review: flex:1 instead of a fixed 54px, so this is
+         what actually absorbs a manual window resize — see the
+         .mini-rail-header comment above and setMiniRailWindowState in
+         sidebar.js for the rest of that mechanism. min-height keeps a
+         short instruction from collapsing to nothing if the window's
+         ever resized very small. Content length no longer drives this
+         box's height at all (window size does); long text still scrolls
+         inside it rather than growing it, since auto-growing per-step
+         would fight the resize the user just set. */
       .mini-rail-desc {
-        height: 54px;
+        position: relative;
+        flex: 1;
+        min-height: 24px;
         overflow-y: auto;
         font-size: 13px;
         font-weight: 600;
@@ -347,14 +504,18 @@
         margin-bottom: 8px;
       }
 
-      /* Thin, overlay-style — see the .path-body comment on the same
-         pattern. */
+      /* Thin, overlay-style — same pattern as .path-body, but the thumb
+         stays faintly visible by default here (2026-09-03 review: "no
+         scroll bar appears by default and the text below is invisible")
+         rather than fully transparent until hover/scroll — a long step
+         instruction needs the affordance up front, before the user has
+         any reason to hover this specific box. */
       .mini-rail-desc::-webkit-scrollbar {
         width: 4px;
       }
 
       .mini-rail-desc::-webkit-scrollbar-thumb {
-        background: transparent;
+        background: rgba(0, 0, 0, 0.14);
         border-radius: 999px;
         transition: background 150ms ease;
       }
@@ -364,18 +525,58 @@
         background: rgba(0, 0, 0, 0.28);
       }
 
+      /* Second, more visible cue on top of the scrollbar above: a small
+         chevron, shown only while updateMiniRailDescOverflow
+         (sidebar.js) has measured real content below the fold — toggled
+         via .has-more-below rather than shown unconditionally, so a
+         short description that already fits shows neither.
+         2026-09-03 review dropped the fade-to-white gradient this used
+         to sit on, for two reasons: it was doing double duty as "the
+         bottom bar is a separate area" (a real border's job — added
+         below on .mini-rail-actions instead), and it had a real bug —
+         resizing the box (dragging the window, in non-question mode;
+         see .mini-rail-header) changed clientHeight without
+         updateMiniRailDescOverflow ever re-running, so the gradient
+         could stay visible after a resize made everything fit, with
+         nothing left below the fold to indicate. Fixed by also calling
+         updateMiniRailDescOverflow from the resize listener
+         (sidebar.js) — the chevron alone is kept simple below rather
+         than reintroducing the same class of bug. */
+      .mini-rail-desc-more {
+        position: absolute;
+        right: 0;
+        bottom: 1px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        color: var(--muted);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 150ms ease;
+      }
+
+      .mini-rail-desc.has-more-below .mini-rail-desc-more {
+        opacity: 1;
+      }
+
       /* Once chat is open (2026-09-02 review — "expanding... should make
          more space for the text rather than just adding empty space"):
-         this is the *default* height, not a fixed one — flex-basis:auto
-         gives the box exactly what its content needs (up to the cap)
-         before .mini-rail-history's flex:1 claims the rest, so a short
-         question leaves history most of the space and a long one leaves
-         it less, automatically. The split bar below (2026-09-02, second
-         review) lets the user override this by hand within
-         MINI_DESC_MIN/MAX_HEIGHT — dragging sets an inline height that
-         naturally wins over this class rule; resetForNewSubstep clears
-         it so the next substep starts back at this auto-fit default. */
+         `flex: 0 1 auto` overrides the base rule's flex:1 (2026-09-03
+         review) so this goes back to a content-driven default height,
+         not the window-resize-driven one chat-closed mode uses — height
+         auto + max-height gives the box exactly what its content needs
+         (up to the cap) before .mini-rail-chat's flex:1 claims the rest,
+         so a short question leaves history most of the space and a long
+         one leaves it less, automatically. The split bar below
+         (2026-09-02, second review) lets the user override this by hand
+         within MINI_DESC_MIN/MAX_HEIGHT — dragging sets an inline height
+         that naturally wins over this class rule; resetMiniRailDescHeight
+         (sidebar.js) clears it so the next substep starts back at this
+         auto-fit default. */
       #mini-rail.chat-open .mini-rail-desc {
+        flex: 0 1 auto;
         height: auto;
         max-height: 140px;
       }
@@ -448,10 +649,17 @@
         animation: mini-rail-slide-back 220ms ease-out;
       }
 
+      /* Same tinted-strip treatment as .mini-rail-topbar above, bled to
+         the header's bottom/side edges instead of the top. */
       .mini-rail-actions {
+        flex-shrink: 0;
         display: flex;
         align-items: center;
         gap: 6px;
+        margin: 0 -12px -10px;
+        padding: 8px 12px;
+        background: var(--sunken);
+        border-top: 1px solid var(--border);
       }
 
       /* Bottom-left, small, icon-only — pure navigation, no completion
@@ -567,6 +775,7 @@
       }
 
       .mini-rail-check-result {
+        flex-shrink: 0;
         margin-top: 8px;
         font-size: 11px;
         color: var(--muted);
@@ -650,6 +859,19 @@
         background: var(--sunken);
       }
 
+      /* Marks a question sent with the screenshot toggle on (2026-09-03
+         review) — see #mini-rail-screenshot-toggle's HTML comment. */
+      .mini-rail-bubble-screenshot-tag {
+        display: inline-flex;
+        vertical-align: middle;
+        color: var(--blue);
+        opacity: 0.8;
+      }
+
+      .mini-rail-bubble-screenshot-tag svg {
+        display: block;
+      }
+
       .mini-rail-inputbar {
         flex-shrink: 0;
         display: flex;
@@ -667,6 +889,53 @@
         padding: 6px 12px;
         font-size: 12px;
         font-family: inherit;
+      }
+
+      /* Shared shape for the two icon-only controls next to the input —
+         same 30px height as #mini-rail-send so all three line up. */
+      #mini-rail-mic,
+      #mini-rail-screenshot-toggle {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+
+      /* Same solid-blue look as #new-goal-mic (the real, wired mic in the
+         home ask box) rather than the outlined toggle shape below —
+         2026-09-03 review: "make the microphone the same blue as in the
+         chat prompt." Still has no click handler (see the HTML comment),
+         this is styling only. */
+      #mini-rail-mic {
+        border: none;
+        background: var(--blue);
+        color: #ffffff;
+      }
+
+      #mini-rail-mic:hover {
+        background: #2f6fdb;
+      }
+
+      #mini-rail-screenshot-toggle {
+        border: 1px solid var(--border);
+        background: #ffffff;
+        color: var(--muted);
+      }
+
+      #mini-rail-screenshot-toggle:hover {
+        color: var(--ink);
+        border-color: var(--blue-border);
+      }
+
+      #mini-rail-screenshot-toggle.active {
+        background: var(--blue-soft);
+        border-color: var(--blue-border);
+        color: var(--blue);
       }
 
       #mini-rail-send {
@@ -728,6 +997,22 @@
 
       .profile-menu button:hover {
         background: #f5f5f5;
+      }
+
+      /* Dev/test-only AI-mode toggle — aria-pressed carries the on/off
+         look, same pattern .mini-rail-icon-btn already uses. */
+      #profile-ai-mode::before {
+        content: "○ ";
+        color: var(--muted);
+      }
+
+      #profile-ai-mode[aria-pressed="true"] {
+        color: var(--blue);
+      }
+
+      #profile-ai-mode[aria-pressed="true"]::before {
+        content: "● ";
+        color: var(--blue);
       }
 
       /* 40/60 split, and the two panes are deliberately two different
@@ -1267,7 +1552,6 @@
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M20 15v10M15 20h10' stroke='%23000000' stroke-opacity='0.09' stroke-width='1.2'/%3E%3C/svg%3E");
       }
 
-      /* Same recolor as .bar-mark — see its comment. */
       .login-mark {
         width: 88px;
         height: 88px;
@@ -1276,7 +1560,6 @@
         border: 1.5px solid rgba(0, 0, 0, 0.10);
         box-shadow: 0 0 0 4px var(--halo), 0 4px 10px -2px rgba(0, 0, 0, 0.15);
         background: #ffffff;
-        filter: grayscale(1) sepia(1) hue-rotate(180deg) saturate(3) brightness(1.1);
       }
 
       .login-wordmark {
@@ -2146,7 +2429,9 @@
     <div id="panel">
       <div class="bar">
         <button class="bar-icon-btn" id="bar-back" type="button" hidden>← Back</button>
-        <img class="bar-mark" src="assets/guido-icon.png" alt="" />
+        <span class="bar-mark-frame" id="bar-mark-frame">
+          <img class="bar-mark" src="assets/mascot/mascot-idle.svg" alt="" />
+        </span>
         <div style="flex: 1; min-width: 0">
           <div class="bar-title" id="bar-title">Guido</div>
           <div class="bar-subtitle" id="bar-subtitle"></div>
@@ -2156,6 +2441,11 @@
              set by applyMembership() in sidebar.js (data-plan drives the
              color variants above). -->
         <span class="plan-badge" id="plan-badge" hidden></span>
+        <!-- Dev/test-only, per docs/testing/manual-test-matrix.md — moves
+             the real OS cursor to the primary screen's center via the
+             move_cursor command (cursor_control.rs). Icon set by JS
+             (CursorIcon — see the icon-pool note in CLAUDE.md). -->
+        <button class="bar-cursor-test" id="bar-cursor-test" type="button" title="Move cursor to screen center (test)" aria-label="Move cursor to screen center (test)"></button>
         <div class="bar-profile-wrap" id="bar-profile-wrap" hidden>
           <button class="bar-profile" id="bar-profile" type="button" aria-label="Profile" aria-expanded="false">G</button>
           <div class="profile-menu" id="profile-menu" role="menu">
@@ -2172,6 +2462,14 @@
                  see" if signed out, voice usage is tracked per-device and
                  works regardless of sign-in (see #view-usage). -->
             <button type="button" id="profile-usage">Usage</button>
+            <!-- Dev/test-only (2026-09-03, "make the ai wiring turn
+                 on/off-able so I can easily test UI or actually use the
+                 ai endpoint") — see the AI_MODE comment in sidebar.js
+                 for exactly which paths this does and doesn't affect
+                 yet. Persisted across restarts (localStorage), default
+                 off (fake/UI-testing mode) so a fresh checkout never
+                 silently starts spending real API calls. -->
+            <button type="button" id="profile-ai-mode" aria-pressed="false">Use real AI (dev)</button>
             <div class="profile-menu-meta" id="app-version"></div>
           </div>
         </div>
@@ -2189,6 +2487,12 @@
       <div id="mini-rail" class="mini-rail" hidden>
         <div class="mini-rail-header">
           <div class="mini-rail-topbar">
+            <!-- Swipe affordance + window-move handle (mini rail has no
+                 native titlebar to drag by — see the CSS comment on
+                 .mini-rail-swipe-handle). No click handler of its own;
+                 data-tauri-drag-region is a Tauri built-in that starts a
+                 native window move on pointerdown here. -->
+            <div class="mini-rail-swipe-handle" data-tauri-drag-region aria-hidden="true"></div>
             <!-- The important one: always gets back to the steps menu,
                  un-pinned and at normal size. Icon set by JS
                  (HomeIcon — see the icon-pool note in CLAUDE.md) since
@@ -2207,7 +2511,15 @@
                Built/scrolled by renderMiniRailTimeline() in sidebar.js. -->
             <div class="mini-rail-timeline" id="mini-rail-timeline"></div>
           </div>
-          <div class="mini-rail-desc" id="mini-rail-desc"></div>
+          <div class="mini-rail-desc" id="mini-rail-desc">
+            <span id="mini-rail-desc-text"></span>
+            <!-- "More text below" cue (2026-09-03 review) — shown only
+                 when updateMiniRailDescOverflow (sidebar.js) measures
+                 real overflow; see the CSS comment on .mini-rail-desc-more
+                 for why this is a sibling of the text rather than the
+                 text node itself. -->
+            <span class="mini-rail-desc-more" id="mini-rail-desc-more" aria-hidden="true"></span>
+          </div>
           <div class="mini-rail-splitbar" id="mini-rail-splitbar" title="Drag to resize"></div>
           <div class="mini-rail-actions">
             <!-- Bottom-left, small, icon-only: pure navigation, no
@@ -2230,6 +2542,25 @@
           <div class="mini-rail-history" id="mini-rail-history"></div>
           <div class="mini-rail-inputbar">
             <input id="mini-rail-input" type="text" placeholder="Ask a question…" />
+            <!-- Voice input (2026-09-03 review) — icon only, deliberately
+                 not wired to anything yet ("do not wire it, only add the
+                 icon and the ability to easily wire it up later"). The
+                 real mic (#new-goal-mic, home ask box) drives a
+                 MediaRecorder session against Aqua Voice
+                 (docs/features/voice.md) — wire this one the same way
+                 when the step chat is ready for voice input, then drop
+                 this comment. -->
+            <button id="mini-rail-mic" type="button" title="Voice input (coming soon)" aria-label="Voice input (coming soon)"></button>
+            <!-- Screen-capture image (2026-09-03 review) — same per-question
+                 opt-in toggle as #chat-screenshot-toggle in the full chat
+                 view (see its CSS comment): resets after every send so a
+                 screenshot is always a deliberate choice for *this*
+                 question. Mini rail's send is still fully faked (see
+                 sendMinimizedQuestion in sidebar.js), so this only tracks
+                 the flag and reflects it on the sent question bubble for
+                 now — no real capture or vision call happens here yet,
+                 same as the text side of this chat. -->
+            <button id="mini-rail-screenshot-toggle" type="button" title="Include a screenshot with this question" aria-pressed="false"></button>
             <button id="mini-rail-send" type="button">Send</button>
           </div>
         </div>
