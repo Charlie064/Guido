@@ -5,6 +5,15 @@
   into `features/` docs + an ADR as pieces get built, then gets deleted
   per [meta/style-guide.md](../meta/style-guide.md). Check
   [STATUS.md](../../STATUS.md) for current status, not this doc.
+- **5c and 5f have graduated**: the minimized per-step view described
+  below as the "sticky rail" got built as the desktop app's "mini rail"
+  (2026-09-02, iterated on through 2026-09-03) — see
+  [features/mini-rail.md](../features/mini-rail.md) for what actually
+  exists, which deviates from the shape described below (a second state
+  of the `sidebar` window, not a persistent overlay — see that doc's
+  "Deviation from the plan"). This doc stays as the historical design
+  record; don't edit 5c/5f to match the build, and don't treat this doc
+  as current status for either.
 - Origin: a design conversation with Quentin (2026-09-01) about the
   current step/chat UI feeling like "following a step-by-step tutorial"
   rather than feeling like Tutoria is inside the app with you.
@@ -67,10 +76,15 @@ The proposal replaces this with a tighter loop:
   `plan_step`'s output but nothing renders or acts on it — deferred to
   [BL-010](../BACKLOG.md). This proposal is the first design that would
   actually need BL-010 built, in both Teach and Do mode, not just Do mode.
-- Do mode itself has no actuation mechanism built at all — ADR 0002 scoped
-  it opt-in and left "where the toggle lives" and "what algorithm decides
-  the action" open in `STATUS.md`. This proposal doesn't answer either;
-  it assumes Do mode can click, which isn't true yet.
+- Do mode's actuation mechanism is now **partially** built, not fully
+  absent: OS-level cursor movement exists
+  ([features/cursor-control.md](../features/cursor-control.md),
+  2026-09-03) but is only reachable from a manual test button — nothing
+  AI-driven calls it, and click/type actuation still don't exist at all.
+  ADR 0002 scoped Do mode opt-in and left "where the toggle lives" and
+  "what algorithm decides the action" open in `STATUS.md`. This proposal
+  doesn't answer either; it assumes Do mode can click, which still isn't
+  true.
 - Chat/skill history already persists to disk (`skills.md`'s "Storage"),
   but there is no UI to browse and reopen a previous chat — today's home
   screen shows one fixture "Excel chats" row, not a real list
@@ -164,10 +178,11 @@ also still unbuilt and could reasonably be done in the same pass.
   reasoning, already written down, just not built) — shows *where*
   without moving the real system cursor.
 - **Do mode**: same visual, but followed by an actual OS-level cursor
-  move + click/type. This is the part that needs Do mode's actuation
-  layer, which doesn't exist yet — see "What's already true today," Do
-  mode bullet. Not a UI change on top of an existing capability; it's the
-  first thing that would force that capability to actually get built.
+  move + click/type. The cursor-move half of this now has real code to
+  build on ([features/cursor-control.md](../features/cursor-control.md))
+  — the click/type half, and anything actually *driving* the move from a
+  plan step rather than a manual test button, still don't exist. See
+  "What's already true today," Do mode bullet.
 
 ## Cost, latency, and screen-data handling
 

@@ -209,6 +209,16 @@ point — this file should never pose as a source of truth for what's done.
   actually move relative to the real system cursor, what triggers it,
   does it work through the same window-scope/portal constraints
   `locate_element` already has) — not scoped here.
+  **Update, 2026-09-03**: this entry is about a CSS/visual cursor
+  *indicator* (Teach mode, doesn't touch the real OS cursor) — a
+  separate, real OS-level cursor mover now exists
+  ([features/cursor-control.md](../features/cursor-control.md),
+  `cursor_control.rs`), built for Do mode, manually triggered only (no
+  plan step calls it yet). Not a replacement for this indicator — Teach
+  mode's whole point is showing *without* moving the real cursor — but
+  worth reading before scoping this, since "where does the cursor
+  actually move relative to the real system cursor" now has a concrete
+  Do-mode-side answer to design Teach mode's indicator alongside.
 - **BL-011 — Relative (before/after) verify checks.** Deliberately
   deferred (2026-08-29) — the first build of Guide → Do → Verify
   (`docs/planning/vision-driven-substep-loop.md`, `verify_substep`) only
@@ -524,3 +534,24 @@ point — this file should never pose as a source of truth for what's done.
   - Not scoped here: which of these (if any) actually ships. This entry
     exists so the option and its trade-offs are written down, not to
     pre-decide them.
+
+- **BL-019 — `research_goal`'s response shape needs migrating to the
+  flattened per-step model.** Found 2026-09-03 wiring the new `AI_MODE`
+  dev toggle ([features/mini-rail.md](../features/mini-rail.md)):
+  `ResearchResult { title, steps: [{title, brief, watch_for}] }`
+  (`lib.rs`, unchanged since before the 5f flattening decision in
+  [planning/minimal-step-mode.md](../planning/minimal-step-mode.md))
+  doesn't match what the desktop UI actually renders per step today —
+  `instruction_text`/`target_description`/`action`/`expected_outcome`,
+  no separate plan-then-expand phase (`fake-skill.js`'s fixture shape,
+  what `plan_step` used to produce before it was removed under 5f). This
+  is why the home goal box (`submitNewGoalStub`, `sidebar.js`) still
+  can't be wired to the real endpoint even with `AI_MODE` on — a bridge
+  mapping from the old coarse shape was considered and deliberately not
+  built, since a lossy guess (what goes in `target_description`? what
+  `action`? no bbox at all from a text-only call) risked silently
+  half-breaking the schematic renderer rather than clearly not working.
+  Needs an actual product/schema pass on `research.py`'s prompt +
+  response schema to emit the flat shape directly — not scoped here,
+  same as 5f's own "Storage shape... needs an actual pass there" note
+  already flagged and never picked up.

@@ -78,6 +78,7 @@ before shipping beyond a demo.)
 | Task | Open |
 | --- | --- |
 | Run/test/build | `docs/workflows/development.md` |
+| Which platform-specific features still need manual per-OS testing | `docs/testing/manual-test-matrix.md` |
 | Understand a past decision | `docs/decisions/` |
 | Current state / what's next | `STATUS.md` |
 | Parking lot for future work | `docs/BACKLOG.md` |
@@ -94,6 +95,8 @@ before shipping beyond a demo.)
 | Website scope (Pauline) | `docs/planning/website-v0.md` |
 | What to work on without a Claude Code session | `docs/planning/offline-planning-guide.md` |
 | Skill generation/editing/storage algorithm | `docs/features/skills.md` |
+| Minimized per-step view (mini rail): window sizing, resize/expansion persistence, timeline, chat input | `docs/features/mini-rail.md` |
+| OS-level cursor movement (Do-mode actuation) | `docs/features/cursor-control.md` |
 | Adding a UI icon (check the pool first, don't redraw) | `spikes/tauri-overlay/src/icons.js`, gallery at `src/icons.html` |
 | Guido mascot (Tuto) states, cursor buddy | `docs/features/mascot.md` |
 | Website + desktop visual language | `docs/features/website-design-system.md` |

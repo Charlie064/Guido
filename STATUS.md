@@ -3,7 +3,109 @@
 High-churn snapshot of what exists and what's next. Kept out of `CLAUDE.md`
 deliberately — that file should stay stable.
 
-_Last updated: 2026-08-31_
+_Last updated: 2026-09-03_
+
+## 2026-09-03: app icon, mini-rail polish pass, OS-level cursor movement (first Do-mode actuation piece)
+
+Branch: `claudev/charlie/step-rail-minimize-maximize-experiment`. A long
+iterative session, mostly on the mini rail built the day before — see
+[features/mini-rail.md](docs/features/mini-rail.md) and
+[features/cursor-control.md](docs/features/cursor-control.md) for the
+lasting documentation; this entry is the changelog.
+
+- **App icon (`assets/mascot/generate-icon.mjs`)**: Guido was small
+  within the OS app icon (~50% fill, ~25% margin every side) — rescaled
+  to ~75-84% fill depending on the pass. Tried a lightened-marketing-blue
+  background per an early request, then reverted it back to the original
+  pastel gradient per a follow-up ("remove the blue background... increase
+  the icon to its maximal size") — the size increase stuck, the color
+  change didn't. Regenerated all `app-icon-*.png` sizes and the full
+  Tauri icon set. Fixed a real, unrelated bug found while doing this:
+  the script's PNG-export loop used `URL.pathname` to build a file path,
+  which produces a leading-slash path Windows can't open — switched to
+  `fileURLToPath`, portable either way.
+- **Reverted an in-app recolor**: an earlier commit on this branch
+  (`010159f`) had retinted `guido-icon.png` (title bar + login card)
+  toward blue via a CSS filter, alongside a genuine app-background color
+  change. The user only wanted the background kept — the character
+  recolor is reverted (the CSS `filter` removed from `.bar-mark`/
+  `.login-mark` in `sidebar.html`); `--bg` untouched.
+- **Mini rail ("minimized per-step view") — most of this session's
+  build time.** Full detail in `features/mini-rail.md`:
+  window-resize-driven step-instruction expansion with a persisted
+  "user defined expansion size" (replacing the old always-snap-back-to-
+  a-fixed-size behavior), no native titlebar while minimized (with a
+  swipe-handle-doubling-as-drag-region to compensate), two-finger/drag
+  scrolling on the per-step timeline, chrome-vs-content visual
+  separation (tinted top/bottom bars), a fixed overflow-cue bug, and two
+  new step-chat input controls (an unwired mic icon, a screenshot
+  toggle that's real when `AI_MODE` is on — see below).
+- **Guido mascot's top-bar mark: circular frame, not rounded-square.**
+  A "guido still has a white background" report turned out to be the
+  frame's *corners* — round character, square-ish frame, so the gap
+  between them showed the white bar background behind it. Found by
+  actually screenshotting the running app, which is normally impossible
+  here (see the `WDA_EXCLUDEFROMCAPTURE` gotcha below) — temporarily
+  disabled it, confirmed no asset actually had a baked-in background,
+  fixed the frame to `border-radius: 50%`, re-enabled the exclusion.
+  Full detail in `features/mascot.md`.
+- **AI_MODE — new dev toggle, "Use real AI" in the profile menu.**
+  Lets the mini rail's question box call the real `answer_question`
+  instead of its canned reply, persisted across restarts, default off.
+  Deliberately does **not** cover the home goal box — `research_goal`'s
+  response shape hasn't been migrated to match the flattened per-step
+  UI model yet (5f in `planning/minimal-step-mode.md`), and a lossy
+  bridge mapping risked silently half-breaking the schematic renderer
+  rather than clearly not working, so that path stays fake with the gap
+  documented instead. Full detail in `features/mini-rail.md`.
+- **OS-level cursor movement — new, `cursor_control.rs`.** The first
+  real piece of Do-mode's actuation layer (previously fully unbuilt —
+  see the fix to `planning/minimal-step-mode.md`'s stale claim
+  otherwise). Windows/macOS/Linux X11 backends, a manual test button
+  in the top bar. Went through three iterations chasing a "does
+  nothing" report: `SetCursorPos` (verified moving the cursor via
+  direct `SetCursorPos`+`GetCursorPos` testing) → single-jump
+  `SendInput` (synthesizes a real input-pipeline event instead of
+  poking the tracked position) → animated `SendInput`/equivalent (a
+  ~260ms eased glide through the real position instead of a teleport,
+  on all three platforms). **Root cause landed on at the end, not
+  fixed by any of the three**: the position was correct the whole time
+  (confirmed — clicking after a move selected the right thing in
+  Inkscape) but visibly reverted the instant the user touched their
+  real mouse — the signature of the test VM's mouse
+  integration/passthrough continuously re-syncing the guest cursor to
+  the host's physical mouse, a layer no in-guest code can override. Not
+  a code bug; needs a captured/exclusive mouse mode in the VM viewer,
+  or real hardware, to actually verify visually. See
+  `features/cursor-control.md`'s two debugging notes (this one, plus
+  the `WDA_EXCLUDEFROMCAPTURE` one below) — both cost real
+  back-and-forth before landing on the actual explanation, worth
+  reading before re-treading either.
+- **Debugging gotcha, worth knowing before scripting anything against
+  this app**: a screenshot of the sidebar window taken via a normal
+  programmatic capture (GDI `BitBlt`, `Windows.Graphics.Capture`/DXGI)
+  comes back blank on Windows/macOS, by design —
+  `exclude_sidebar_from_capture` in `lib.rs` (BL-014) excludes it from
+  every such API so it never leaks into a screenshot sent to the vision
+  model. Looks exactly like the app isn't rendering; isn't. Temporarily
+  commenting out that call is the only way to screenshot it for a debug
+  session — this is what actually resolved the mascot background
+  question above, after chasing it blind for a while first.
+- **`docs/testing/manual-test-matrix.md` — new doc.** Tracks which
+  platform-specific behaviors need manual per-OS verification; linked
+  from `CLAUDE.md`'s load map. Seeded from this session's cursor-movement
+  work plus a retroactive pass over what `STATUS.md` already documents
+  as platform-uneven (window enumeration, the real overlay, capture
+  exclusion, icon extraction, portal capture, auto-update).
+- **Not yet done**: cursor movement actually confirmed visually on any
+  platform (blocked on the VM issue above, not code); macOS/Linux
+  verification for cursor movement at all; the home goal box's real-AI
+  gap (needs `research_goal`'s response shape migrated, a schema/product
+  pass, not a toggle); deciding whether/how a screenshot sent via the
+  mini rail's toggle should ever be *stored*, which runs straight into
+  the still-open "no screenshots stored" non-negotiable
+  (`features/skills.md`, `CLAUDE.md`) — flagged, not resolved, when
+  asked about compression/storage cost for it.
 
 ## 2026-08-31: v0.1.7 promoted; website download re-enabled as early access
 
