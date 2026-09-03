@@ -224,6 +224,102 @@ Original framing, for the parts still relevant:
   (no upfront Research wait). Worth prototyping both feels before
   committing, not assuming either one wins.
 
+### 5f. Flattened step list, single upfront generation (revised 2026-09-02)
+
+Decided in a follow-up conversation with Charlie, prompted by the desktop
+app's minimized-view work actually being built (see `STATUS.md`)
+surfacing this as a real UI question rather than a hypothetical one: the
+step/substep split is gone. **A "step" is now the only unit** — what
+used to be a substep (one instruction, one `target_description`, one
+`expected_outcome`) *is* a step; there is no coarser container above it
+and no per-step lazy-generation phase inside it.
+
+- **Research becomes one regular AI call**, not the two-call race 5a
+  proposed. It returns the complete, ordered, flat step list for the
+  goal in a single response — closer to what `research_goal` already
+  does today (see "What's already true today," above), just without the
+  nested substep list under each entry. **This supersedes 5a**: there is
+  no separate "immediate step" call anymore, and no concurrent
+  lightweight plan racing against it, since the one call already
+  produces the whole thing.
+- **`plan_step` goes away.** Nothing is generated lazily per-step
+  anymore — the reason `plan_step` existed (generate a step's substeps
+  only once the user reaches it) doesn't apply once there's nothing left
+  to expand into.
+- **Storage shape**: `skill.steps[]` is the only level —
+  `steps[].substeps[]` is gone. Each entry carries what a substep used
+  to (`instruction_text`, `target_description`, `action`,
+  `expected_outcome`, `last_known_bbox`), not what a step used to
+  (`title`/`brief`/`watch_for` as a container with nothing executable of
+  its own). Affects `skills.md`'s storage model directly — needs an
+  actual pass there, not just the desktop app's fixture data
+  (`fake-skill.js`), before this is buildable against something real.
+- **5b (a vision call on every step advance) is untouched by this** — a
+  separate, still fully open question about whether/when a screenshot
+  gets taken, independent of whether the plan itself is flat or nested.
+- Motivation, stated plainly rather than left implicit: a flat list is
+  easier for the AI to *revise* mid-skill than a two-level one is (no
+  step-vs-substep coordination when inserting/removing/reordering) — see
+  Open question 7, which this decision was made in service of but does
+  not itself resolve.
+
+### 5g. Plan revision (sketch, 2026-09-02 — a proposal for Open question
+7, not a decision)
+
+Speculative even by this doc's own standard: nothing below is scoped,
+approved, or resolves question 7 — it's a concrete enough shape to argue
+about, written because "should the AI revise the plan" is hard to
+evaluate in the abstract. Reject or rewrite freely.
+
+- **Trigger: piggyback on a call that already carries a screenshot,
+  don't add a new automatic one.** The two existing vision-grounded
+  moments — "Check work" failing, and a question sent with
+  `includeScreenshotForNextQuestion` on — are where the AI can actually
+  see something that contradicts the plan. Rather than a third,
+  always-on call (which is exactly the cost/screen-data expansion the
+  "Cost, latency, and screen-data handling" section above already
+  flags), let either of those responses optionally carry a plan patch
+  alongside their normal answer, e.g. `plan_patch: { fromStepId,
+  steps: [...] }`. Absent in the common case; present only when the
+  model itself judges the remaining plan is now wrong.
+- **A typed question is the richest signal available today**, before 5b
+  (automatic per-step vision) is ever built — it's the one moment the
+  user volunteers unprompted information about the real environment
+  ("I don't have an Insert tab, where is it?" is exactly this case — a
+  concrete example `fake-skill.js` carried until the 5f flattening pass
+  collapsed every step to one substep and dropped it). A failed
+  Check-work is the other trigger, but
+  it's ambiguous by itself: did the *user* mis-click, or was the *plan*
+  wrong about what the app looks like? Not disambiguated here — for now
+  both funnel into the same optional `plan_patch`, and it's on the
+  model's judgment call in the prompt, not on separate app logic.
+- **Locked vs. revisable, split strictly on position, not content**:
+  anything at an index before the current step is locked — never
+  rewritten, no exceptions. The user already read and acted on it, and
+  principle 3 ("Verify before continuing") already confirmed it against
+  the real screen; rewriting history serves no one and contradicts what
+  actually happened. Everything from the current step onward (inclusive)
+  is the revisable region — `plan_patch.fromStepId` names where the
+  patch starts, and it wholesale replaces every step from there to the
+  end (insert, remove, reorder, reword all fall out of "replace the
+  tail" rather than needing separate operations).
+- **Surfaced, not silent.** A plan that quietly changes under the user is
+  the wrong failure mode for a *teaching* tool (principle 1) — trust
+  depends on the user being able to tell what changed and why. Minimal
+  version: a one-line note in the mini rail ("Guido updated the plan
+  based on your question") plus the timeline re-rendering with the new
+  step count; no modal, no interruption, consistent with everything else
+  about this view staying low-friction. A revised-but-not-yet-reached
+  node could get its own one-time visual distinction from a plain "not
+  reached" gray node, but the exact treatment isn't designed here.
+- **Explicitly not addressed**: whether the model can be trusted to
+  *only* patch when it should (a model that revises too eagerly is its
+  own failure mode, arguably worse than never revising); what happens if
+  a patch arrives while the user is mid-typed-question on a *later*
+  step than the one the patch is anchored to; and prompt-level detail
+  for how the model is told about "the tail is revisable, the head
+  isn't." All real, none resolved here.
+
 ## What this proposal doesn't answer
 
 - **Do-mode actuation** — how a click/type actually gets issued at the OS
@@ -242,16 +338,18 @@ Original framing, for the parts still relevant:
 
 ## Open questions (none resolved here — see `CLAUDE.md`'s handoff rule)
 
-1. **Does this replace or sit alongside the step/substep model?** If a
-   "step" is now itself vision-grounded and singular, does the coarse
-   top-level `title`/`brief`/`watch_for` structure from Research still
-   exist as a container, or does the concurrent lightweight plan replace
-   it entirely? Affects storage shape in `skills.md`, not just the UI.
+1. **Resolved (2026-09-02):** replaces it — see 5f. The coarse top-level
+   container is gone; a step is the only unit, and Research returns the
+   full flat list in one call. Storage-shape work in `skills.md` is
+   still needed, not just a UI change.
 2. **Resolved (2026-09-01) for the rail's default path:** "Next step" is
    free/no-vision-call, "Check work" is the opt-in paid vision call — see
-   5c. Still open: whether the *first* step (5a's immediate-step call) and
-   the concurrent plan are themselves ever skippable/gated by tier, since
-   those remain automatic regardless of how "Next step" behaves.
+   5c. The rest of this question is now moot, not just answered: it asked
+   whether 5a's immediate-step call and concurrent plan should be
+   tier-gated, but 5f (2026-09-02) removed both — there's just the one
+   Research call now, so the question this was asking about no longer has
+   a subject. Whether *that* call is ever tier-gated isn't addressed
+   anywhere and would need its own question if it matters.
 3. **What tier gates this, if it's meaningfully more expensive?** Given
    the cost direction above, does this become a `pro`-only mode, or does
    it change the free tier's "1 new skill, lifetime" allowance math?
@@ -269,3 +367,12 @@ Original framing, for the parts still relevant:
    risk noted in 5c)? Not designed — could be as simple as a low-key
    "unverified" indicator on the rail after N free advances without a
    "Check work" press, but that's a guess, not a decision.
+7. **New, 2026-09-02 — sketched in 5g, not decided:** can the AI revise
+   the flat step list mid-skill, and how does that relate to the user
+   asking a question? 5f's flattening was motivated by this being easier
+   against a single list than a nested one. 5g proposes an answer
+   (piggyback the patch on a Check-work/question call that already has a
+   screenshot; lock everything before the current step; surface the
+   change) but explicitly doesn't resolve whether the model can be
+   trusted not to over-revise, or the prompt-level mechanics — still a
+   real, open product decision, not settled by having a sketch.
