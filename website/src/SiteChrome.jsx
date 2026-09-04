@@ -1,18 +1,50 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Logo } from "./brand.jsx";
 
+/** Scroll distance (px) over which the header eases from full bar → pill. */
+const COMPACT_RANGE = 100;
+
+function smoothstep(t) {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+}
+
 export function SiteHeader({ onJoin, current = "home" }) {
+  const headerRef = useRef(null);
   const [compact, setCompact] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setCompact(window.scrollY > 18);
-    onScroll();
+    const header = headerRef.current;
+    if (!header) return;
+
+    let raf = 0;
+    let last = -1;
+
+    const apply = () => {
+      raf = 0;
+      const y = window.scrollY;
+      const t = smoothstep(y / COMPACT_RANGE);
+      if (Math.abs(t - last) < 0.001) return;
+      last = t;
+      header.style.setProperty("--header-t", t.toFixed(4));
+      setCompact(t > 0.55);
+    };
+
+    const onScroll = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(apply);
+    };
+
+    apply();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   return (
-    <header className={`site-header${compact ? " is-compact" : ""}`}>
+    <header ref={headerRef} className={`site-header${compact ? " is-compact" : ""}`}>
       <div className="site-header-inner">
         {current === "home" ? (
           <Logo />

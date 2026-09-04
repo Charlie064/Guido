@@ -76,8 +76,9 @@ not uppercase. The header logo stays `guido-icon.png`.
 top third; collapses on press. Header and bottom **Join the waitlist**
 use this. Download is not shown on the public site yet.
 
-**Header** — sticky frosted bar that compacts after a short scroll
-(`is-compact`: shorter height, smaller logo/CTAs, tighter nav gap).
+**Header** — sticky frosted bar that morphs into a floating frosted
+pill as you scroll (`--header-t` 0→1: shorter height, rounded corners,
+side inset, soft shadow), still pinned to the top of the viewport.
 
 **Secondary/outline button** — white pill, thin black border, violet
 halo on hover. Used sparingly outside primary waitlist CTAs.
