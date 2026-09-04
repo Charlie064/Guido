@@ -2,8 +2,9 @@ export const BRAND = "#B6FF3E";
 export const FLASH_PINK = "#FF2E9A";
 export const FLASH_BLUE = "#3B82F6";
 
-const PLUS_GRID =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M20 15v10M15 20h10' stroke='%23000000' stroke-opacity='0.09' stroke-width='1.2'/%3E%3C/svg%3E\")";
+/** Soft pink/violet dots — same field as the landing atmosphere. */
+const DOT_FIELD =
+  "radial-gradient(rgba(255, 46, 154, 0.1) 1px, transparent 1.2px), radial-gradient(rgba(167, 139, 250, 0.08) 1px, transparent 1.2px)";
 
 export function Logo() {
   return (
@@ -11,13 +12,16 @@ export function Logo() {
       <img
         src="/assets/guido-icon.png"
         alt="Guido"
-        className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl"
+        className="logo-mark w-9 h-9 sm:w-11 sm:h-11 rounded-xl"
         style={{
           border: "1.5px solid rgba(0,0,0,0.1)",
           boxShadow: "0 0 0 4px rgba(196,181,253,0.15), 0 4px 10px -2px rgba(0,0,0,0.15)",
         }}
       />
-      <span className="font-semibold text-[17px] tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+      <span
+        className="logo-word font-semibold text-[17px] tracking-tight"
+        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      >
         Guido
       </span>
     </div>
@@ -28,7 +32,12 @@ export function PlusGrid({ className = "", children }) {
   return (
     <div
       className={className}
-      style={{ backgroundImage: PLUS_GRID, backgroundRepeat: "repeat" }}
+      style={{
+        backgroundImage: DOT_FIELD,
+        backgroundSize: "36px 36px, 54px 54px",
+        backgroundPosition: "0 0, 18px 27px",
+        backgroundRepeat: "repeat",
+      }}
     >
       {children}
     </div>

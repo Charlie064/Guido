@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
-import { DownloadOverlay } from "./Download.jsx";
+import BackgroundGradient from "./BackgroundGradient.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 import { currencyForCountry, formatMoney, localeCountry, proAmount } from "./currency.js";
@@ -59,7 +59,6 @@ function PricingCard({ tier, currency, onJoin }) {
 export default function Pricing() {
   const [currency, setCurrency] = useState(null);
   const [waitlistOpen, setWaitlistOpen] = useState(false);
-  const [downloadOpen, setDownloadOpen] = useState(false);
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
 
   useEffect(() => {
@@ -80,12 +79,10 @@ export default function Pricing() {
   }, []);
 
   return (
-    <div className="min-h-screen text-[#0A0A0A] bg-white" style={{ fontFamily: "'Inter', sans-serif" }}>
-      <SiteHeader
-        current="pricing"
-        onJoin={() => setWaitlistOpen(true)}
-        onDownload={() => setDownloadOpen(true)}
-      />
+    <div className="relative min-h-screen text-[#0A0A0A] bg-transparent" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <BackgroundGradient />
+      <div className="relative z-10">
+      <SiteHeader current="pricing" onJoin={() => setWaitlistOpen(true)} />
 
       <section className="pricing-page">
         <div className="pricing-hero">
@@ -114,8 +111,6 @@ export default function Pricing() {
         </p>
       </section>
 
-      <DownloadOverlay open={downloadOpen} onClose={() => setDownloadOpen(false)} />
-
       <WaitlistOverlay
         open={waitlistOpen}
         referredBy={referredBy}
@@ -123,6 +118,7 @@ export default function Pricing() {
       />
 
       <SiteFooter />
+      </div>
     </div>
   );
 }

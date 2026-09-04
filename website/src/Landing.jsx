@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowRight, MousePointer2 } from "lucide-react";
 import GlassMascotCursor from "@mascot/GlassMascotCursor.jsx";
-import { DownloadOverlay } from "./Download.jsx";
+import BackgroundGradient from "./BackgroundGradient.jsx";
 import WaitlistOverlay from "./Waitlist.jsx";
 import { FLASH_BLUE } from "./brand.jsx";
 import { SiteFooter, SiteHeader } from "./SiteChrome.jsx";
 
 const INTRO_MS = 4200;
 const INTRO_SEEN_KEY = "guido.introSeen";
-const LANDING_HASHES = new Set(["how-it-works", "works-with", "waitlist", "download"]);
+const LANDING_HASHES = new Set(["how-it-works", "works-with", "waitlist"]);
 
 function landingHash() {
   return window.location.hash.replace(/^#/, "");
@@ -126,7 +126,6 @@ function WorksWithMarquee() {
 export default function Landing({ startWaitlist = false }) {
   const referredBy = new URLSearchParams(window.location.search).get("ref") || "";
   const [waitlistOpen, setWaitlistOpen] = useState(startWaitlist);
-  const [downloadOpen, setDownloadOpen] = useState(() => landingHash() === "download");
   const [introDone, setIntroDone] = useState(() => skipIntro());
   const [touchPointer] = useState(() =>
     typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
@@ -163,7 +162,9 @@ export default function Landing({ startWaitlist = false }) {
   }, []);
 
   return (
-    <div className="min-h-screen text-[#0A0A0A]" style={{ background: "#ffffff", fontFamily: "'Inter', sans-serif" }}>
+    <div className="relative min-h-screen text-[#0A0A0A] bg-transparent" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <BackgroundGradient />
+      <div className="relative z-10">
       {introDone ? null : (
         <IntroAnimation
           onDone={() => {
@@ -181,24 +182,15 @@ export default function Landing({ startWaitlist = false }) {
         />
       ) : null}
 
-      {/* Nav — links stay laptop-only (`site-nav`). Phone keeps logo + CTA. */}
-      <SiteHeader onJoin={() => setWaitlistOpen(true)} onDownload={() => setDownloadOpen(true)} />
+      <SiteHeader onJoin={() => setWaitlistOpen(true)} />
 
-      {/* Hero — clean, editor-vibe */}
+      {/* Hero — original mark, no plus grid */}
       <section>
-        <div
-          className="pt-12 pb-12 sm:pt-20 sm:pb-20"
-          style={{
-            backgroundImage:
-              "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M20 15v10M15 20h10' stroke='%23000000' stroke-opacity='0.09' stroke-width='1.2'/%3E%3C/svg%3E\")",
-            backgroundRepeat: "repeat",
-          }}
-        >
+        <div className="pt-12 pb-12 sm:pt-20 sm:pb-20">
           <div className="max-w-3xl mx-auto px-6 text-center">
             <div
               className="hero-mark relative w-full max-w-3xl mx-auto overflow-hidden mb-8"
               style={{
-                background: "#fcfcfc",
                 maskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
                 WebkitMaskImage: "radial-gradient(ellipse 65% 70% at center, black 55%, transparent 100%)",
               }}
@@ -206,7 +198,7 @@ export default function Landing({ startWaitlist = false }) {
               <video
                 ref={heroVideoRef}
                 src="/assets/hero-demo.mp4"
-                className="w-full h-auto block"
+                className="hero-mark-video w-full h-auto block"
                 muted
                 playsInline
                 preload="auto"
@@ -241,7 +233,6 @@ export default function Landing({ startWaitlist = false }) {
         </div>
       </section>
 
-      {/* How it works, in more detail */}
       <section id="how-it-works" className="max-w-5xl mx-auto px-5 sm:px-6 py-14 sm:py-20 scroll-mt-16">
         <h2 className="how-section-title text-[1.7rem] sm:text-4xl text-center mb-10 sm:mb-14">
           A closer look at how it works
@@ -261,7 +252,6 @@ export default function Landing({ startWaitlist = false }) {
         </div>
       </section>
 
-      {/* Works with — horizontal icon marquee */}
       <section id="works-with" className="border-y border-black/[0.06] bg-white scroll-mt-16 py-14 sm:py-20">
         <h2
           className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-center max-w-2xl mx-auto px-6 mb-10 sm:mb-14"
@@ -272,42 +262,39 @@ export default function Landing({ startWaitlist = false }) {
         <WorksWithMarquee />
       </section>
 
-      {/* Waitlist */}
-      <section id="waitlist" className="max-w-6xl mx-auto px-5 sm:px-6 py-12 sm:py-16 text-center scroll-mt-16">
-        <img
-          src="/assets/get-guido.png"
-          alt="Get Guido"
-          className="w-full max-w-sm sm:max-w-2xl mx-auto mb-8 sm:mb-10"
+      <div className="relative z-10 bg-white">
+        <section id="waitlist" className="max-w-6xl mx-auto px-5 sm:px-6 py-12 sm:py-16 text-center scroll-mt-16">
+          <img
+            src="/assets/get-guido.png"
+            alt="Get Guido"
+            className="w-full max-w-sm sm:max-w-2xl mx-auto mb-8 sm:mb-10"
+          />
+
+          <div className="landing-ctas">
+            <button
+              type="button"
+              onClick={() => setWaitlistOpen(true)}
+              className="waitlist-cta waitlist-cta-lg"
+            >
+              Join the waitlist
+            </button>
+          </div>
+        </section>
+
+        <WaitlistOverlay
+          open={waitlistOpen}
+          referredBy={referredBy}
+          onClose={() => {
+            setWaitlistOpen(false);
+            if (window.location.pathname.replace(/\/+$/, "") === "/waitlist") {
+              window.history.replaceState({}, "", "/");
+            }
+          }}
         />
 
-        <div className="landing-ctas">
-          <button type="button" onClick={() => setDownloadOpen(true)} className="download-cta download-cta-lg">
-            Download
-          </button>
-          <button
-            type="button"
-            onClick={() => setWaitlistOpen(true)}
-            className="waitlist-cta waitlist-cta-lg"
-          >
-            Join the waitlist
-          </button>
-        </div>
-      </section>
-
-      <DownloadOverlay open={downloadOpen} onClose={() => setDownloadOpen(false)} />
-
-      <WaitlistOverlay
-        open={waitlistOpen}
-        referredBy={referredBy}
-        onClose={() => {
-          setWaitlistOpen(false);
-          if (window.location.pathname.replace(/\/+$/, "") === "/waitlist") {
-            window.history.replaceState({}, "", "/");
-          }
-        }}
-      />
-
-      <SiteFooter />
+        <SiteFooter />
+      </div>
+      </div>
     </div>
   );
 }

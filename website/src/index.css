@@ -6,6 +6,102 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Edge wash only — center stays white so the hero mark isn't interrupted */
+.guido-gradient {
+  --gradient-background-start: rgb(255, 255, 255);
+  --gradient-background-end: rgb(255, 255, 255);
+  --first-color: 255, 46, 154;
+  --second-color: 196, 181, 253;
+  --third-color: 238, 120, 185;
+  --fourth-color: 167, 139, 250;
+  --fifth-color: 255, 160, 200;
+  --pointer-color: 255, 46, 154;
+  --size: 70%;
+  --blending-value: normal;
+  background: #ffffff;
+}
+
+.guido-gradient-center-clear {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 72% 58% at 50% 28%,
+    #ffffff 0%,
+    #ffffff 42%,
+    rgba(255, 255, 255, 0.72) 58%,
+    rgba(255, 255, 255, 0) 78%
+  );
+}
+
+@keyframes guido-blob-vertical {
+  0%,
+  100% {
+    transform: translateY(-16%) translateX(-6%);
+  }
+  50% {
+    transform: translateY(16%) translateX(8%);
+  }
+}
+
+@keyframes guido-blob-circle {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes guido-blob-horizontal {
+  0%,
+  100% {
+    transform: translateX(-18%) translateY(-8%);
+  }
+  50% {
+    transform: translateX(18%) translateY(10%);
+  }
+}
+
+.guido-blob-a {
+  animation: guido-blob-vertical 28s ease-in-out infinite;
+}
+.guido-blob-b {
+  animation: guido-blob-circle 22s linear infinite reverse;
+}
+.guido-blob-c {
+  animation: guido-blob-circle 40s linear infinite;
+}
+.guido-blob-d {
+  animation: guido-blob-horizontal 36s ease-in-out infinite;
+}
+.guido-blob-e {
+  animation: guido-blob-circle 24s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guido-blob-a,
+  .guido-blob-b,
+  .guido-blob-c,
+  .guido-blob-d,
+  .guido-blob-e {
+    animation: none;
+  }
+}
+
+.hero-mark {
+  background: #fcfcfc;
+}
+
+.hero-mark-video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .site-header {
   position: sticky;
   top: 0;
@@ -14,6 +110,17 @@ html, body {
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  transition:
+    background 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    backdrop-filter 220ms ease;
+}
+
+.site-header.is-compact {
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px -18px rgba(0, 0, 0, 0.28);
 }
 
 .site-header-inner {
@@ -25,6 +132,45 @@ html, body {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 12px;
+  transition: height 220ms cubic-bezier(0.22, 1, 0.36, 1), gap 220ms ease;
+}
+
+.site-header.is-compact .site-header-inner {
+  height: 52px;
+  gap: 10px;
+}
+
+.site-header .logo-mark {
+  transition: width 220ms ease, height 220ms ease, box-shadow 220ms ease;
+}
+
+.site-header.is-compact .logo-mark {
+  width: 2rem;
+  height: 2rem;
+}
+
+.site-header .logo-word {
+  transition: font-size 220ms ease;
+}
+
+.site-header.is-compact .logo-word {
+  font-size: 15px;
+}
+
+.site-header.is-compact .download-cta,
+.site-header.is-compact .waitlist-cta {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.site-header.is-compact .download-cta {
+  box-shadow: 0 3px 0 0 #000, 0 8px 14px -10px rgba(0, 0, 0, 0.4);
+}
+
+.site-header.is-compact .waitlist-cta {
+  box-shadow:
+    0 2px 0 0 #b8107a,
+    0 8px 16px -8px rgba(184, 16, 122, 0.5);
 }
 
 .site-nav {
@@ -74,11 +220,34 @@ html, body {
     height: 68px;
   }
 
+  .site-header.is-compact .site-header-inner {
+    height: 54px;
+  }
+
   .site-nav {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 32px;
+  }
+
+  .site-header.is-compact .site-nav {
+    gap: 24px;
+  }
+
+  .site-header.is-compact .site-nav a {
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-header,
+  .site-header-inner,
+  .site-header .logo-mark,
+  .site-header .logo-word,
+  .site-header.is-compact .download-cta,
+  .site-header.is-compact .waitlist-cta {
+    transition: none;
   }
 }
 
@@ -196,24 +365,49 @@ html, body {
 }
 
 .waitlist-cta {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   border-radius: 999px;
   padding: 7px 14px;
   font-family: "Space Grotesk", sans-serif;
   font-size: 13px;
   font-weight: 600;
-  color: #0a0a0a;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  box-shadow: 0 0 0 0 rgba(196, 181, 253, 0);
-  transition: box-shadow 200ms ease, border-color 200ms ease;
+  color: #ffffff;
+  background: linear-gradient(180deg, #ff2e9a 0%, #ff2e9a 55%, #b8107a 100%);
+  border: 0;
+  box-shadow:
+    0 3px 0 0 #b8107a,
+    0 10px 20px -8px rgba(184, 16, 122, 0.55);
+  transition: box-shadow 200ms ease, transform 100ms ease, filter 200ms ease;
+}
+
+.waitlist-cta::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 1px 1px auto;
+  height: 40%;
+  border-radius: 999px 999px 40% 40% / 999px 999px 100% 100%;
+  background: linear-gradient(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0));
 }
 
 .waitlist-cta:hover {
-  border-color: rgba(0, 0, 0, 0.28);
-  box-shadow: 0 0 24px 6px rgba(196, 181, 253, 0.35);
+  box-shadow:
+    0 3px 0 0 #b8107a,
+    0 12px 26px -8px rgba(184, 16, 122, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  filter: brightness(1.04);
+}
+
+.waitlist-cta:active {
+  transform: translateY(2px);
+  box-shadow:
+    0 1px 0 0 #b8107a,
+    0 4px 10px -4px rgba(184, 16, 122, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .waitlist-cta:focus-visible {
@@ -304,9 +498,6 @@ html, body {
 .pricing-page {
   padding: 40px 20px 72px;
   padding-bottom: max(72px, calc(48px + env(safe-area-inset-bottom)));
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M20 15v10M15 20h10' stroke='%23000000' stroke-opacity='0.09' stroke-width='1.2'/%3E%3C/svg%3E");
-  background-repeat: repeat;
 }
 
 .pricing-hero {

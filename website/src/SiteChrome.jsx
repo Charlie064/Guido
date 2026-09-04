@@ -1,8 +1,18 @@
+import { useEffect, useState } from "react";
 import { Logo } from "./brand.jsx";
 
-export function SiteHeader({ onJoin, onDownload, current = "home" }) {
+export function SiteHeader({ onJoin, current = "home" }) {
+  const [compact, setCompact] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setCompact(window.scrollY > 18);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   return (
-    <header className="site-header">
+    <header className={`site-header${compact ? " is-compact" : ""}`}>
       <div className="site-header-inner">
         {current === "home" ? (
           <Logo />
@@ -19,11 +29,6 @@ export function SiteHeader({ onJoin, onDownload, current = "home" }) {
           </a>
         </nav>
         <div className="site-header-actions">
-          {onDownload ? (
-            <button type="button" onClick={onDownload} className="download-cta">
-              Download
-            </button>
-          ) : null}
           <button type="button" onClick={onJoin} className="waitlist-cta">
             Join the waitlist
           </button>

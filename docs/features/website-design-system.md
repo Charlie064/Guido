@@ -34,8 +34,15 @@ do      accent #A78BFA (violet)   text on accent: #0A0A0A
 mark and outline buttons. Alpha ramps from `0.15` (rest) to `0.35`
 (hover).
 
-**Neutrals** — white (`#ffffff`) background everywhere except premium
-glass surfaces (`rgba(12,12,14,0.75)` / `#0A0A0A`).
+**Neutrals** — light page base (`#ffffff` / soft pink–lilac wash). Premium
+glass surfaces stay dark (`rgba(12,12,14,0.75)` / `#0A0A0A`).
+
+**Page gradient** — landing and pricing use a fixed light-mode animated
+wash (`website/src/BackgroundGradient.jsx`), same pattern as the laundry
+landing gradient but retinted to FLASH_PINK / violet halo / how-it-works
+pastels. Layer sits at `z-0` (not negative — negative sits behind the
+body fill). Blobs use normal blend on a soft pink–lilac base. Soft
+pink/violet dots sit on top of the wash. Page content is `z-10`.
 
 ## Typography
 
@@ -64,19 +71,20 @@ also serves desktop Better Auth and voice routes.
 The hero headline is sentence-case Space Grotesk in flash pink,
 not uppercase. The header logo stays `guido-icon.png`.
 
-**Primary CTA ("keycap" button)** — black pill, hard bottom offset
-shadow (`0 5px 0 0 #000`) that collapses on press, white sheen on the
-top third. Header and bottom **Download** use this; it opens the
-platform modal (`Download.jsx`) which links to
-`github.com/Charlie064/Guido/releases/latest/download/`
-(`Guido_mac.dmg`, `Guido_windows.exe`, `Guido_linux.AppImage`).
+**Primary CTA ("keycap" button)** — pink pill for waitlist
+(`#FF2E9A` → `#b8107a`), hard bottom offset shadow, white sheen on the
+top third; collapses on press. Header and bottom **Join the waitlist**
+use this. Download is not shown on the public site yet.
+
+**Header** — sticky frosted bar that compacts after a short scroll
+(`is-compact`: shorter height, smaller logo/CTAs, tighter nav gap).
 
 **Secondary/outline button** — white pill, thin black border, violet
-halo on hover. Landing header and bottom “Join the waitlist” use this.
+halo on hover. Used sparingly outside primary waitlist CTAs.
 
 **Pricing page** (`/pricing`, the React app — not `public/pricing.html`).
 Document title `Guido — Pricing`. Same
-header, waitlist overlay, plus-grid, and footer as the landing page. Two cards: quiet white **Free**, then
+header, waitlist overlay, edge wash, and footer as the landing page. Two cards: quiet white **Free**, then
 elevated glass **Guido Pro** (how-it-works wash, Recommended chip,
 keycap CTA). Pro stacks first on the phone. Laptop
 nav adds Pricing next to How it works and Usecases. Sticker amounts
@@ -128,16 +136,20 @@ view (login, setup, skills, path, chat):
 
 ## Layout & motion (website)
 
-Hero sits on a faint plus/cross SVG tiled 40×40px. Hover halo bloom
-and the keycap press are the two motions the app reuses. Full website
-patterns (how-it-works tiles, marquee) stay on the landing page until
-a desktop view needs them.
+Landing/pricing sit on an animated pink–lilac wash that stays at the
+edges; a center-clear overlay keeps the hero mark untinted. The hero
+Guido mark is a frozen frame from `hero-demo.mp4` with a light plate
+and radial mask — no plus/dot grid over the wash. Hover halo bloom and
+the keycap press are the two motions the app reuses. Full website
+patterns (how-it-works tiles, marquee) stay on the landing page until a
+desktop view needs them.
 
 ## Assets
 
 - `website/public/assets/guido-icon.png` — brand mark (copied to
   `spikes/tauri-overlay/src/assets/guido-icon.png` and the Tauri
   bundle icons).
-- `get-guido.png`, `hero-demo.mp4`, and the "works with" logos
-  (including `davinci-resolve.svg`) are website-only. Marquee tiles
-  are a shared 72–80px square with a 38–42px contained mark.
+- `get-guido.png`, `hero-demo.mp4` (frozen hero still), and the
+  "works with" logos (including `davinci-resolve.svg`) are
+  website-only. Marquee tiles are a shared 72–80px square with a
+  38–42px contained mark.
