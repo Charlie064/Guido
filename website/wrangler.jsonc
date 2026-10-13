@@ -24,14 +24,11 @@
     { "pattern": "guidotutor.com", "custom_domain": true },
     { "pattern": "www.guidotutor.com", "custom_domain": true }
   ],
-  "vars": {
-    // Comma-separated emails that land on `owner` instead of `free` at
-    // signup (see the databaseHooks comment in worker/better-auth.ts) —
-    // add teammates here (docs/reference/team.md) rather than hand-editing
-    // D1. Not a secret: plan tier isn't sensitive, and this only ever
-    // grants owner to an email the person themselves signs up with.
-    "OWNER_EMAILS": "charlie.sandvall@gmail.com,quentinfeinaeugle@gmail.com,pauline.mophou@protonmail.com,eleanore4444@icloud.com"
-  },
+  // OWNER_EMAILS (comma-separated emails that land on `owner` instead of
+  // `free` at signup, see the databaseHooks comment in worker/better-auth.ts)
+  // is a secret, not a var: in a public repo the list would tell anyone which
+  // accounts are the site's owners. Set or update it with
+  //   npx wrangler secret put OWNER_EMAILS
   // Abuse guard on /api/voice/transcribe, which spends real Aqua Voice
   // money per call — same pattern as a vision-proxy rate limiter built on
   // another branch (see docs/features/voice.md). Keyed per user, not per

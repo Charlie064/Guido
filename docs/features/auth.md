@@ -47,9 +47,10 @@ plan/quota logic isn't an auth concern.
 
 A new account defaults to `plan=free`, `status=active`
 (`better-auth.ts`'s `databaseHooks.user.create.after`), unless its email
-is on the `OWNER_EMAILS` allowlist (comma-separated `wrangler.jsonc`
-var), in which case it starts `owner` — the way a teammate gets
-unlimited access without manual D1 surgery.
+is on the `OWNER_EMAILS` allowlist (a comma-separated Worker secret, set
+with `npx wrangler secret put OWNER_EMAILS`), in which case it starts
+`owner` — the way a teammate gets unlimited access without manual D1
+surgery.
 
 ## Endpoints
 

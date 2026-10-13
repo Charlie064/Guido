@@ -21,17 +21,20 @@ one place that fact lives; don't restate roles elsewhere.
 Charlie Sandvall created and administers the Tutoria Cloudflare account
 (billing, DNS, member invites) — see
 [ADR 0004](../decisions/0004-cloudflare-infrastructure-proposal.md).
-Account ID `06e757ca8ed84a9c592f859886811b41`, `workers.dev` subdomain
-`guidotutor`. Other team members are added as account **members** by
+The `workers.dev` subdomain is `guidotutor`; the account ID is in the
+dashboard. Other team members are added as account **members** by
 email invite (Manage Account → Members in the dashboard), not via a
 shared login.
 
-| Full name          | Cloudflare email                  | Role                              |
-| ------------------ | ---------------------------------- | ---------------------------------- |
-| Charlie Sandvall   | `charlie.sandvall@gmail.com`       | Super Administrator (billing/DNS/member management) |
-| Pauline Mophou     | `pauline.mophou@protonmail.com`    | Administrator (no billing/membership access) |
-| Elanore de Garidel | `eleanore4444@icloud.com`          | Administrator (no billing/membership access) |
-| Quentin Feinäugle  | `quentinfeinaeugle@gmail.com`      | Administrator (no billing/membership access) |
+| Full name          | Role                              |
+| ------------------ | ---------------------------------- |
+| Charlie Sandvall   | Super Administrator (billing/DNS/member management) |
+| Pauline Mophou     | Administrator (no billing/membership access) |
+| Elanore de Garidel | Administrator (no billing/membership access) |
+| Quentin Feinäugle  | Administrator (no billing/membership access) |
+
+Member emails are in the Cloudflare dashboard (Manage Account → Members),
+not here: this repo is public.
 
 Non-billing teammates get the built-in **Administrator** role, not **Super
 Administrator** — full Workers/Pages/D1 access for development, but no
